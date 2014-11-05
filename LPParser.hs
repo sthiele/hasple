@@ -1,28 +1,10 @@
--- Copyright (c) 2014, Sven Thiele <sthiele78@gmail.com>
-
--- This file is part of hasple.
-
--- hasple is free software: you can redistribute it and/or modify
--- it under the terms of the GNU General Public License as published
--- the Free Software Foundation, either version 3 of the License, or
--- (at your option) any later version.
-
--- hasple is distributed in the hope that it will be useful,
--- but WITHOUT ANY WARRANTY; without even the implied warranty of
--- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
--- GNU General Public License for more details.
-
--- You should have received a copy of the GNU General Public License
--- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
-
-module LPparser (
-    readPrg
+module LPParser (
+    readProgram
   ) where
 
--- import Data.List (sort)
 import ASP
 import Text.ParserCombinators.Parsec
-import qualified Text.Parsec.Token as P
+import qualified Text.Parsec.Token as Token
 import Text.ParserCombinators.Parsec.Language (emptyDef)
 
 
@@ -45,29 +27,27 @@ instance Show Literal where
 
 -- the lexer bzw tokenizer
 
-
 myLangDef = emptyDef{
 --                 P.commentStart = "{-"
 --               , P.commentEnd = "-}"
-              P.commentLine = "%"
-              , P.identStart = lower
-              , P.identLetter = alphaNum
+              Token.commentLine = "%"
+              , Token.identStart = lower
+              , Token.identLetter = alphaNum
 --               , P.opStart = oneOf "~&=:"
 --               , P.opLetter = oneOf "~&=:"
-              , P.reservedOpNames = [":-", "==", "!=", ".", ","]
-              , P.reservedNames = ["not", "false", "true"]
-              , P.caseSensitive = True
+              , Token.reservedOpNames = [":-", "==", "!=", ".", ","]
+              , Token.reservedNames = ["not", "false", "true"]
+              , Token.caseSensitive = True
               }
 
+lexer = Token.makeTokenParser myLangDef
 
-lexer = P.makeTokenParser myLangDef
-
-identifier = P.identifier lexer
-negationp  = P.reserved lexer "not"
-ifparser   = P.reservedOp lexer ":-"
-dotparser   = P.reservedOp lexer "."
-commaparser   = P.reservedOp lexer ","
-semi = P.semi lexer
+identifier  = Token.identifier lexer
+negationp   = Token.reserved lexer "not"
+ifparser    = Token.reservedOp lexer ":-"
+dotparser   = Token.reservedOp lexer "."
+commaparser = Token.reservedOp lexer ","
+-- semi        = Token.semi lexer
 
 
 -- the parser
@@ -133,19 +113,16 @@ parseRule =  do
                 lits <- parseBody
                 return (Rule head (posbody lits) (negbody lits))
 
-readRule input = case parse parseRule "rule" input of
-    Left err -> "No match: " ++ show err
-    Right val -> "Found value " ++ show val
 
+parseProgram::  Parser [Rule]
+parseProgram = do
+                  spaces
+                  x <- (many1 parseRule)
+                  eof
+                  return x
 
+readProgram input =  parse parseProgram "prg" input
 
-parseProgramm::  Parser [Rule]
-parseProgramm = many parseRule
-
-
-readPrg input = case parse parseProgramm "prg" input of
-    Left err -> "No match: " ++ show err
-    Right val -> "Found value " ++ show val
 
 
 
