@@ -1,4 +1,4 @@
 hasple
 ======
 
-A simple ASP solver in Haskell
+A simple Answer Set solver in Haskell
