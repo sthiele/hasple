@@ -19,19 +19,6 @@ import System.Environment
 import ASP
 import LPParser
 
-p1 = [ (Rule "q" [] []),
-       (Rule "p" ["q"] ["r"]) ]
-       
-p2 = [ (Rule "q" [] []),
-       (Rule "p" ["p"] ["r"]) ] 
-       
-p3 = [ (Rule "p" [] ["q"]),
-       (Rule "q" [] ["p"]) ] 
-       
-p4 = [ (Rule "p" [] ["p"])] 
-
-
-
 
 show_lp [] = ""
 show_lp (x:xs) = (show x) ++ "\n" ++ (show_lp xs)

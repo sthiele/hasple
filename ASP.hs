@@ -59,8 +59,8 @@ instance Eq Rule where
 
 
 heads_p :: [Rule] -> [Atom]
--- returns the head of all rules
-heads_p rules = map kopf rules
+-- returns the head of all rules without the contradiction symbol "" (all consistent consequences)
+heads_p rules = filter (\i -> i/="" ) (map kopf rules)
 
 
 subsets :: [Atom] -> [[Atom]]
@@ -119,5 +119,20 @@ anssets p = filter (\i -> (sort (cn (reduct p i)))==(sort i)) (subsets (heads_p 
 
 
 
+p1 = [ (Rule "q" [] []),
+       (Rule "p" ["q"] ["r"]) ]
 
+p2 = [ (Rule "q" [] []),
+       (Rule "p" ["p"] ["r"]) ]
+
+p3 = [ (Rule "p" [] ["q"]),
+       (Rule "q" [] ["p"]) ]
+
+p4 = [ (Rule "p" [] ["p"])]
+
+px = [ (Rule "p" [] ["q","r"]),
+       (Rule "q" [] ["p","r"]),
+       (Rule "r" [] ["p","q"]),
+       (Rule "" ["r"] [])
+       ]
 

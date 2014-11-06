@@ -106,6 +106,15 @@ parseBody = do
               dotparser
               return ret
 
+parseBody2 = do
+              dotparser
+              return []
+            <|>
+            do
+              ret <- parseLitList
+              dotparser
+              return ret              
+
 
 parseLitList  :: Parser [Literal]
 parseLitList  = do
@@ -125,7 +134,12 @@ negbody (l:t) = if ispos l
                    else ((getatom l):(negbody t))
 
 parseRule :: Parser Rule
-parseRule =  do
+parseRule = do
+              ifparser 
+              lits <- parseBody2
+              return (Rule "" (posbody lits) (negbody lits))
+            <|>
+            do
                 head <- parseAtom
                 lits <- parseBody
                 return (Rule head (posbody lits) (negbody lits))
