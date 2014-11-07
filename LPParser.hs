@@ -64,19 +64,37 @@ negationp   = Token.reserved lexer "not"
 ifparser    = Token.reservedOp lexer ":-"
 dotparser   = Token.reservedOp lexer "."
 commaparser = Token.reservedOp lexer ","
+parens = Token.parens lexer
+commaSep = Token.commaSep lexer
+integer = Token.integer lexer
 -- semi        = Token.semi lexer
 
 
 -- the parser
 
-parseAtom :: Parser Atom
-parseAtom =  identifier
+-- parseAtom :: Parser Atom
+-- parseAtom =  identifier
 
+parseAtom :: Parser Atom
+parseAtom =
+          do
+            p <- identifier
+            a <- parseAguments
+            return (p ++ (show a))
+
+parseAguments = (parens (commaSep parseArg))
+                <|>
+                do return []
+
+-- parseArg = choice [integer, identifier]
+parseArg = choice [identifier]
+              
+readAtom input =  parse parseAtom "atom" input
 
 parsepAtom :: Parser Literal
 parsepAtom = do
-              atom <- parseAtom
-              return (Literal True atom)
+               atom <- parseAtom
+               return (Literal True atom)
 
 
 parsenAtom :: Parser Literal

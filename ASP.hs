@@ -19,7 +19,8 @@ module ASP (
     Atom, Rule(..), facts, anssets
   ) where
   
-import Data.List (sort)
+import Data.List (sort, nub)
+-- use sort to order list nub to remove duplicates from list -- maybe use Sets instead?
  
 type Atom = String
 
@@ -60,10 +61,10 @@ instance Eq Rule where
 
 heads_p :: [Rule] -> [Atom]
 -- returns the head of all rules without the contradiction symbol "" (all consistent consequences)
-heads_p rules = filter (\i -> i/="" ) (map kopf rules)
+heads_p rules = filter (\i -> i/="" ) (nub (map kopf rules))
 
 
-subsets :: [Atom] -> [[Atom]]
+subsets :: [a] -> [[a]]
 subsets []  = [[]]
 subsets (x:xs) = subsets xs ++ map (x:) (subsets xs)
 
@@ -107,7 +108,7 @@ cn :: [Rule] -> [Atom]
 cn [] = []
 cn p = if (reducebasicprogram p (facts p))==p 
    then (facts p) 
-   else (facts p) ++ (cn (reducebasicprogram p (facts p)))
+   else nub ((facts p) ++ (cn (reducebasicprogram p (facts p))))
    
    
 reduct :: [Rule] -> [Atom] -> [Rule]
@@ -133,6 +134,53 @@ p4 = [ (Rule "p" [] ["p"])]
 px = [ (Rule "p" [] ["q","r"]),
        (Rule "q" [] ["p","r"]),
        (Rule "r" [] ["p","q"]),
-       (Rule "" ["r"] [])
+       (Rule "" ["r"] []),
+       (Rule "p" [] ["q","r"])
        ]
+
+data Answer = SAT [[Atom]] | UNSAT [Atom]
+
+instance Show Answer where
+  show (SAT x) =  "SAT: " ++ show x
+  show (UNSAT x)   =  "UNSAT: " ++ show x
+
+ 
+sol :: Answer -> [[Atom]]
+sol (UNSAT s) = []
+sol (SAT s) = s
+
+
+-- given a list of boolean variables returns all possible interpretations
+assignment_generator c = (subsets c)
+
+-- test whether cond is satified by candidate
+-- tester for an answer set
+test:: [Rule] -> [Atom] -> Bool
+test p candidate = (sort (cn (reduct p candidate)))==(sort candidate)
+
+
+-- choose heuristic
+-- use info to reorder the candidates such that the most prefered is first
+choose:: [a] -> info -> [a]
+-- very stupid heuristic
+choose x info = x
+
+findas:: [Rule] -> Int -> Answer
+-- return atmost n answer sets for program p
+findas p n =
+  let variables= (heads_p p)
+  in check p (assignment_generator variables) n
+
+check:: [Rule] -> [[Atom]] -> Int ->  Answer
+check cond [] num = UNSAT ["f","a","i","l"]
+check cond candidates num=
+  if ((test cond (head candidates)))
+     then  if (num==1)
+       then SAT [(head candidates)]
+       else
+    --    learn answer
+       SAT ((head candidates): sol (check cond (tail candidates) (num-1)))
+     else
+    --    let conflicts=conflictana
+       check cond (tail candidates) (num)
 
