@@ -172,15 +172,17 @@ findas p n =
   in check p (assignment_generator variables) n
 
 check:: [Rule] -> [[Atom]] -> Int ->  Answer
-check cond [] num = UNSAT ["f","a","i","l"]
+check cond [] num = UNSAT ["c","o","n","f","l","i","c","t"]
 check cond candidates num=
-  if ((test cond (head candidates)))
-     then  if (num==1)
-       then SAT [(head candidates)]
-       else
-    --    learn answer
-       SAT ((head candidates): sol (check cond (tail candidates) (num-1)))
-     else
+  let choice = head candidates in
+  if (test cond choice)
+  then
+    if (num==1)
+    then SAT [choice]
+    else
+      --    learn answer
+      SAT (choice: sol (check cond (tail candidates) (num-1)))
+  else
     --    let conflicts=conflictana
-       check cond (tail candidates) (num)
+    check cond (tail candidates) (num)
 
