@@ -24,24 +24,15 @@ import Data.List (sort, nub)
  
 type Atom = String
 
-data Rule = Rule { h' :: Atom
-                 , pb' :: [Atom]
-                 , nb' :: [Atom] 
+data Rule = Rule { kopf :: Atom
+                 , pbody :: [Atom]
+                 , nbody :: [Atom]
                  }
-
-kopf :: Rule -> Atom    
-kopf (Rule h pb nb) = h
-
-pbody :: Rule -> [Atom]    
-pbody (Rule h pb nb) = pb
 
 showpbody :: [Atom] -> String
 showpbody [] = ""
 showpbody (x:[]) = x
 showpbody (x:xs) = x ++ ", " ++ (showpbody xs)
-
-nbody :: Rule -> [Atom]    
-nbody (Rule {h' = h, pb' = pb, nb' = nb}) = nb
 
 shownbody :: [Atom] -> String
 shownbody [] = ""
@@ -100,13 +91,13 @@ facts p = [ (kopf r) |  r <- p,  (pbody r)==[], (nbody r)==[] ]
 
 
 reducebasicprogram :: [Rule] -> [Atom] -> [Rule]
-reducebasicprogram p x = [ (Rule (kopf r) (reducepbody (pbody r) x) []) |  r <- p, (pbody r)/=[] ]
+reducebasicprogram p x = [ (Rule (kopf r) (reducepbody (pbody r) x) []) | r <- p, (pbody r)/=[] ]
 
 
 cn :: [Rule] -> [Atom]
 -- return the consequences of a  basic logic programm
 cn [] = []
-cn p = if (reducebasicprogram p (facts p))==p 
+cn p = if (reducebasicprogram p (facts p)) == p 
    then (facts p) 
    else nub ((facts p) ++ (cn (reducebasicprogram p (facts p))))
    
@@ -171,7 +162,7 @@ findas p n =
   let variables= (heads_p p)
   in check p (assignment_generator variables) n
 
-check:: [Rule] -> [[Atom]] -> Int ->  Answer
+check:: [Rule] -> [[Atom]] -> Int -> Answer
 check cond [] num = UNSAT ["c","o","n","f","l","i","c","t"]
 check cond candidates num=
   let choice = head candidates in
