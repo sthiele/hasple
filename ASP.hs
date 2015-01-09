@@ -1,4 +1,4 @@
--- Copyright (c) 2014, Sven Thiele <sthiele78@gmail.com>
+-- Copyright (c) 2015, Sven Thiele <sthiele78@gmail.com>
 
 -- This file is part of hasple.
 
@@ -22,7 +22,34 @@ module ASP (
 import Data.List (sort, nub)
 -- use sort to order list nub to remove duplicates from list -- maybe use Sets instead?
  
-type Atom = String
+data Atom = Atom { predicate :: String
+                 , arguments :: [Term]
+                 }
+instance Ord Atom where
+--   compare :: Atom -> Atom -> Bool
+  compare (Atom pred args) (Atom pred2 args2) = compare pred pred2
+instance Show Atom where
+    show (Atom pred []) =  pred
+    show (Atom pred xs) =  pred ++"("++showargs xs++")"
+instance Eq Atom where
+  (Atom p1 args1) == (Atom p2 args2) = p1==p2 && args1==args2
+
+showargs :: [Term] -> String
+showargs [] = ""
+showargs (x:[]) = (show x)
+showargs (x:xs) = (show x)  ++ "," ++ (showargs xs)
+
+    
+                 
+data Term = Konst String | Variable String
+instance Show Term where
+    show (Konst x) =  x
+    show (Variable x) =  x
+    
+instance Eq Term where
+  (Konst x) == (Konst x2) = x==x2
+  (Variable x) == (Variable x2) = x==x2
+  
 
 data Rule = Rule { kopf :: Atom
                  , pbody :: [Atom]
@@ -31,19 +58,19 @@ data Rule = Rule { kopf :: Atom
 
 showpbody :: [Atom] -> String
 showpbody [] = ""
-showpbody (x:[]) = x
-showpbody (x:xs) = x ++ ", " ++ (showpbody xs)
+showpbody (x:[]) = (show x)
+showpbody (x:xs) = (show x) ++ ", " ++ (showpbody xs)
 
 shownbody :: [Atom] -> String
 shownbody [] = ""
-shownbody (x:[]) = "not " ++ x
-shownbody (x:xs) =  "not " ++ x ++ ", "++ (shownbody xs)
+shownbody (x:[]) = "not " ++ (show x)
+shownbody (x:xs) =  "not " ++ (show x) ++ ", "++ (shownbody xs)
 
 instance Show Rule where
-  show (Rule h [] []) =  h ++"."  
-  show (Rule h pb []) =  h ++ " :- "++showpbody pb++"."
-  show (Rule h [] nb) =  h ++ " :- "++shownbody nb++"."
-  show (Rule h pb nb) =  h ++ " :- "++(showpbody pb)++", "++(shownbody nb)++"."
+  show (Rule h [] []) =  (show h) ++"."  
+  show (Rule h pb []) =  (show h) ++ " :- "++showpbody pb++"."
+  show (Rule h [] nb) =  (show h) ++ " :- "++shownbody nb++"."
+  show (Rule h pb nb) =  (show h) ++ " :- "++(showpbody pb)++", "++(shownbody nb)++"."
   
     
 instance Eq Rule where
@@ -52,7 +79,7 @@ instance Eq Rule where
 
 heads_p :: [Rule] -> [Atom]
 -- returns the head of all rules without the contradiction symbol "" (all consistent consequences)
-heads_p rules = filter (\i -> i/="" ) (nub (map kopf rules))
+heads_p rules = filter (\i -> i/=__conflict ) (nub (map kopf rules))
 
 
 subsets :: [a] -> [[a]]
@@ -111,22 +138,30 @@ anssets p = filter (\i -> (sort (cn (reduct p i)))==(sort i)) (subsets (heads_p 
 
 
 
-p1 = [ (Rule "q" [] []),
-       (Rule "p" ["q"] ["r"]) ]
 
-p2 = [ (Rule "q" [] []),
-       (Rule "p" ["p"] ["r"]) ]
 
-p3 = [ (Rule "p" [] ["q"]),
-       (Rule "q" [] ["p"]) ]
+r = (Atom "r" [])
+p = (Atom "p" [(Konst "conststring"), (Variable "Var")])
+q = (Atom "q" [(Variable "X"), (Konst "c")])
+__conflict = (Atom "conflict" [])
 
-p4 = [ (Rule "p" [] ["p"])]
 
-px = [ (Rule "p" [] ["q","r"]),
-       (Rule "q" [] ["p","r"]),
-       (Rule "r" [] ["p","q"]),
-       (Rule "" ["r"] []),
-       (Rule "p" [] ["q","r"])
+p1 = [ (Rule q [] []),
+       (Rule p [q] [r]) ]
+
+p2 = [ (Rule q [] []),
+       (Rule p [p] [r]) ]
+
+p3 = [ (Rule p [] [q]),
+       (Rule q [] [p]) ]
+
+p4 = [ (Rule p [] [p])]
+
+px = [ (Rule p [] [q,r]),
+       (Rule q [] [p,r]),
+       (Rule r [] [p,q]),
+       (Rule __conflict [r] []),
+       (Rule p [] [q,r])
        ]
 
 data Answer = SAT [[Atom]] | UNSAT [Atom]
@@ -163,7 +198,7 @@ findas p n =
   in check p (assignment_generator variables) n
 
 check:: [Rule] -> [[Atom]] -> Int -> Answer
-check cond [] num = UNSAT ["c","o","n","f","l","i","c","t"]
+check cond [] num = UNSAT [__conflict]
 check cond candidates num=
   let choice = head candidates in
   if (test cond choice)
