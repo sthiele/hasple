@@ -22,34 +22,7 @@ module ASP (
 import Data.List (sort, nub)
 -- use sort to order list nub to remove duplicates from list -- maybe use Sets instead?
  
-data Atom = Atom { predicate :: String
-                 , arguments :: [Term]
-                 }
-instance Ord Atom where
---   compare :: Atom -> Atom -> Bool
-  compare (Atom pred args) (Atom pred2 args2) = compare pred pred2
-instance Show Atom where
-    show (Atom pred []) =  pred
-    show (Atom pred xs) =  pred ++"("++showargs xs++")"
-instance Eq Atom where
-  (Atom p1 args1) == (Atom p2 args2) = p1==p2 && args1==args2
-
-showargs :: [Term] -> String
-showargs [] = ""
-showargs (x:[]) = (show x)
-showargs (x:xs) = (show x)  ++ "," ++ (showargs xs)
-
-    
-                 
-data Term = Konst String | Variable String
-instance Show Term where
-    show (Konst x) =  x
-    show (Variable x) =  x
-    
-instance Eq Term where
-  (Konst x) == (Konst x2) = x==x2
-  (Variable x) == (Variable x2) = x==x2
-  
+type Atom = String
 
 data Rule = Rule { kopf :: Atom
                  , pbody :: [Atom]
@@ -114,7 +87,7 @@ reducenbody x y = [a | a <- x, a `elem` y]
 
 facts :: [Rule] -> [Atom]
 -- return the facts of a programm
-facts p = [ (kopf r) |  r <- p,  (pbody r)==[], (nbody r)==[] ]
+facts p = [ (kopf r) |  r <- p,  (null (pbody r)), (null (nbody r)) ]
 
 
 reducebasicprogram :: [Rule] -> [Atom] -> [Rule]
@@ -135,35 +108,10 @@ reduct p x = [ (Rule (kopf r) (pbody r) []) |  r <- p,  (reducenbody (nbody r) x
 
    
 anssets p = filter (\i -> (sort (cn (reduct p i)))==(sort i)) (subsets (heads_p p))
+ 
 
-
-
-
-
-r = (Atom "r" [])
-p = (Atom "p" [(Konst "conststring"), (Variable "Var")])
-q = (Atom "q" [(Variable "X"), (Konst "c")])
-__conflict = (Atom "conflict" [])
-
-
-p1 = [ (Rule q [] []),
-       (Rule p [q] [r]) ]
-
-p2 = [ (Rule q [] []),
-       (Rule p [p] [r]) ]
-
-p3 = [ (Rule p [] [q]),
-       (Rule q [] [p]) ]
-
-p4 = [ (Rule p [] [p])]
-
-px = [ (Rule p [] [q,r]),
-       (Rule q [] [p,r]),
-       (Rule r [] [p,q]),
-       (Rule __conflict [r] []),
-       (Rule p [] [q,r])
-       ]
-
+ 
+ 
 data Answer = SAT [[Atom]] | UNSAT [Atom]
 
 instance Show Answer where
@@ -212,3 +160,31 @@ check cond candidates num=
     --    let conflicts=conflictana
     check cond (tail candidates) (num)
 
+
+    
+
+r = "r"
+p = "p"
+q = "q"
+__conflict = "conflict"
+
+
+p1 = [ (Rule q [] []),
+       (Rule p [q] [r]) ]
+
+p2 = [ (Rule q [] []),
+       (Rule p [p] [r]) ]
+
+p3 = [ (Rule p [] [q]),
+       (Rule q [] [p]) ]
+
+p4 = [ (Rule p [] [p])]
+
+p5 = [ (Rule p [] [q,r]),
+       (Rule q [] [p,r]),
+       (Rule r [] [p,q]),
+       (Rule __conflict [r] []),
+       (Rule p [] [q,r])
+       ]
+       
+    
