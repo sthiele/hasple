@@ -178,7 +178,43 @@ getbindings2 x (y:ys) =
        Just z -> z:(getbindings2 x ys)
        
        
+getbindingsAtoms:: [Atom] -> MapOfSets -> [[(Term,Term)]]
+getbindingsAtoms [] m = [[]]
+getbindingsAtoms (x:xs) m = join2 (getbindings x m) (getbindingsAtoms xs m)
 
+join2:: [[(Term,Term)]] -> [[(Term,Term)]] -> [[(Term,Term)]]
+-- join2 xs ys = [ z | x <- xs, y <- ys, (merge x y)==(Just z)]
+join2 [] ys = []
+join2 xs [] = []
+join2 xs ys =
+  do 
+    x <- xs
+    y <- ys
+    case (merge x y) of
+         Just z -> return z
+         Nothing -> [] 
+         
+                                   
+merge:: [(Term,Term)] -> [(Term,Term)] -> Maybe [(Term,Term)]
+merge [] ys = Just ys
+merge (x:xs) ys = 
+  case (merge2 x ys) of
+       Nothing -> Nothing
+       Just z -> merge xs z
+       
+ 
+merge2:: (Term,Term) -> [(Term,Term)] -> Maybe [(Term,Term)]
+merge2 (k,v) ys = 
+  case lookup k ys of
+       Nothing -> Just ((k,v):ys)
+       Just z -> if v==z
+                    then (Just ys)
+                    else Nothing
+
+       
+       
+       
+       
        
 arg1 = [ (constant "a"), (constant "a"), (constant "c")]
 arg2 = [ (constant "a"), (constant "b"), (constant "e")]
@@ -223,5 +259,10 @@ b9 = (Atom "b" arg13)
 
 mos1 = getpredval [a1,a2,a3,a4,a5,a6,a7,b1,b2,b3,b4,b5,b6,b7]       
 
+mySubs1 = getbindings a8 mos1  
+mySubs2 = getbindings a9 mos1  
+mySubs3 = getbindings b8 mos1  
+mySubs4 = getbindings b9 mos1  
 
-mySubs = getbindings b9 mos1  
+mySubsx = getbindingsAtoms [a8,a9,b9] mos1  
+mySubsy = getbindingsAtoms [a8,a9,b8,b9] mos1  
