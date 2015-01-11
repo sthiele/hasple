@@ -109,17 +109,6 @@ subsAtom m (Atom pred x)  = (Atom pred (map (subsTerm m) x))
 
                 
                 
--- define a substitution                
-mySub = Map.insert (variable "X") (constant "const") Map.empty
-test = (Atom "a" [(variable "X"),(variable "Y")])
-
-
-a1 = (Atom "a" [(constant "a")])
-a2 = (Atom "a" [(variable "X")])
-b  = (Atom "b" [(variable "X")])
-
-p6 = [ (Rule a1 [] []),
-       (Rule b [a2] []) ]
 
 
 
@@ -131,18 +120,13 @@ insert_mos mos key val =
       Nothing -> Map.insert key (Set.insert val Set.empty) mos
       Just x  -> Map.insert key (Set.insert val x) mos
 
+      
+--TODO rename to get mos      
 getpredval:: [Atom] -> MapOfSets
 getpredval [] = Map.empty
 getpredval ((Atom pred args):xs) = insert_mos (getpredval xs) (pred, (length args)) args
 
-{-
-getbindings:: Atom -> MapOfSets -> Map.Map Term Term
-getbindings  (Atom pred args) m = 
-  let x = Map.lookup (preds, (length args)) in
-  matching args x
 
-matching:: [Term] -> [[Term]] -> [[Term]]
--}
 
 
 matchTerm:: Term -> Term -> Maybe [(Term,Term)]
@@ -178,9 +162,66 @@ join (v, c) (Just list) =
                     
 
 
-arg1 = [ (constant "a"), (constant "b"), (constant "c")]
-arg2 = [ (variable "X"), (constant "b"), (constant "c")]
-arg3 = [ (variable "X"), (variable "X"), (constant "c")]
+
+getbindings:: Atom -> MapOfSets -> [[(Term,Term)]]
+getbindings  (Atom pred args) m = 
+  let x = Map.lookup (pred, (length args)) m in
+      case x of
+           Nothing -> []
+           Just z ->  (getbindings2 args (Set.toList z))
+
+getbindings2:: [Term] -> [[Term]] ->  [[(Term,Term)]]
+getbindings2 x [] = []
+getbindings2 x (y:ys) = 
+  case (match x y) of
+       Nothing -> (getbindings2 x ys)
+       Just z -> z:(getbindings2 x ys)
+       
+       
+
+       
+arg1 = [ (constant "a"), (constant "a"), (constant "c")]
+arg2 = [ (constant "a"), (constant "b"), (constant "e")]
+arg3 = [ (constant "b"), (constant "c"), (constant "d")]
+arg4 = [ (constant "a"), (constant "c"), (constant "e")]
+arg5 = [ (constant "c"), (constant "b"), (constant "a")]
+
+arg6 = [ (constant "a"), (constant "b")]
+arg7 = [ (constant "a"), (constant "a")]
+arg8 = [ (constant "b"), (constant "c")]
+arg9 = [ (constant "a"), (constant "e")]
+arg10 = [ (constant "c"), (constant "b")]
 
 
+arg11 = [ (variable "X"), (constant "b"), (constant "c")]
+arg12 = [ (variable "X"), (variable "X"), (constant "c")]
+arg13 = [ (variable "X"), (variable "Y"), (constant "e")]
 
+
+a1 = (Atom "a" arg1)
+a2 = (Atom "a" arg2)
+a3 = (Atom "a" arg3)
+a4 = (Atom "a" arg5)
+a5 = (Atom "a" arg6)
+a6 = (Atom "a" arg9)
+a7 = (Atom "a" arg10)
+
+a8 = (Atom "a" arg12)
+a9 = (Atom "a" arg13)
+
+b1 = (Atom "b" arg1)
+b2 = (Atom "b" arg2)
+b3 = (Atom "b" arg4)
+b4 = (Atom "b" arg6)
+b5 = (Atom "b" arg7)
+b6 = (Atom "b" arg8)
+b7 = (Atom "b" arg10)
+
+b8 = (Atom "b" arg11)
+b9 = (Atom "b" arg13)
+
+
+mos1 = getpredval [a1,a2,a3,a4,a5,a6,a7,b1,b2,b3,b4,b5,b6,b7]       
+
+
+mySubs = getbindings b9 mos1  
