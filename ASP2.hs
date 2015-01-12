@@ -22,7 +22,7 @@ module ASP (
 import Data.List (sort, nub)
 -- use sort to order list nub to remove duplicates from list -- maybe use Sets instead?
 import qualified Data.Set as Set
-import qualified Data.Map.Strict as Map
+import qualified Data.Map as Map
  
 --my showlist 
 showlist :: (Show a) => [a] -> String
@@ -30,7 +30,51 @@ showlist [] = ""
 showlist (x:[]) = (show x)
 showlist (x:xs) = (show x)  ++ "," ++ (showlist xs)
 
+
+-- ########################################
+
+data Term = Term { is_const :: Bool
+                 , name :: String
+                 }
+
+constant:: String -> Term
+constant x = (Term True x)
+
+variable :: String -> Term
+variable x = (Term False x)
+
+instance Show Term where
+  show (Term True x) =  show x
+  show (Term False x) = x
+
+instance Ord Term where
+  compare (Term True args) (Term False args2) = compare True  False
+  compare (Term False args) (Term True args2) = compare False True
+  compare (Term True args) (Term True args2) = compare args args2
+  compare (Term False args) (Term False args2) = compare args args2
+
+instance Eq Term where
+  (Term b1 args1) == (Term b2 args2) = b1==b2 && args1==args2
+
   
+-- --------------------------------------------------------------
+
+data Atom = Atom { predicate :: String
+                 , arguments :: [Term]
+                 }
+                 
+instance Show Atom where
+    show (Atom pred []) =  pred
+    show (Atom pred xs) =  pred ++"("++showlist xs++")"
+    
+instance Eq Atom where
+  (Atom p1 args1) == (Atom p2 args2) = p1==p2 && args1==args2
+
+instance Ord Atom where
+  compare (Atom pred args) (Atom pred2 args2) = compare pred pred2
+  
+-- --------------------------------------------------------------
+
 data Rule = Rule { kopf :: Atom
                  , pbody :: [Atom]
                  , nbody :: [Atom]
@@ -42,78 +86,26 @@ shownbody (x:[]) = "not " ++ (show x)
 shownbody (x:xs) =  "not " ++ (show x) ++ ", "++ (shownbody xs)
 
 instance Show Rule where
-  show (Rule h [] []) =  (show h) ++"."  
+  show (Rule h [] []) =  (show h) ++"."
   show (Rule h pb []) =  (show h) ++ " :- "++showlist pb++"."
   show (Rule h [] nb) =  (show h) ++ " :- "++shownbody nb++"."
   show (Rule h pb nb) =  (show h) ++ " :- "++(showlist pb)++", "++(shownbody nb)++"."
-  
-    
--- instance Eq Rule where
---   (Rule h1 pb1 nb1) == (Rule h2 pb2 nb2) = h1==h2 && pb1==pb2 && nb1==nb2
+
+instance Eq Rule where
+  (Rule h1 pb1 nb1) == (Rule h2 pb2 nb2) = h1==h2 && pb1==pb2 && nb1==nb2
+
+instance Ord Rule where
+  compare (Rule h pb nb) (Rule h2 pb2 nb2) = compare h h2
+
+          
+-- --------------------------------------------------------------                
 
 
 
-data Atom = Atom { predicate :: String
-                 , arguments :: [Term]
-                 }
--- instance Ord Atom where
---   compare (Atom pred args) (Atom pred2 args2) = compare pred pred2
-instance Show Atom where
-    show (Atom pred []) =  pred
-    show (Atom pred xs) =  pred ++"("++showlist xs++")"
--- instance Eq Atom where
---   (Atom p1 args1) == (Atom p2 args2) = p1==p2 && args1==args2
-
-
-        
-data Term = Term { is_const :: Bool
-                 , name :: String
-                 }
--- Konst :: String -> Term
-constant x = (Term True x)
-
--- Variable :: String -> Term
-variable x = (Term False x)
-
-instance Show Term where
-  show (Term True x) =  show x
-  show (Term False x) = x
-    
-instance Ord Term where
-  compare (Term True args) (Term False args2) = compare True  False
-  compare (Term False args) (Term True args2) = compare False True
-  compare (Term True args) (Term True args2) = compare args args2
-  compare (Term False args) (Term False args2) = compare args args2
-instance Eq Term where
-  (Term b1 args1) == (Term b2 args2) = b1==b2 && args1==args2
-
-
-
-    
-     
--- instance Eq Term where
---   (Konst x) == (Konst x2) = x==x2
---   (Variable x) == (Variable x2) = x==x2
---   
-
-subsTerm:: Map.Map Term Term -> Term -> Term
-subsTerm m (Term True x) = (Term True x)
-subsTerm m x =
-              case Map.lookup x m of
-                Just y -> y
-                Nothing -> x
-
-subsAtom:: Map.Map Term Term -> Atom -> Atom
-subsAtom m (Atom pred []) = (Atom pred [])
-subsAtom m (Atom pred x)  = (Atom pred (map (subsTerm m) x))
-
-                
-                
-
-
-
+-- type MapOfSets =  Map.Map (String, Int) (Set.Set Atom)
 type MapOfSets =  Map.Map (String, Int) (Set.Set [Term])     
 
+-- insert_mos:: MapOfSets -> Atom -> MapOfSets
 insert_mos:: MapOfSets -> (String, Int) -> [Term] -> MapOfSets      
 insert_mos mos key val = 
     case Map.lookup key mos of 
@@ -125,7 +117,6 @@ insert_mos mos key val =
 getpredval:: [Atom] -> MapOfSets
 getpredval [] = Map.empty
 getpredval ((Atom pred args):xs) = insert_mos (getpredval xs) (pred, (length args)) args
-
 
 
 
@@ -149,6 +140,7 @@ match (x:xs) (y:ys) =
           Just [] ->  (match xs ys)     
           Just [((Term False x),(Term True y))] -> join ((Term False x),(Term True y)) (match xs ys)
      else Nothing
+     
 
 join:: (Term,Term) -> Maybe [(Term,Term)] -> Maybe [(Term,Term)]
 join x Nothing = Nothing
@@ -162,7 +154,6 @@ join (v, c) (Just list) =
                     
 
 
-
 getbindings:: Atom -> MapOfSets -> [[(Term,Term)]]
 getbindings  (Atom pred args) m = 
   let x = Map.lookup (pred, (length args)) m in
@@ -170,6 +161,7 @@ getbindings  (Atom pred args) m =
            Nothing -> []
            Just z ->  (getbindings2 args (Set.toList z))
 
+-- getbindings2:: [Term] -> [Atom] ->  [[(Term,Term)]]
 getbindings2:: [Term] -> [[Term]] ->  [[(Term,Term)]]
 getbindings2 x [] = []
 getbindings2 x (y:ys) = 
@@ -211,11 +203,9 @@ merge2 (k,v) ys =
                     then (Just ys)
                     else Nothing
 
-       
-       
-       
-       
-       
+   
+
+   
 arg1 = [ (constant "a"), (constant "a"), (constant "c")]
 arg2 = [ (constant "a"), (constant "b"), (constant "e")]
 arg3 = [ (constant "b"), (constant "c"), (constant "d")]
@@ -265,4 +255,206 @@ mySubs3 = getbindings b8 mos1
 mySubs4 = getbindings b9 mos1  
 
 mySubsx = getbindingsAtoms [a8,a9,b9] mos1  
-mySubsy = getbindingsAtoms [a8,a9,b8,b9] mos1  
+mySubsy = getbindingsAtoms [a8,a9,b8,b9] mos1
+
+
+
+-- --------------------------------------------------------------
+
+subsTerm:: [(Term,Term)] -> Term -> Term
+-- subsTerm:: Map.Map Term Term -> Term -> Term
+subsTerm m (Term True x) = (Term True x)
+subsTerm m x =
+              case lookup x m of
+                Just y -> y
+                Nothing -> x
+
+subsAtom:: [(Term,Term)] -> Atom -> Atom
+-- subsAtom:: Map.Map Term Term -> Atom -> Atom
+subsAtom m (Atom pred []) = (Atom pred [])
+subsAtom m (Atom pred x)  = (Atom pred (map (subsTerm m) x))
+
+ground_rule:: Rule -> [(Term,Term)] -> Rule
+ground_rule (Rule h pb nb) m= (Rule (subsAtom m h) (map (subsAtom m) pb) (map (subsAtom m) nb))
+
+ground_rules:: [[(Term,Term)]] ->  Rule -> [Rule]
+ground_rules xs r = map (ground_rule r) xs
+
+-- --------------------------------------------------------------
+
+uv = (Atom "u" [(variable "X")])
+tv = (Atom "t" [(variable "X")])
+sv = (Atom "s" [(variable "X")])
+rv = (Atom "r" [(variable "X")])
+pv = (Atom "p" [(variable "X")])
+qv = (Atom "q" [(variable "X")])
+qc = (Atom "q" [(constant "c")])
+
+pv1 = [ (Rule qc [] []),
+        (Rule pv [qv] []),
+       (Rule rv [pv] []),
+       (Rule sv [rv] []),
+              (Rule tv [uv] [])
+
+       ]
+
+ground1 =  getbindingsAtoms [qv]( getpredval (heads_p pv1))
+ground2 =  ground_rules  ground1 (Rule pv [qv] [rv])
+
+
+
+
+
+ground_program:: [Rule] -> [Rule]
+ground_program p =
+  let m = getpredval (heads_p  p)
+      pg1 = nub (concatMap  (ground_rules2 m)  p)
+  in
+    if pg1==p
+       then pg1
+       else ground_program pg1
+      
+-- ground_program p =
+--   let m = getpredval (heads_p  p)
+--       pg1 = nub (concatMap  (ground_rules2 m)  p)
+--       n = getpredval (heads_p  pg1)
+--   in  nub (concatMap  (ground_rules2 n) p)
+      
+ground_rules2:: MapOfSets ->  Rule -> [Rule]
+ground_rules2 m (Rule h pb nb) =
+  let c =  getbindingsAtoms pb m
+  in  nub (map (ground_rule (Rule h pb nb)) c)
+
+
+
+-- --------------------------------------------------------------
+
+
+__conflict = (Atom "conflict" [])
+
+
+heads_p :: [Rule] -> [Atom]
+-- returns the head of all rules without the contradiction symbol "" (all consistent consequences)
+heads_p rules = filter (\i -> i/=__conflict ) (nub (map kopf rules))
+
+
+subsets :: [a] -> [[a]]
+subsets []  = [[]]
+subsets (x:xs) = subsets xs ++ map (x:) (subsets xs)
+
+
+reducepbody :: [Atom] -> [Atom] -> [Atom]
+-- reduces a positive body
+reducepbody x y = [a | a <- x, not( a `elem` y)]
+
+
+reducenbody :: [Atom] -> [Atom] -> [Atom]
+-- reduces the negative body
+reducenbody x y = [a | a <- x, a `elem` y]
+
+
+facts :: [Rule] -> [Atom]
+-- return the facts of a programm
+facts p = [ (kopf r) |  r <- p,  (null (pbody r)), (null (nbody r)) ]
+
+
+reducebasicprogram :: [Rule] -> [Atom] -> [Rule]
+reducebasicprogram p x = [ (Rule (kopf r) (reducepbody (pbody r) x) []) | r <- p, (pbody r)/=[] ]
+
+
+cn :: [Rule] -> [Atom]
+-- return the consequences of a  basic logic programm
+cn [] = []
+cn p = if (reducebasicprogram p (facts p)) == p
+   then (facts p)
+   else nub ((facts p) ++ (cn (reducebasicprogram p (facts p))))
+
+
+reduct :: [Rule] -> [Atom] -> [Rule]
+-- return the reduct of a logic program with x
+reduct p x = [ (Rule (kopf r) (pbody r) []) |  r <- p,  (reducenbody (nbody r) x)==[] ]
+
+
+anssets p = filter (\i -> (sort (cn (reduct p i)))==(sort i)) (subsets (heads_p p))
+
+
+
+
+data Answer = SAT [[Atom]] | UNSAT [Atom]
+
+instance Show Answer where
+  show (SAT x) =  "SAT: " ++ show x
+  show (UNSAT x)   =  "UNSAT: " ++ show x
+
+
+sol :: Answer -> [[Atom]]
+sol (UNSAT s) = []
+sol (SAT s) = s
+
+
+-- given a list of boolean variables returns all possible interpretations
+assignment_generator c = (subsets c)
+
+-- test whether cond is satified by candidate
+-- tester for an answer set
+test:: [Rule] -> [Atom] -> Bool
+test p candidate = (sort (cn (reduct p candidate)))==(sort candidate)
+
+
+-- choose heuristic
+-- use info to reorder the candidates such that the most prefered is first
+choose:: [a] -> info -> [a]
+-- very stupid heuristic
+choose x info = x
+
+findas:: [Rule] -> Int -> Answer
+-- return atmost n answer sets for program p
+findas p n =
+  let variables= (heads_p p)
+  in check p (assignment_generator variables) n
+
+check:: [Rule] -> [[Atom]] -> Int -> Answer
+check cond [] num = UNSAT [__conflict]
+check cond candidates num=
+  let choice = head candidates in
+  if (test cond choice)
+  then
+    if (num==1)
+    then SAT [choice]
+    else
+      --    learn answer
+      SAT (choice: sol (check cond (tail candidates) (num-1)))
+  else
+    --    let conflicts=conflictana
+    check cond (tail candidates) (num)
+
+
+r = (Atom "r" [])
+p = (Atom "p" [])
+q = (Atom "q" [])
+
+p1 = [ (Rule q [] []),
+       (Rule p [q] [r]) ]
+       
+
+p2 = [ (Rule q [] []),
+       (Rule p [p] [r]) ]
+
+p3 = [ (Rule p [] [q]),
+       (Rule q [] [p]) ]
+
+p4 = [ (Rule p [] [p])]
+
+p5 = [ (Rule p [] [q,r]),
+       (Rule q [] [p,r]),
+       (Rule r [] [p,q]),
+       (Rule __conflict [r] []),
+       (Rule p [] [q,r])
+       ]
+
+
+
+
+
+
+
