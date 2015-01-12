@@ -19,7 +19,7 @@ module LPParser (
     readProgram
   ) where
 
-import ASP
+import ASP2
 import Text.ParserCombinators.Parsec
 import qualified Text.Parsec.Token as Token
 import Text.ParserCombinators.Parsec.Language (emptyDef)
@@ -37,8 +37,8 @@ getatom (Literal b atom) = atom
 
 
 instance Show Literal where
-  show (Literal True atom) =  atom
-  show (Literal False atom) =  "NoT " ++ atom
+  show (Literal True atom) =  show atom
+  show (Literal False atom) =  "NoT " ++ (show atom)
 
 
 
@@ -79,15 +79,24 @@ parseAtom :: Parser Atom
 parseAtom =
           do
             p <- identifier
-            a <- parseAguments
-            return (p ++ (show a))
-
-parseAguments = (parens (commaSep parseArg))
-                <|>
-                do return []
+            a <- parseArguments
+            return (Atom p a)
+            
+parseArguments :: Parser [Term]
+parseArguments = (parens (commaSep parseArg))
+                 <|>
+                 do return []
 
 -- parseArg = choice [integer, identifier]
-parseArg = choice [identifier]
+parseArg = do
+             arg <- parseArg2
+             return (constant arg)
+parseArg2 = choice [parseVar, identifier]
+-- parseArg2 = choice [parseVar, identifier, integer]
+
+parseVar = do
+            start <- upper
+            return (start:"_var")
               
 readAtom input =  parse parseAtom "atom" input
 
@@ -155,7 +164,7 @@ parseRule :: Parser Rule
 parseRule = do
               ifparser 
               lits <- parseBody2
-              return (Rule "" (posbody lits) (negbody lits))
+              return (Rule __conflict (posbody lits) (negbody lits))
             <|>
             do
                 head <- parseAtom

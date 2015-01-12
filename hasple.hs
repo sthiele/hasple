@@ -16,7 +16,7 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 import System.Environment
-import ASP
+import ASP2
 import LPParser
 
 
@@ -30,7 +30,7 @@ show_as2 [] n = ""
 show_as2 (x:xs) n = "\nAnswer " ++ (show n) ++ ":\n" ++ (show_as3 x) ++ "\n" ++ (show_as2 xs (n+1))
 
 show_as3 [] = ""
-show_as3 (x:xs) =  x ++ " " ++ (show_as3 xs)
+show_as3 (x:xs) =  (show x) ++ " " ++ (show_as3 xs)
 
 
 

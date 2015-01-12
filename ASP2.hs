@@ -15,8 +15,8 @@
 -- You should have received a copy of the GNU General Public License
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
-module ASP (
-    Atom, Rule(..)
+module ASP2 (
+    Term, constant, variable, Atom(..), __conflict, Rule(..), anssets
   ) where
   
 import Data.List (sort, nub)
@@ -36,7 +36,8 @@ showlist (x:xs) = (show x)  ++ "," ++ (showlist xs)
 data Term = Term { is_const :: Bool
                  , name :: String
                  }
-
+-- data Val =  String | Int
+                 
 constant:: String -> Term
 constant x = (Term True x)
 
@@ -280,29 +281,11 @@ ground_rule (Rule h pb nb) m= (Rule (subsAtom m h) (map (subsAtom m) pb) (map (s
 ground_rules:: [[(Term,Term)]] ->  Rule -> [Rule]
 ground_rules xs r = map (ground_rule r) xs
 
--- --------------------------------------------------------------
-
-uv = (Atom "u" [(variable "X")])
-tv = (Atom "t" [(variable "X")])
-sv = (Atom "s" [(variable "X")])
-rv = (Atom "r" [(variable "X")])
-pv = (Atom "p" [(variable "X")])
-qv = (Atom "q" [(variable "X")])
-qc = (Atom "q" [(constant "c")])
-
-pv1 = [ (Rule qc [] []),
-        (Rule pv [qv] []),
-       (Rule rv [pv] []),
-       (Rule sv [rv] []),
-              (Rule tv [uv] [])
-
-       ]
-
-ground1 =  getbindingsAtoms [qv]( getpredval (heads_p pv1))
-ground2 =  ground_rules  ground1 (Rule pv [qv] [rv])
-
-
-
+-- alterantive
+ground_rules2:: MapOfSets ->  Rule -> [Rule]
+ground_rules2 m (Rule h pb nb) =
+  let c =  getbindingsAtoms pb m
+  in  nub (map (ground_rule (Rule h pb nb)) c)
 
 
 ground_program:: [Rule] -> [Rule]
@@ -314,18 +297,26 @@ ground_program p =
        then pg1
        else ground_program pg1
       
--- ground_program p =
---   let m = getpredval (heads_p  p)
---       pg1 = nub (concatMap  (ground_rules2 m)  p)
---       n = getpredval (heads_p  pg1)
---   in  nub (concatMap  (ground_rules2 n) p)
-      
-ground_rules2:: MapOfSets ->  Rule -> [Rule]
-ground_rules2 m (Rule h pb nb) =
-  let c =  getbindingsAtoms pb m
-  in  nub (map (ground_rule (Rule h pb nb)) c)
+
+ay = (Atom "a" [(variable "Y")])
+uv = (Atom "u" [(variable "X")])
+tv = (Atom "t" [(variable "X")])
+sv = (Atom "s" [(variable "X")])
+rv = (Atom "r" [(variable "X")])
+pv = (Atom "p" [(variable "X")])
+qv = (Atom "q" [(variable "X")])
+qc = (Atom "q" [(constant "c")])
+qc2 = (Atom "q" [(constant "k")])
 
 
+pv1 = [
+        (Rule qc [] []),
+        (Rule qc2 [] []),
+        (Rule pv [qv] [ay]),
+        (Rule rv [pv] []),
+        (Rule sv [rv] []),
+        (Rule tv [uv] [])
+      ]
 
 -- --------------------------------------------------------------
 
@@ -451,7 +442,6 @@ p5 = [ (Rule p [] [q,r]),
        (Rule __conflict [r] []),
        (Rule p [] [q,r])
        ]
-
 
 
 
