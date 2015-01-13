@@ -16,7 +16,7 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 import System.Environment
-import ASP2
+import ASP
 import LPParser
 
 

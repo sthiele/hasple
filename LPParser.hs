@@ -19,7 +19,7 @@ module LPParser (
     readProgram
   ) where
 
-import ASP2
+import ASP
 import Text.ParserCombinators.Parsec
 import qualified Text.Parsec.Token as Token
 import Text.ParserCombinators.Parsec.Language (emptyDef)
