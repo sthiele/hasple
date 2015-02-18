@@ -90,13 +90,18 @@ parseArguments = (parens (commaSep parseArg))
 -- parseArg = choice [integer, identifier]
 parseArg = do
              arg <- parseArg2
-             return (constant arg)
-parseArg2 = choice [parseVar, identifier]
+             return arg
+             
+parseArg2 = choice [parseVar, parseConst]
 -- parseArg2 = choice [parseVar, identifier, integer]
 
 parseVar = do
             start <- upper
-            return (start:"_var")
+            return (variable (start:""))
+
+parseConst = do
+              p <- identifier
+              return (constant p)
               
 readAtom input =  parse parseAtom "atom" input
 
