@@ -32,8 +32,32 @@ show_as2 (x:xs) n = "\nAnswer " ++ (show n) ++ ":\n" ++ (show_as3 x) ++ "\n" ++ 
 show_as3 [] = ""
 show_as3 (x:xs) =  (show x) ++ " " ++ (show_as3 xs)
 
+-- show_answers UNSAT = "UNSAT"
 
 
+
+myprg1 = "f(c). f(b). f(a). \n" ++
+         "q(X):- f(X), not p(X), not r(X). \n" ++
+         "p(X) :-f(X), not q(X), not r(X). \n" ++
+         "r(X) :-f(X), not p(X), not q(X). \n" ++
+         ":- r(X)."
+         
+myprg2 = "f(c). f(b). f(a). \n q(YX):- f(YX), not p(YX), not r(YX). \n p(X) :-f(X), not q(X), not r(X).\n  r(X) :-f(X), not p(X), not q(X).\n:- r(X)."
+
+
+test1 x = case readProgram x of
+          Left  err -> putStrLn ("ParseError: " ++ show err)
+          Right val -> putStrLn ("Program found:\n" ++ (show_lp val) ++
+                                show_lp (ground_program val) ++
+                                show_as (anssets (ground_program val)))
+
+
+test2 x = case readProgram x of
+          Left  err -> putStrLn ("ParseError: " ++ show err)
+          Right val -> putStrLn ("Program found:\n" ++ (show_lp val) ++
+                                show_lp (ground_program val) ++
+                                show_as (sol (findas (ground_program val) 0)))
+          
 
 main :: IO ()  
 main =
@@ -45,5 +69,9 @@ main =
          putStrLn ("Answer Set Solver in Haskell by Sven Thiele 2014.\n")
          contents <- readFile (head args)
          case readProgram contents of
-           Left err -> putStrLn ("ParseError: " ++ show err)
-           Right val -> putStrLn ("Program found:\n" ++ (show_lp val) ++ show_as (anssets val))
+           Left  err -> putStrLn ("ParseError: " ++ show err)
+           Right val -> putStrLn ("Program found:\n" ++
+                        (show_lp val) ++
+                        "\nGrounded program:\n" ++
+                        show_lp (ground_program val) ++
+                        show_as (sol (findas (ground_program val) 0)))
