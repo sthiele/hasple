@@ -16,11 +16,12 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module Solver (
-   anssets, findas, sol, ground_program,
+   anssets, findas, sol, ground_program, bla, consequences, simplifyProgramm, heads_p, get_query_rules
   ) where
 
 import ASP
-import Data.List (sort, nub)
+import Data.List (sort, nub, intersect, (\\) )
+import Data.Maybe -- for mapMaybe
 -- import Data.List.Extra (nubOrd)
 -- use sort to order list nub (nubOrd) to remove duplicates from list -- maybe use Sets instead?
 import qualified Data.Set as Set
@@ -85,6 +86,7 @@ matchTerm x y = Just [(x,(Identifier ("Whaaat????"++ show y)))]
 
 
 
+                      
 
 -- can two argumentlist be unified if yes return variable bindings
 match:: [Term] -> [Term] -> Maybe [(Term,Term)]
@@ -105,6 +107,7 @@ join x (Just []) = Just [x]
 join (v, c) (Just list) = 
       case lookup v list of
            Nothing -> (Just ((v,c):list))
+           Just (Variable v2) -> Just list
            Just x -> if x==c 
                         then Just list
                         else Nothing
@@ -224,27 +227,8 @@ ground_program p =
 
 
       
-ac = (Atom "a" [(Identifier "c")])
-av = (Atom "a" [(Variable "X")])
 
-bv = (Atom "b" [(Variable "X")])
-
-rv = (Atom "r" [(Variable "X")])
-rc = (Atom "r" [(Identifier "x")])
-
-
-mm = getpredval [rc]
-mr = (Rule __conflict [rv] [])
-
-mp = [
-        (Rule ac [] []),
-        (Rule rv [av] [bv]),
-        mr
-      ]
 -- --------------------------------------------------------------
-
-
--- __conflict = (Atom "conflict" [])
 
 
 heads_p :: [Rule] -> [Atom]
@@ -344,12 +328,111 @@ check cond candidates num=
 
 
 
--- bla:: [Rule] -> ([Atom],[Atom])
+
+-- splits a programm into ground and nonground rules
+bla:: [Rule] -> ([Rule],[Rule])
+bla [] = ([],[])
+bla (r:rs) =
+  let (ground,nonground) = bla rs in
+  if (is_groundRule r)
+  then ((r:ground), nonground)
+  else (ground, (r:nonground))
+
+
+-- return true if a rule does not contain variables
+is_groundRule:: Rule -> Bool
+is_groundRule (Rule h pb nb) = is_groundAtom h && is_groundAtoms pb && is_groundAtoms nb
+
+-- returns true if the list of Atoms does not contain variables
+is_groundAtoms:: [Atom] -> Bool
+is_groundAtoms [] = True
+is_groundAtoms (x:xs) = is_groundAtom x && is_groundAtoms xs
+
+-- returns true if the atom does not contain variables
+is_groundAtom:: Atom -> Bool
+is_groundAtom (Atom pred args) = is_groundTerms args
+
+-- returns true if the list of Terms only consists of constants
+is_groundTerms:: [Term] -> Bool
+is_groundTerms [] = True
+is_groundTerms ((Constant x):xs) = is_groundTerms xs
+is_groundTerms ((Identifier x):xs) = is_groundTerms xs
+is_groundTerms _ = False
 
 
 
+-- get ground facts and nonground facts
+grfngrf:: [Rule] -> ([Atom],[Atom])
+grfngrf p = let (ground,nonground) = bla p in
+         ((facts ground), (facts nonground))
 
 
+simplifyProgramm:: [Rule] -> [Atom]-> [Rule]
+simplifyProgramm [] x = []
+simplifyProgramm x f = (mapMaybe (simplifyRule f) x)
 
 
+simplifyRule:: [Atom] -> Rule -> Maybe Rule
+simplifyRule f (Rule h pb nb) =
+  if ( (elem h f) || not (null (intersect nb f)))
+  then Nothing
+  else
+  let newbody = (nub pb) \\ f in
+  Just (Rule h newbody nb)
+
+
+         
+-- return consequences of a programm
+consequences :: [Rule] -> [Atom]
+consequences p =
+  let f = facts p in
+  if (null f)
+  then []
+  else f ++ (consequences (simplifyProgramm p f))
+  
+
+ac = (Atom "a" [(Identifier "c")])
+av = (Atom "a" [(Variable "X")])
+
+bv = (Atom "b" [(Variable "X")])
+bc = (Atom "b" [(Constant 1 )])
+
+
+rv = (Atom "r" [(Variable "X")])
+rc = (Atom "r" [(Identifier "x")])
+
+
+mm = getpredval [rc]
+mr = (Rule __conflict [rv] [])
+mr2 = (Rule ac [bc,rc] [])
+
+mp = [
+        (Rule ac [] []),
+        (Rule bc [ac] []),          
+        (Rule rv [ac] [bv]),
+        mr
+      ]
+
+x1 = (Atom "a" [(Variable "X"),(Variable "X")])
+t1 = [(Variable "X"),(Variable "X")]
+x2 = (Atom "a" [(Variable "Y"),(Variable "Z")])
+t2 = [(Variable "Y"),(Variable "Z")]
+x3 = (Atom "a" [(Identifier "a"),(Identifier "a")])
+t3 = [(Identifier "a"),(Identifier "a")]
+x4 = (Atom "a" [(Identifier "a"),(Identifier "b")])
+t4 = [(Identifier "a"),(Identifier "b")]
+      
+unify:: Atom -> Atom -> Bool
+unify (Atom pred1 args1) (Atom pred2 args2) = pred1==pred2 && unifyTerms args1 args2
+
+unifyTerms:: [Term] -> [Term] -> Bool
+unifyTerms x y = case (match x y) of
+                      Nothing -> False
+                      Just x  -> True
+
+
+get_query_rules:: [Rule] -> Atom -> [Rule]
+get_query_rules (r:rs) a = if unify (kopf r) a
+                           then (r: (get_query_rules rs a))
+                           else get_query_rules rs a
 

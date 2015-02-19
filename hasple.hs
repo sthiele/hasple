@@ -19,6 +19,8 @@ import System.Environment
 import ASP
 import LPParser
 import Solver
+import Data.List
+
 
 
 show_lp [] = ""
@@ -34,7 +36,6 @@ show_as3 [] = ""
 show_as3 (x:xs) =  (show x) ++ " " ++ (show_as3 xs)
 
 
-          
 
 main :: IO ()  
 main =
@@ -54,32 +55,71 @@ main =
                         show_as (sol (findas (ground_program val) 0)))
 
 
-
-
-facts1 = "f(a). f(b).\n"
-facts2 = "f(a). f(b). f(c).\n"
-
-prg1  = "q(X):- f(X), not p(X), not r(X). \n" ++
-         "p(X) :-f(X), not q(X), not r(X). \n" ++
-         "r(X) :-f(X), not p(X), not q(X). \n" ++
-         ":- r(X)."
-
-myprg1 = facts1 ++ prg1
-myprg2 = facts2 ++ prg1
-
-
-test1 x = case readProgram x of
-          Left  err -> putStrLn ("ParseError: " ++ show err)
-          Right val -> putStrLn ("Program found:\n" ++ (show_lp val) ++
-                        "\nGrounded program:\n" ++
-                        show_lp (ground_program val) ++
-                        show_as (anssets (ground_program val)))
-
-
-test2 x = case readProgram x of
-          Left  err -> putStrLn ("ParseError: " ++ show err)
-          Right val -> putStrLn ("Program found:\n" ++ (show_lp val) ++
-                        "\nGrounded program:\n" ++
-                        show_lp (ground_program val) ++
+test2 x =
+    do
+         case readProgram x of
+           Left  err -> putStrLn ("ParseError: " ++ show err)
+           Right val -> putStrLn ("Program found:\n" ++
+                        (show_lp val) ++
+--                         "\nGrounded program:\n" ++
+--                         show_lp (ground_program val) ++
                         show_as (sol (findas (ground_program val) 0)))
+
+ground_facts     = "f(a).\n"
+nonground_facts  = "x(X).\n"
+
+ground_rules     = "f(b) :- f(a). \n" ++
+                   "a(b) :- q(a). \n"
+
+nonground_rules  = "y(X) :- x(X). \n" ++
+                   "q(X) :- f(X), not p(X), not r(X). \n" ++
+                   "p(X) :- f(X), not q(X), not r(X). \n" ++
+                   "r(X) :- f(X), not p(X), not q(X). \n"
+                     
+ground_ics       = ":- r(a).\n"
+nonground_ics    = ":- r(X)."
+
+myprg1 = ground_facts ++ nonground_facts ++ ground_rules ++ nonground_rules ++ ground_ics ++ nonground_ics
+
+
+test :: [Char] -> IO ()
+test x =
+  do
+    case readProgram x of
+      Left  err -> putStrLn ("ParseError: " ++ show err)
+      Right prg -> 
+                   let
+                     (ground, nonground) = bla prg
+                     cons = consequences prg
+                     simplified_prg = (simplifyProgramm prg cons)
+                     (ground_simpl, nonground_simpl) = bla simplified_prg
+                     ground_choice_candidates = heads_p ground_simpl
+                     nongrnd_choice_candidates = heads_p nonground_simpl
+                     choice_candidates = heads_p simplified_prg
+                     choice = head choice_candidates
+                     queries = get_query_rules simplified_prg choice
+                    in
+                    if (choice_candidates==[])
+                      then putStrLn "No Choices left"
+                      else
+                      putStrLn ("Program found:\n" ++ (show_lp prg) ++
+                        "\nGround rules:\n" ++
+                        show_lp ground ++
+                        "\nNonGround rules:\n" ++
+                        show_lp nonground ++
+                        "\nConsequences:\n" ++
+                        show cons ++"\n"++
+                        "\nChoice Candidates:\n"++
+                        show ground_choice_candidates ++"\n" ++
+                        show nongrnd_choice_candidates ++ "\n" ++
+                        "\nSimplifiedProgram :\n" ++
+                        "\nGround rules:\n" ++
+                        (show_lp ground_simpl) ++
+                        "\nNonGround rules:\n" ++
+                        (show_lp nonground_simpl) ++
+                        "\nChoice:" ++ show choice ++
+                        "\nChoosenRules:" ++ show_lp queries ++
+                        "\n")
+
+
                         
