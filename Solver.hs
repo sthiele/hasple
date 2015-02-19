@@ -16,7 +16,7 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module Solver (
-   anssets, findas, sol, ground_program, bla, consequences, simplifyProgramm, heads_p, get_query_rules
+   anssets, findas, sol, groundProgram, bla, consequences, simplifyProgramm, heads_p, get_query_rules, getpredval, groundRule,
   ) where
 
 import ASP
@@ -209,27 +209,30 @@ subsAtom:: [(Term,Term)] -> Atom -> Atom
 subsAtom m (Atom pred []) = (Atom pred [])
 subsAtom m (Atom pred x)  = (Atom pred (map (subsTerm m) x))
 
-ground_rule:: Rule -> [(Term,Term)] -> Rule
-ground_rule (Rule h pb nb) m= (Rule (subsAtom m h) (map (subsAtom m) pb) (map (subsAtom m) nb))
+groundRule2:: Rule -> [(Term,Term)] -> Rule
+groundRule2 (Rule h pb nb) m= (Rule (subsAtom m h) (map (subsAtom m) pb) (map (subsAtom m) nb))
 
-ground_rules:: [[(Term,Term)]] ->  Rule -> [Rule]
-ground_rules xs r = map (ground_rule r) xs
+-- ground_rules2:: [[(Term,Term)]] ->  Rule -> [Rule]
+-- ground_rules2 xs r = map (ground_rule r) xs
 
 -- alternative
-ground_rules2:: MapOfSets ->  Rule -> [Rule]
-ground_rules2 m (Rule h pb nb) =
-  let c =  getbindingsAtoms pb m
-  in  nub (map (ground_rule (Rule h pb nb)) c)
+groundRule:: MapOfSets ->  Rule -> [Rule]
+groundRule m (Rule h pb nb) =
+  if (is_groundRule (Rule h pb nb))
+  then [(Rule h pb nb)]
+  else
+    let c =  getbindingsAtoms pb m
+    in  nub (map (groundRule2 (Rule h pb nb)) c)
 
 
-ground_program:: [Rule] -> [Rule]
-ground_program p =
+groundProgram:: [Rule] -> [Rule]
+groundProgram p =
   let m = getpredval (heads_p  p)
-      pg1 = nub (concatMap  (ground_rules2 m)  p)
+      pg1 = nub (concatMap  (groundRule m)  p)
   in
     if pg1==p
        then pg1
-       else ground_program pg1
+       else groundProgram pg1
       
 
 
@@ -369,9 +372,9 @@ is_groundTerms _ = False
 
 
 -- get ground facts and nonground facts
-grfngrf:: [Rule] -> ([Atom],[Atom])
-grfngrf p = let (ground,nonground) = bla p in
-         ((facts ground), (facts nonground))
+-- grfngrf:: [Rule] -> ([Atom],[Atom])
+-- grfngrf p = let (ground,nonground) = bla p in
+--          ((facts ground), (facts nonground))
 
 
 simplifyProgramm:: [Rule] -> [Atom]-> [Rule]
@@ -440,7 +443,7 @@ get_query_rules:: [Rule] -> Atom -> [Rule]
 get_query_rules [] _ = []
 get_query_rules (r:rs) a = 
   case matchAtom (kopf r) a of
-       Just binding ->  let gr = ground_rule r binding
+       Just binding ->  let gr = groundRule2 r binding
                             x = pbody gr
                             y = nbody gr
                             z = x ++ y
