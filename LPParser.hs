@@ -25,15 +25,10 @@ import qualified Text.Parsec.Token as Token
 import Text.ParserCombinators.Parsec.Language (emptyDef)
 
 
-data Literal = Literal { sign' :: Bool
-                 , atom' :: Atom
-                 }
-ispos :: Literal -> Bool
-ispos (Literal True atom) = True
-ispos (Literal False atom) = False
+data Literal = Literal { ispos :: Bool
+                       , atom :: Atom
+                       }
 
-getatom :: Literal -> Atom
-getatom (Literal b atom) = atom
 
 
 instance Show Literal where
@@ -64,9 +59,10 @@ negationp   = Token.reserved lexer "not"
 ifparser    = Token.reservedOp lexer ":-"
 dotparser   = Token.reservedOp lexer "."
 commaparser = Token.reservedOp lexer ","
-parens = Token.parens lexer
-commaSep = Token.commaSep lexer
-integer = Token.integer lexer
+parens      = Token.parens lexer
+commaSep    = Token.commaSep lexer
+integer     = Token.integer lexer
+whiteSpace  = Token.whiteSpace lexer
 -- semi        = Token.semi lexer
 
 
@@ -74,6 +70,13 @@ integer = Token.integer lexer
 
 -- parseAtom :: Parser Atom
 -- parseAtom =  identifier
+
+alphaNumUnderScore :: Parser Char
+alphaNumUnderScore = alphaNum <|> char '_'
+
+
+--------
+readAtom input =  parse parseAtom "atom" input
 
 parseAtom :: Parser Atom
 parseAtom =
@@ -87,29 +90,34 @@ parseArguments = (parens (commaSep parseArg))
                  <|>
                  do return []
 
--- parseArg = choice [integer, identifier]
-parseArg = do
-             arg <- parseArg2
-             return arg
-             
-parseArg2 = choice [parseVar, parseConst]
+parseArg =  choice [parseVar, parseConst]
 -- parseArg2 = choice [parseVar, identifier, integer]
 
 parseVar = do
-            start <- upper
-            return (variable (start:""))
-
+             firstChar <- upper
+             restChars <- many alphaNumUnderScore
+             whiteSpace
+             return (Variable (firstChar : restChars))
+                          
 parseConst = do
               p <- identifier
-              return (constant p)
-              
-readAtom input =  parse parseAtom "atom" input
+              return (Identifier p)
+
+
+-------------
+readLit input = case parse parseLit "lit" input of
+    Left err -> "No match: " ++ show err
+    Right val -> "Found value " ++ show val
+
+
+parseLit :: Parser Literal
+parseLit =  parsenAtom
+         <|> parsepAtom
 
 parsepAtom :: Parser Literal
 parsepAtom = do
                atom <- parseAtom
                return (Literal True atom)
-
 
 parsenAtom :: Parser Literal
 parsenAtom = do
@@ -118,15 +126,19 @@ parsenAtom = do
                 return (Literal False atom )
 
 
-parseLit :: Parser Literal
-parseLit =  parsenAtom
-         <|> parsepAtom
+--------------
+readrule input =  parse parseRule "rul" input
 
-readLit input = case parse parseLit "lit" input of
-    Left err -> "No match: " ++ show err
-    Right val -> "Found value " ++ show val
-
-
+parseRule :: Parser Rule
+parseRule = do
+              ifparser
+              lits <- parseBody2
+              return (Rule __conflict (posbody lits) (negbody lits))
+            <|>
+            do
+                head <- parseAtom
+                lits <- parseBody
+                return (Rule head (posbody lits) (negbody lits))
 
 parseBody = do
               dotparser
@@ -147,7 +159,6 @@ parseBody2 = do
               dotparser
               return ret              
 
-
 parseLitList  :: Parser [Literal]
 parseLitList  = do
                   stmts <- sepEndBy1 parseLit (commaparser)
@@ -156,27 +167,19 @@ parseLitList  = do
 posbody :: [Literal] -> [Atom]
 posbody [] = []
 posbody (l:t) = if ispos l
-                   then ((getatom l):(posbody t))
+                   then ((atom l):(posbody t))
                    else (posbody t)
 
 negbody :: [Literal] -> [Atom]
 negbody [] = []
 negbody (l:t) = if ispos l
                    then (negbody t)
-                   else ((getatom l):(negbody t))
-
-parseRule :: Parser Rule
-parseRule = do
-              ifparser 
-              lits <- parseBody2
-              return (Rule __conflict (posbody lits) (negbody lits))
-            <|>
-            do
-                head <- parseAtom
-                lits <- parseBody
-                return (Rule head (posbody lits) (negbody lits))
-
-
+                   else ((atom l):(negbody t))
+                   
+                   
+-----------                   
+readProgram input =  parse parseProgram "prg" input
+                
 parseProgram::  Parser [Rule]
 parseProgram = do
                   spaces
@@ -184,7 +187,6 @@ parseProgram = do
                   eof
                   return x
 
-readProgram input =  parse parseProgram "prg" input
 
 
 

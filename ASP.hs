@@ -16,7 +16,7 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module ASP (
-    Term, constant, variable, Atom(..), __conflict, Rule(..), anssets, findas, sol, ground_program,
+    Term(..), Atom(..), __conflict, Rule(..), anssets, findas, sol, ground_program,
   ) where
   
 import Data.List (sort, nub)
@@ -25,68 +25,7 @@ import Data.List (sort, nub)
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 
-
--- | /O(n log n)/. The 'nubOrd' function removes duplicate elements from a list.
--- In particular, it keeps only the first occurrence of each element.
--- Unlike the standard 'nub' operator, this version requires an 'Ord' instance
--- and consequently runs asymptotically faster.
---
--- > nubOrd "this is a test" == "this ae"
--- > nubOrd (take 4 ("this" ++ undefined)) == "this"
--- > \xs -> nubOrd xs == nub xs
-nubOrd :: Ord a => [a] -> [a]
-nubOrd = nubOrdBy compare
-
--- | A version of 'nubOrd' with a custom predicate.
---
--- > nubOrdBy (compare `on` length) ["a","test","of","this"] == ["a","test","of"]
-nubOrdBy :: (a -> a -> Ordering) -> [a] -> [a]
-nubOrdBy cmp xs = f E xs
-  where f seen [] = []
-        f seen (x:xs) | memberRB cmp x seen = f seen xs
-                      | otherwise = x : f (insertRB cmp x seen) xs
-
----------------------------------------------------------------------
--- OKASAKI RED BLACK TREE
--- Taken from http://www.cs.kent.ac.uk/people/staff/smk/redblack/Untyped.hs
-
-data Color = R | B deriving Show
-data RB a = E | T Color (RB a) a (RB a) deriving Show
-
-{- Insertion and membership test as by Okasaki -}
-insertRB :: (a -> a -> Ordering) -> a -> RB a -> RB a
-insertRB cmp x s =
-    T B a z b
-    where
-    T _ a z b = ins s
-    ins E = T R E x E
-    ins s@(T B a y b) = case cmp x y of
-        LT -> balance (ins a) y b
-        GT -> balance a y (ins b)
-        EQ -> s
-    ins s@(T R a y b) = case cmp x y of
-        LT -> T R (ins a) y b
-        GT -> T R a y (ins b)
-        EQ -> s
-
-memberRB :: (a -> a -> Ordering) -> a -> RB a -> Bool
-memberRB cmp x E = False
-memberRB cmp x (T _ a y b) = case cmp x y of
-    LT -> memberRB cmp x a
-    GT -> memberRB cmp x b
-    EQ -> True
-
-{- balance: first equation is new,
-   to make it work with a weaker invariant -}
-balance :: RB a -> a -> RB a -> RB a
-balance (T R a x b) y (T R c z d) = T R (T B a x b) y (T B c z d)
-balance (T R (T R a x b) y c) z d = T R (T B a x b) y (T B c z d)
-balance (T R a x (T R b y c)) z d = T R (T B a x b) y (T B c z d)
-balance a x (T R b y (T R c z d)) = T R (T B a x b) y (T B c z d)
-balance a x (T R (T R b y c) z d) = T R (T B a x b) y (T B c z d)
-balance a x b = T B a x b
-
-                      
+                    
  
 --my showlist 
 showlist :: (Show a) => [a] -> String
@@ -97,29 +36,20 @@ showlist (x:xs) = (show x)  ++ "," ++ (showlist xs)
 
 -- ########################################
 
-data Term = Term { is_const :: Bool
-                 , name :: String
-                 }
--- data Val =  String | Int
-                 
-constant:: String -> Term
-constant x = (Term True x)
-
-variable :: String -> Term
-variable x = (Term False x)
-
+data Term = Constant Int
+                | Identifier String
+                | Variable String
+                | Addition Term Term
+                | Subtraction Term Term
+                | Multiplication Term Term
+--                 | Division Term Term
+                | Negation Term
+                deriving (Eq, Ord)
+                
 instance Show Term where
-  show (Term True x) =  show x
-  show (Term False x) = x
-
-instance Ord Term where
-  compare (Term True args) (Term False args2) = compare True  False
-  compare (Term False args) (Term True args2) = compare False True
-  compare (Term True args) (Term True args2) = compare args args2
-  compare (Term False args) (Term False args2) = compare args args2
-
-instance Eq Term where
-  (Term b1 args1) == (Term b2 args2) = b1==b2 && args1==args2
+  show (Identifier x) = x
+  show (Variable x) = x
+  show (Constant x) = show x
 
   
 -- --------------------------------------------------------------
@@ -137,6 +67,7 @@ instance Eq Atom where
 
 instance Ord Atom where
   compare (Atom pred args) (Atom pred2 args2) = compare pred pred2
+
   
 -- --------------------------------------------------------------
 
@@ -166,7 +97,6 @@ instance Ord Rule where
 -- --------------------------------------------------------------                
 
 
-
 -- type MapOfSets =  Map.Map (String, Int) (Set.Set Atom)
 type MapOfSets =  Map.Map (String, Int) (Set.Set [Term])     
 
@@ -174,8 +104,20 @@ type MapOfSets =  Map.Map (String, Int) (Set.Set [Term])
 insert_mos:: MapOfSets -> (String, Int) -> [Term] -> MapOfSets      
 insert_mos mos key val = 
     case Map.lookup key mos of 
-      Nothing -> Map.insert key (Set.insert val Set.empty) mos
-      Just x  -> Map.insert key (Set.insert val x) mos
+      Nothing -> if (allconst val)
+                    then Map.insert key (Set.insert val Set.empty) mos
+                    else mos
+      Just x  -> if (allconst val)
+                    then Map.insert key (Set.insert val x) mos
+                    else mos
+
+
+allconst:: [Term] -> Bool
+allconst [] = True
+allconst ((Identifier x):xs) = True && allconst xs
+allconst ((Constant x):xs) = True && allconst xs
+allconst _ = False
+
 
       
 --TODO rename to get mos      
@@ -185,16 +127,36 @@ getpredval ((Atom pred args):xs) = insert_mos (getpredval xs) (pred, (length arg
 
 
 
+-- can two terms be unified if yes return variable bindings
 matchTerm:: Term -> Term -> Maybe [(Term,Term)]
-matchTerm (Term True x) (Term True y) = 
-  if x==y 
+matchTerm (Identifier x) (Constant y) = Nothing
+matchTerm (Constant x) (Identifier y) = Nothing
+matchTerm (Constant x) (Constant y) =
+  if x==y
      then Just []
      else Nothing
-matchTerm (Term False x) (Term True y) = Just [ ((Term False x),(Term True y))]
-matchTerm (Term False x) (Term False y) = Just []
-matchTerm (Term True x) (Term False y) = Nothing
+matchTerm (Identifier x) (Identifier y) =
+  if x==y
+     then Just []
+     else Nothing
+
+matchTerm (Variable x) (Identifier y) = Just [ ((Variable x),(Identifier y))]
+matchTerm (Variable x) (Constant y) = Just [ ((Variable x),(Constant y))]
+matchTerm (Addition x y) (Constant z) = Just []
+matchTerm (Addition x y) (Identifier z) = Nothing
+matchTerm (Subtraction x y) (Constant z) = Just []
+matchTerm (Subtraction x y) (Identifier z) = Nothing
+matchTerm (Multiplication x y) (Constant z) = Just []
+matchTerm (Multiplication x y) (Identifier z) = Nothing
+matchTerm (Negation x) (Constant z) = Just []
+matchTerm (Negation x) (Identifier z) = Nothing
+matchTerm (Variable x) (Variable y) = Just [((Variable x),(Variable y))]
+matchTerm x y = Just [(x,(Identifier ("Whaaat????"++ show y)))]
 
 
+
+
+-- can two argumentlist be unified if yes return variable bindings
 match:: [Term] -> [Term] -> Maybe [(Term,Term)]
 match [] [] = Just []
 match (x:xs) (y:ys) = 
@@ -203,7 +165,7 @@ match (x:xs) (y:ys) =
      case (matchTerm x y) of
           Nothing -> Nothing
           Just [] ->  (match xs ys)     
-          Just [((Term False x),(Term True y))] -> join ((Term False x),(Term True y)) (match xs ys)
+          Just [(var,const)] -> join (var,const) (match xs ys)
      else Nothing
      
 
@@ -216,14 +178,15 @@ join (v, c) (Just list) =
            Just x -> if x==c 
                         then Just list
                         else Nothing
-                    
 
 
+
+-- return the possible variable bindings associated a non ground atom
 getbindings:: Atom -> MapOfSets -> [[(Term,Term)]]
 getbindings  (Atom pred args) m = 
   let x = Map.lookup (pred, (length args)) m in
       case x of
-           Nothing -> []
+           Nothing -> [[]]
            Just z ->  (getbindings2 args (Set.toList z))
 
 -- getbindings2:: [Term] -> [Atom] ->  [[(Term,Term)]]
@@ -269,70 +232,37 @@ merge2 (k,v) ys =
                     else Nothing
 
    
-
-   
-arg1 = [ (constant "a"), (constant "a"), (constant "c")]
-arg2 = [ (constant "a"), (constant "b"), (constant "e")]
-arg3 = [ (constant "b"), (constant "c"), (constant "d")]
-arg4 = [ (constant "a"), (constant "c"), (constant "e")]
-arg5 = [ (constant "c"), (constant "b"), (constant "a")]
-
-arg6 = [ (constant "a"), (constant "b")]
-arg7 = [ (constant "a"), (constant "a")]
-arg8 = [ (constant "b"), (constant "c")]
-arg9 = [ (constant "a"), (constant "e")]
-arg10 = [ (constant "c"), (constant "b")]
-
-
-arg11 = [ (variable "X"), (constant "b"), (constant "c")]
-arg12 = [ (variable "X"), (variable "X"), (constant "c")]
-arg13 = [ (variable "X"), (variable "Y"), (constant "e")]
-
-
-a1 = (Atom "a" arg1)
-a2 = (Atom "a" arg2)
-a3 = (Atom "a" arg3)
-a4 = (Atom "a" arg5)
-a5 = (Atom "a" arg6)
-a6 = (Atom "a" arg9)
-a7 = (Atom "a" arg10)
-
-a8 = (Atom "a" arg12)
-a9 = (Atom "a" arg13)
-
-b1 = (Atom "b" arg1)
-b2 = (Atom "b" arg2)
-b3 = (Atom "b" arg4)
-b4 = (Atom "b" arg6)
-b5 = (Atom "b" arg7)
-b6 = (Atom "b" arg8)
-b7 = (Atom "b" arg10)
-
-b8 = (Atom "b" arg11)
-b9 = (Atom "b" arg13)
-
-
-mos1 = getpredval [a1,a2,a3,a4,a5,a6,a7,b1,b2,b3,b4,b5,b6,b7]       
-
-mySubs1 = getbindings a8 mos1  
-mySubs2 = getbindings a9 mos1  
-mySubs3 = getbindings b8 mos1  
-mySubs4 = getbindings b9 mos1  
-
-mySubsx = getbindingsAtoms [a8,a9,b9] mos1  
-mySubsy = getbindingsAtoms [a8,a9,b8,b9] mos1
-
-
-
 -- --------------------------------------------------------------
 
 subsTerm:: [(Term,Term)] -> Term -> Term
 -- subsTerm:: Map.Map Term Term -> Term -> Term
-subsTerm m (Term True x) = (Term True x)
-subsTerm m x =
-              case lookup x m of
+subsTerm m (Constant x) = (Constant x)
+subsTerm m (Identifier x) = (Identifier x)
+subsTerm m (Variable x) =
+              case lookup (Variable x) m of
                 Just y -> y
-                Nothing -> x
+                Nothing -> (Variable x)
+                
+subsTerm m (Addition x y) =
+              let xsubs = subsTerm m x
+                  ysubs = subsTerm m y
+              in (Addition xsubs ysubs)
+
+subsTerm m (Subtraction x y) =
+              let xsubs = subsTerm m x
+                  ysubs = subsTerm m y
+              in (Subtraction xsubs ysubs)
+              
+subsTerm m (Multiplication x y) =
+              let xsubs = subsTerm m x
+                  ysubs = subsTerm m y
+              in (Multiplication xsubs ysubs)
+              
+subsTerm m (Negation x) =
+              let xsubs = subsTerm m x
+              in (Negation xsubs)
+              
+              
 
 subsAtom:: [(Term,Term)] -> Atom -> Atom
 -- subsAtom:: Map.Map Term Term -> Atom -> Atom
@@ -345,7 +275,7 @@ ground_rule (Rule h pb nb) m= (Rule (subsAtom m h) (map (subsAtom m) pb) (map (s
 ground_rules:: [[(Term,Term)]] ->  Rule -> [Rule]
 ground_rules xs r = map (ground_rule r) xs
 
--- alterantive
+-- alternative
 ground_rules2:: MapOfSets ->  Rule -> [Rule]
 ground_rules2 m (Rule h pb nb) =
   let c =  getbindingsAtoms pb m
@@ -362,26 +292,25 @@ ground_program p =
        else ground_program pg1
       
 
-ay = (Atom "a" [(variable "Y")])
-uv = (Atom "u" [(variable "X")])
-tv = (Atom "t" [(variable "X")])
-sv = (Atom "s" [(variable "X")])
-rv = (Atom "r" [(variable "X")])
-pv = (Atom "p" [(variable "X")])
-qv = (Atom "q" [(variable "X")])
-qc = (Atom "q" [(constant "c")])
-qc2 = (Atom "q" [(constant "k")])
+
+      
+ac = (Atom "a" [(Identifier "c")])
+av = (Atom "a" [(Variable "X")])
+
+bv = (Atom "b" [(Variable "X")])
+
+rv = (Atom "r" [(Variable "X")])
+rc = (Atom "r" [(Identifier "x")])
 
 
-pv1 = [
-        (Rule qc [] []),
-        (Rule qc2 [] []),
-        (Rule pv [qv] [ay]),
-        (Rule rv [pv] []),
-        (Rule sv [rv] []),
-        (Rule tv [uv] [])
+mm = getpredval [rc]
+mr = (Rule __conflict [rv] [])
+
+mp = [
+        (Rule ac [] []),
+        (Rule rv [av] [bv]),
+        mr
       ]
-
 -- --------------------------------------------------------------
 
 
@@ -447,7 +376,7 @@ sol (UNSAT s) = []
 sol (SAT s) = s
 
 
--- given a list of boolean variables returns all possible interpretations
+-- given a list of boolean Variables returns all possible interpretations
 assignment_generator c = (subsets c)
 
 -- test whether cond is satified by candidate
