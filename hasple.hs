@@ -20,7 +20,7 @@ import ASP
 import LPParser
 import Solver
 
-
+import Data.List (nub)
 
 show_lp [] = ""
 show_lp (x:xs) = (show x) ++ "\n" ++ (show_lp xs)
@@ -65,8 +65,9 @@ test2 x =
                         show_as (sol (findas (groundProgram val) 0)))
 
 ground_facts     = "f(a).\n"
+--                 ++ "r(b).\n" 
 nonground_facts  = "x(X).\n"
-
+--                 ++ "r(Y).\n"
 ground_rules     = "f(b) :- f(a). \n" 
                 ++ "a(b) :- q(a). \n"
 
@@ -90,38 +91,63 @@ test x =
                    let
                      (ground, nonground) = bla prg
                      cons = consequences prg
+                     mos = getpredval cons
+                     ics = get_ics prg
+                     gr_ics = simplifyProgramm (nub (concatMap (groundRule mos) ics)) cons
+                     wfm = findas gr_ics 1
                      simplified_prg = (simplifyProgramm prg cons)
                      (ground_simpl, nonground_simpl) = bla simplified_prg
                      ground_choice_candidates = heads_p ground_simpl
                      nongrnd_choice_candidates = heads_p nonground_simpl
                      choice_candidates = heads_p simplified_prg
-                     choice = head choice_candidates
-                     queries = get_query_rules simplified_prg choice
-                     mos = getpredval cons
-                     gr_queries = concatMap (groundRule mos) queries
                     in
-                    if (choice_candidates==[])
-                      then putStrLn "No Choices left"
+                    if ( sol wfm == [])                   
+                    then putStrLn ("Program found:\n" ++ (show_lp prg)
+                      ++ "\nGround rules:\n"
+                      ++ show_lp ground
+                      ++ "\nNonGround rules:\n"  
+                      ++ show_lp nonground               
+                      ++"\nNo Solution."
+                      ++ "\n")
+                    else
+                      if (choice_candidates==[])
+                      then
+                        putStrLn ("Program found:\n" ++ (show_lp prg)
+                        ++ "\nGround rules:\n"
+                        ++ show_lp ground
+                        ++ "\nNonGround rules:\n"
+                        ++ show_lp nonground
+                        ++ "\nConsequences:\n"
+                        ++ show cons ++"\n"
+                        ++ "\nNo Choice left"
+                        ++ "\n")
                       else
-                      putStrLn ("Program found:\n" ++ (show_lp prg)
-                       ++ "\nGround rules:\n"
-                       ++ show_lp ground
-                       ++ "\nNonGround rules:\n"
-                       ++ show_lp nonground
-                       ++ "\nConsequences:\n"
-                       ++ show cons ++"\n"
-                       ++ "\nChoice Candidates:\n"
-                       ++ show ground_choice_candidates ++"\n"
-                       ++ show nongrnd_choice_candidates ++ "\n"
-                       ++ "\nSimplifiedProgram :\n"
-                       ++ "\nGround rules:\n"
-                       ++ (show_lp ground_simpl)
-                       ++ "\nNonGround rules:\n"
-                       ++ (show_lp nonground_simpl)
-                       ++ "\nChoice:" ++ show choice
-                       ++ "\nChoosenRules:" ++ show_lp queries
-                       ++ "\nChoosenGRules:" ++ show_lp gr_queries
-                       ++ "\n")
+                        let
+                          choice = head choice_candidates
+                          queries = get_query_rules simplified_prg choice
+                          gr_queries = simplifyProgramm (nub (concatMap (groundRule mos) (queries++ics))) cons
+                          as = sol (findas gr_queries 0)
+                        in
+                        putStrLn ("Program found:\n" ++ (show_lp prg)
+                        ++ "\nGround rules:\n"
+                        ++ show_lp ground
+                        ++ "\nNonGround rules:\n"
+                        ++ show_lp nonground
+                        ++ "\nConsequences:\n"
+                        ++ show cons ++"\n"
+                        ++ "\nChoice Candidates:\n"
+                        ++ show ground_choice_candidates ++"\n"
+                        ++ show nongrnd_choice_candidates ++ "\n"
+                        ++ "\nSimplifiedProgram :\n"
+                        ++ "\nGround rules:\n"
+                        ++ (show_lp ground_simpl)
+                        ++ "\nNonGround rules:\n"
+                        ++ (show_lp nonground_simpl)
+                        ++ "\nChoice:" ++ show choice
+                        ++ "\nChoosenRules:" ++ show_lp queries
+                        ++ "\nChoosenGRules simplified:\n" ++ show_lp gr_queries
+                        ++ "\nAnswerSet:" ++ show_as as
+                        ++ "\n")
 
 
                         

@@ -16,7 +16,7 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module Solver (
-   anssets, findas, sol, groundProgram, bla, consequences, simplifyProgramm, heads_p, get_query_rules, getpredval, groundRule,
+   anssets, findas, sol, groundProgram, bla, consequences, simplifyProgramm, heads_p, get_query_rules, getpredval, groundRule, get_ics, Answer(..),
   ) where
 
 import ASP
@@ -33,21 +33,28 @@ type MapOfSets =  Map.Map (String, Int) (Set.Set [Term])
 
 -- insert_mos:: MapOfSets -> Atom -> MapOfSets
 insert_mos:: MapOfSets -> (String, Int) -> [Term] -> MapOfSets      
+-- insert_mos mos key val = 
+--     case Map.lookup key mos of 
+--       Nothing -> if (allconst val)
+--                     then Map.insert key (Set.insert val Set.empty) mos
+--                     else mos
+--       Just x  -> if (allconst val)
+--                     then Map.insert key (Set.insert val x) mos
+--                     else mos
+                    
 insert_mos mos key val = 
     case Map.lookup key mos of 
-      Nothing -> if (allconst val)
-                    then Map.insert key (Set.insert val Set.empty) mos
-                    else mos
-      Just x  -> if (allconst val)
-                    then Map.insert key (Set.insert val x) mos
-                    else mos
+      Nothing -> Map.insert key (Set.insert val Set.empty) mos                 
+      Just x  -> Map.insert key (Set.insert val x) mos
+                 
+                    
+                    
 
-
-allconst:: [Term] -> Bool
-allconst [] = True
-allconst ((Identifier x):xs) = True && allconst xs
-allconst ((Constant x):xs) = True && allconst xs
-allconst _ = False
+-- allconst:: [Term] -> Bool
+-- allconst [] = True
+-- allconst ((Identifier x):xs) = True && allconst xs
+-- allconst ((Constant x):xs) = True && allconst xs
+-- allconst _ = False
 
 
       
@@ -321,6 +328,7 @@ findas p n =
   let variables= (heads_p p)
   in check p (assignment_generator variables) n
 
+  
 check:: [Rule] -> [[Atom]] -> Int -> Answer
 check cond [] num = UNSAT [__conflict]
 check cond candidates num=
@@ -348,6 +356,13 @@ bla (r:rs) =
   then ((r:ground), nonground)
   else (ground, (r:nonground))
 
+-- returns the integrity constraints of a program  
+get_ics:: [Rule] -> [Rule]
+get_ics [] = []
+get_ics ((Rule h pb nb):rs) =
+  if (h == __conflict)
+  then ((Rule h pb nb): get_ics rs)
+  else get_ics rs
 
 -- return true if a rule does not contain variables
 is_groundRule:: Rule -> Bool
