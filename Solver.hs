@@ -20,7 +20,7 @@ module Solver (
   ) where
 
 import ASP
-import Data.List (sort, nub, intersect, (\\) )
+import Data.List (sort, nub, intersect, (\\), delete )
 import Data.Maybe -- for mapMaybe
 -- import Data.List.Extra (nubOrd)
 -- use sort to order list nub (nubOrd) to remove duplicates from list -- maybe use Sets instead?
@@ -100,7 +100,14 @@ match (x:xs) (y:ys) =
           Just [(var,const)] -> join (var,const) (match xs ys)
      else Nothing
      
-
+matchAtom:: Atom -> Atom -> Maybe [(Term,Term)]
+matchAtom (Atom p1 a1) (Atom p2 a2) = 
+  if p1==p2
+  then match a1 a2
+  else Nothing
+                                         
+  
+     
 join:: (Term,Term) -> Maybe [(Term,Term)] -> Maybe [(Term,Term)]
 join x Nothing = Nothing
 join x (Just []) = Just [x]
@@ -422,17 +429,22 @@ t3 = [(Identifier "a"),(Identifier "a")]
 x4 = (Atom "a" [(Identifier "a"),(Identifier "b")])
 t4 = [(Identifier "a"),(Identifier "b")]
       
-unify:: Atom -> Atom -> Bool
-unify (Atom pred1 args1) (Atom pred2 args2) = pred1==pred2 && unifyTerms args1 args2
-
-unifyTerms:: [Term] -> [Term] -> Bool
-unifyTerms x y = case (match x y) of
-                      Nothing -> False
-                      Just x  -> True
+-- unify:: Atom -> Atom -> Bool
+-- unify a1 a2 = 
+--   case (matchAtom a1 a2) of
+--     Nothing -> False
+--     Just x  -> True
 
 
 get_query_rules:: [Rule] -> Atom -> [Rule]
-get_query_rules (r:rs) a = if unify (kopf r) a
-                           then (r: (get_query_rules rs a))
-                           else get_query_rules rs a
-
+get_query_rules [] _ = []
+get_query_rules (r:rs) a = 
+  case matchAtom (kopf r) a of
+       Just binding ->  let gr = ground_rule r binding
+                            x = pbody gr
+                            y = nbody gr
+                            z = x ++ y
+                            c = concatMap (get_query_rules rs) z
+                        in
+                        nub (gr: c)
+       Nothing -> get_query_rules rs a
