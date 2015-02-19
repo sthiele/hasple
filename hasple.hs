@@ -18,6 +18,7 @@
 import System.Environment
 import ASP
 import LPParser
+import Solver
 
 
 show_lp [] = ""
