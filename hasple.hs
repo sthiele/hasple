@@ -68,22 +68,18 @@ mix _ [] = []
 mix (x:xs) (y:ys) = ((x,y):(mix xs ys))                        
                         
 --outerloop, returns the answer sets of a program                        
-loop x =
-  case readProgram x of
-      Left  err -> []
-      Right prg -> 
+loop prg =
                    let
-                     (ground, nonground) = bla prg
                      cons = consequences prg
                      mos = getpredval cons
                      ics = get_ics prg
                      gr_ics = simplifyProgramm (nub (concatMap (groundRule mos) ics)) cons
                      wfm = findas gr_ics 1
                      simplified_prg = (simplifyProgramm prg cons)
-                     (ground_simpl, nonground_simpl) = bla simplified_prg
-                     ground_choice_candidates = heads_p ground_simpl
-                     nongrnd_choice_candidates = heads_p nonground_simpl
-                     choice_candidates = heads_p simplified_prg
+--                      (ground_simpl, nonground_simpl) = bla simplified_prg
+--                      ground_choice_candidates = heads_p ground_simpl
+--                      nongrnd_choice_candidates = heads_p nonground_simpl
+                     choice_candidates = heads_p simplified_prg -- make sure ground atoms are first
                     in
                     if ( sol wfm == [])                   
                     then []
@@ -114,12 +110,10 @@ inner (prg, cons) =
                      ics = get_ics prg
                      gr_ics = simplifyProgramm (nub (concatMap (groundRule mos) ics)) cons
                      wfm = findas gr_ics 1
---                      simplified_prg = (simplifyProgramm prg cons)
-                     simplified_prg = prg
-                     (ground_simpl, nonground_simpl) = bla simplified_prg
-                     ground_choice_candidates = heads_p ground_simpl
-                     nongrnd_choice_candidates = heads_p nonground_simpl
-                     choice_candidates = heads_p simplified_prg
+--                      (ground_simpl, nonground_simpl) = bla prg
+--                      ground_choice_candidates = heads_p ground_simpl
+--                      nongrnd_choice_candidates = heads_p nonground_simpl
+                     choice_candidates = heads_p prg
                     in
                     if ( sol wfm == [])                   
                     then []
@@ -129,21 +123,23 @@ inner (prg, cons) =
                       else
                         let
                           choice = head choice_candidates
-                          queries = get_query_rules simplified_prg choice
+                          queries = get_query_rules prg choice
                           gr_queries = simplifyProgramm (nub (concatMap (groundRule mos) (queries++ics))) cons
                           tas = sol (findas gr_queries 0)
                           ncons = map (cons ++) tas --as candidates
                           nmos = map (getpredval) ncons
-                          temp_prg = simplified_prg \\ queries
+                          temp_prg = prg \\ queries
                           nsimplified_prg =  map (simplifyProgramm temp_prg) ncons
                           list = mix nsimplified_prg ncons
                         in
                         concatMap inner list                        
 
 test_new :: [Char] -> IO ()
-test_new prg= 
+test_new x= 
   do
-  putStrLn (show_as (loop prg))
+    case readProgram x of
+      Left  err -> putStrLn ("ParseError: " ++ show err)
+      Right prg ->  putStrLn (show_as (loop prg))
 
 
                         
@@ -247,3 +243,10 @@ myprg1 = ground_facts ++ nonground_facts ++ ground_rules ++ nonground_rules ++ g
 
 myprg2 = myprg1++"r(b).\n"
 
+myprg3 = "f(a).\n"
+      ++ "q(X) :- f(X), not p(X). \n"
+      ++ "p(X) :- f(X), not q(X). \n"
+      ++ "q1(X) :- f(X), not p1(X). \n"
+      ++ "p1(X) :- f(X), not q1(X). \n"
+      
+      
