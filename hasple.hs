@@ -20,7 +20,7 @@ import ASP
 import LPParser
 import Solver
 
-import Data.List (nub)
+import Data.List (nub,(\\))
 
 show_lp [] = ""
 show_lp (x:xs) = (show x) ++ "\n" ++ (show_lp xs)
@@ -49,43 +49,107 @@ main =
            Left  err -> putStrLn ("ParseError: " ++ show err)
            Right val -> putStrLn ("Program found:\n" ++
                         (show_lp val) ++
---                         "\nGrounded program:\n" ++
---                         show_lp (ground_program val) ++
                         show_as (sol (findas (groundProgram val) 0)))
 
 
-test2 x =
+test_old x =
     do
          case readProgram x of
            Left  err -> putStrLn ("ParseError: " ++ show err)
            Right val -> putStrLn ("Program found:\n" ++
                         (show_lp val) ++
---                         "\nGrounded program:\n" ++
---                         show_lp (ground_program val) ++
                         show_as (sol (findas (groundProgram val) 0)))
 
-ground_facts     = "f(a).\n"
---                 ++ "r(b).\n" 
-nonground_facts  = "x(X).\n"
---                 ++ "r(Y).\n"
-ground_rules     = "f(b) :- f(a). \n" 
-                ++ "a(a1) :- q(a). \n"
-                ++ "a(b1) :- q(b). \n"
+      
 
-nonground_rules  = "y(X) :- x(X). \n"
-                ++ "q(X) :- f(X), not p(X), not r(X). \n"
-                ++ "p(X) :- f(X), not q(X), not r(X). \n"
-                ++ "r(X) :- f(X), not p(X), not q(X). \n"
-                     
-ground_ics       = ":- r(a).\n"
-                ++ ":- a(a1),a(b1).\n"
-nonground_ics    = ":- r(X)."
+mix:: [[Rule]] -> [[Atom]] -> [([Rule],[Atom])]
+mix [] _ = []
+mix _ [] = []
+mix (x:xs) (y:ys) = ((x,y):(mix xs ys))                        
+                        
+--outerloop, returns the answer sets of a program                        
+loop x =
+  case readProgram x of
+      Left  err -> []
+      Right prg -> 
+                   let
+                     (ground, nonground) = bla prg
+                     cons = consequences prg
+                     mos = getpredval cons
+                     ics = get_ics prg
+                     gr_ics = simplifyProgramm (nub (concatMap (groundRule mos) ics)) cons
+                     wfm = findas gr_ics 1
+                     simplified_prg = (simplifyProgramm prg cons)
+                     (ground_simpl, nonground_simpl) = bla simplified_prg
+                     ground_choice_candidates = heads_p ground_simpl
+                     nongrnd_choice_candidates = heads_p nonground_simpl
+                     choice_candidates = heads_p simplified_prg
+                    in
+                    if ( sol wfm == [])                   
+                    then []
+                    else
+                      if (choice_candidates==[])
+                      then [cons]                      
+                      else
+                        let
+                          choice = head choice_candidates
+                          queries = get_query_rules simplified_prg choice
+                          gr_queries = simplifyProgramm (nub (concatMap (groundRule mos) (queries++ics))) cons
+                          tas = sol (findas gr_queries 0)
+                          ncons = map (cons ++) tas --as candidates
+                          nmos = map (getpredval) ncons                          
+                          temp_prg = simplified_prg \\ queries
+                          nsimplified_prg =  map (simplifyProgramm temp_prg) ncons
+                          list = mix nsimplified_prg ncons
+                        in
+                        concatMap inner list
+                        
 
-myprg1 = ground_facts ++ nonground_facts ++ ground_rules ++ nonground_rules ++ ground_ics ++ nonground_ics
+                        
+-- returns the answer sets consistent with the subsequent components
+inner:: ([Rule],[Atom]) -> [[Atom]]
+inner (prg, cons) =
+                   let
+                     mos = getpredval cons
+                     ics = get_ics prg
+                     gr_ics = simplifyProgramm (nub (concatMap (groundRule mos) ics)) cons
+                     wfm = findas gr_ics 1
+--                      simplified_prg = (simplifyProgramm prg cons)
+                     simplified_prg = prg
+                     (ground_simpl, nonground_simpl) = bla simplified_prg
+                     ground_choice_candidates = heads_p ground_simpl
+                     nongrnd_choice_candidates = heads_p nonground_simpl
+                     choice_candidates = heads_p simplified_prg
+                    in
+                    if ( sol wfm == [])                   
+                    then []
+                    else
+                      if (choice_candidates==[])
+                      then [cons]                      
+                      else
+                        let
+                          choice = head choice_candidates
+                          queries = get_query_rules simplified_prg choice
+                          gr_queries = simplifyProgramm (nub (concatMap (groundRule mos) (queries++ics))) cons
+                          tas = sol (findas gr_queries 0)
+                          ncons = map (cons ++) tas --as candidates
+                          nmos = map (getpredval) ncons
+                          temp_prg = simplified_prg \\ queries
+                          nsimplified_prg =  map (simplifyProgramm temp_prg) ncons
+                          list = mix nsimplified_prg ncons
+                        in
+                        concatMap inner list                        
+
+test_new :: [Char] -> IO ()
+test_new prg= 
+  do
+  putStrLn (show_as (loop prg))
 
 
-test :: [Char] -> IO ()
-test x =
+                        
+                        
+test_verb :: [Char] -> IO ()
+test_verb x =
   do
     case readProgram x of
       Left  err -> putStrLn ("ParseError: " ++ show err)
@@ -128,7 +192,13 @@ test x =
                           choice = head choice_candidates
                           queries = get_query_rules simplified_prg choice
                           gr_queries = simplifyProgramm (nub (concatMap (groundRule mos) (queries++ics))) cons
-                          as = sol (findas gr_queries 0)
+                          tas = sol (findas gr_queries 0)
+                          mas = map (cons ++) tas --ncons
+                          nmos = map (getpredval) mas
+                          temp_prg = simplified_prg \\ queries
+                          nsimplified_prg =  map (simplifyProgramm temp_prg) mas
+                          example = head nsimplified_prg
+                          nchoice_candidates = map heads_p nsimplified_prg
                         in
                         putStrLn ("Program found:\n" ++ (show_lp prg)
                         ++ "\nGround rules:\n"
@@ -148,8 +218,32 @@ test x =
                         ++ "\nChoice:" ++ show choice
                         ++ "\nChoosenRules:" ++ show_lp queries
                         ++ "\nChoosenGRules simplified:\n" ++ show_lp gr_queries
-                        ++ "\nAnswerSet:" ++ show_as as
+                        ++ "\nAnswerSet:" ++ show_as mas
+                        ++ "example simplified prg"++ show_lp example
                         ++ "\n")
 
-
                         
+
+ground_facts     = "f(a).\n"
+                ++ "f(b).\n"
+                ++ "f(c).\n"
+--                 ++ "r(b).\n" 
+nonground_facts  = "x(X).\n"
+--                 ++ "r(Y).\n"
+ground_rules     = "f(b) :- f(a). \n" 
+                ++ "a(a1) :- q(a). \n"
+                ++ "a(b1) :- q(b). \n"
+
+nonground_rules  = "y(X) :- x(X). \n"
+                ++ "q(X) :- f(X), not p(X), not r(X). \n"
+                ++ "p(X) :- f(X), not q(X), not r(X). \n"
+                ++ "r(X) :- f(X), not p(X), not q(X). \n"
+                     
+ground_ics       = ":- r(a).\n"
+                ++ ":- a(a1),a(b1).\n"
+nonground_ics    = ":- r(X)."
+
+myprg1 = ground_facts ++ nonground_facts ++ ground_rules ++ nonground_rules ++ ground_ics ++ nonground_ics
+
+myprg2 = myprg1++"r(b).\n"
+
