@@ -90,7 +90,7 @@ parseArguments = (parens (commaSep parseArg))
                  <|>
                  do return []
 
-parseArg =  choice [parseVar, parseConst]
+parseArg =  choice [parseVar, parseIndent, parseConst]
 -- parseArg2 = choice [parseVar, identifier, integer]
 
 parseVar = do
@@ -99,9 +99,14 @@ parseVar = do
              whiteSpace
              return (Variable (firstChar : restChars))
                           
-parseConst = do
+parseIndent = do
               p <- identifier
               return (Identifier p)
+
+parseConst =
+  do
+    n <- integer
+    return (Constant n)
 
 
 -------------

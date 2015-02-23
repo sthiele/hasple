@@ -22,7 +22,7 @@ module ASP (
  
 -- --------------------------------------------------------------
 
-data Term = Constant Int
+data Term = Constant Integer
                 | Identifier String
                 | Variable String
                 | Addition Term Term
