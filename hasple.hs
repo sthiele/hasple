@@ -29,7 +29,7 @@ show_as [] = "No Answersets"
 show_as (x:xs) = (show_as2 (x:xs) 1)
 
 show_as2 [] n = ""
-show_as2 (x:xs) n = "\nAnswer " ++ (show n) ++ ":\n" ++ (show_as3 x) ++ "\n" ++ (show_as2 xs (n+1))
+show_as2 (x:xs) n = "Answer " ++ (show n) ++ ":\n" ++ (show_as3 x) ++ "\n" ++ (show_as2 xs (n+1))
 
 show_as3 [] = ""
 show_as3 (x:xs) =  (show x) ++ " " ++ (show_as3 xs)
@@ -48,16 +48,17 @@ main =
          case readProgram contents of
            Left  err -> putStrLn ("ParseError: " ++ show err)
            Right val -> putStrLn ("Program found:\n" ++
-                        (show_lp val) ++
-                        show_as (sol (findas (groundProgram val) 0)))
-
+                        show_lp val ++
+--                         show_as (sol (findas (groundProgram val) 0)))
+                        show_as (loop val)
+                        ) 
 
 test_old x =
     do
          case readProgram x of
            Left  err -> putStrLn ("ParseError: " ++ show err)
            Right val -> putStrLn ("Program found:\n" ++
-                        (show_lp val) ++
+                        show_lp val ++
                         show_as (sol (findas (groundProgram val) 0)))
 
       
@@ -76,9 +77,6 @@ loop prg =
                      gr_ics = simplifyProgramm (nub (concatMap (groundRule mos) ics)) cons
                      wfm = findas gr_ics 1
                      simplified_prg = (simplifyProgramm prg cons)
---                      (ground_simpl, nonground_simpl) = bla simplified_prg
---                      ground_choice_candidates = heads_p ground_simpl
---                      nongrnd_choice_candidates = heads_p nonground_simpl
                      choice_candidates = heads_p simplified_prg -- make sure ground atoms are first
                     in
                     if ( sol wfm == [])                   
@@ -93,7 +91,6 @@ loop prg =
                           gr_queries = simplifyProgramm (nub (concatMap (groundRule mos) (queries++ics))) cons
                           tas = sol (findas gr_queries 0)
                           ncons = map (cons ++) tas --as candidates
-                          nmos = map (getpredval) ncons                          
                           temp_prg = simplified_prg \\ queries
                           nsimplified_prg =  map (simplifyProgramm temp_prg) ncons
                           list = mix nsimplified_prg ncons
@@ -110,9 +107,6 @@ inner (prg, cons) =
                      ics = get_ics prg
                      gr_ics = simplifyProgramm (nub (concatMap (groundRule mos) ics)) cons
                      wfm = findas gr_ics 1
---                      (ground_simpl, nonground_simpl) = bla prg
---                      ground_choice_candidates = heads_p ground_simpl
---                      nongrnd_choice_candidates = heads_p nonground_simpl
                      choice_candidates = heads_p prg
                     in
                     if ( sol wfm == [])                   
@@ -126,8 +120,7 @@ inner (prg, cons) =
                           queries = get_query_rules prg choice
                           gr_queries = simplifyProgramm (nub (concatMap (groundRule mos) (queries++ics))) cons
                           tas = sol (findas gr_queries 0)
-                          ncons = map (cons ++) tas --as candidates
-                          nmos = map (getpredval) ncons
+                          ncons = map (cons ++) tas  --as candidates
                           temp_prg = prg \\ queries
                           nsimplified_prg =  map (simplifyProgramm temp_prg) ncons
                           list = mix nsimplified_prg ncons
@@ -151,34 +144,22 @@ test_verb x =
       Left  err -> putStrLn ("ParseError: " ++ show err)
       Right prg -> 
                    let
-                     (ground, nonground) = bla prg
                      cons = consequences prg
                      mos = getpredval cons
                      ics = get_ics prg
                      gr_ics = simplifyProgramm (nub (concatMap (groundRule mos) ics)) cons
                      wfm = findas gr_ics 1
                      simplified_prg = (simplifyProgramm prg cons)
-                     (ground_simpl, nonground_simpl) = bla simplified_prg
-                     ground_choice_candidates = heads_p ground_simpl
-                     nongrnd_choice_candidates = heads_p nonground_simpl
                      choice_candidates = heads_p simplified_prg
                     in
                     if ( sol wfm == [])                   
                     then putStrLn ("Program found:\n" ++ (show_lp prg)
-                      ++ "\nGround rules:\n"
-                      ++ show_lp ground
-                      ++ "\nNonGround rules:\n"  
-                      ++ show_lp nonground               
                       ++"\nNo Solution."
                       ++ "\n")
                     else
                       if (choice_candidates==[])
                       then
                         putStrLn ("Program found:\n" ++ (show_lp prg)
-                        ++ "\nGround rules:\n"
-                        ++ show_lp ground
-                        ++ "\nNonGround rules:\n"
-                        ++ show_lp nonground
                         ++ "\nConsequences:\n"
                         ++ show cons ++"\n"
                         ++ "\nNo Choice left"
@@ -189,33 +170,31 @@ test_verb x =
                           queries = get_query_rules simplified_prg choice
                           gr_queries = simplifyProgramm (nub (concatMap (groundRule mos) (queries++ics))) cons
                           tas = sol (findas gr_queries 0)
-                          mas = map (cons ++) tas --ncons
-                          nmos = map (getpredval) mas
+                          ncons = map (cons ++) tas
                           temp_prg = simplified_prg \\ queries
-                          nsimplified_prg =  map (simplifyProgramm temp_prg) mas
+                          nsimplified_prg =  map (simplifyProgramm temp_prg) ncons
                           example = head nsimplified_prg
                           nchoice_candidates = map heads_p nsimplified_prg
+                          list = mix nsimplified_prg ncons
                         in
                         putStrLn ("Program found:\n" ++ (show_lp prg)
-                        ++ "\nGround rules:\n"
-                        ++ show_lp ground
-                        ++ "\nNonGround rules:\n"
-                        ++ show_lp nonground
+
                         ++ "\nConsequences:\n"
                         ++ show cons ++"\n"
                         ++ "\nChoice Candidates:\n"
-                        ++ show ground_choice_candidates ++"\n"
-                        ++ show nongrnd_choice_candidates ++ "\n"
+
+                        ++ show choice_candidates ++ "\n"
+
                         ++ "\nSimplifiedProgram :\n"
-                        ++ "\nGround rules:\n"
-                        ++ (show_lp ground_simpl)
-                        ++ "\nNonGround rules:\n"
-                        ++ (show_lp nonground_simpl)
+                        ++ (show_lp simplified_prg)
+
                         ++ "\nChoice:" ++ show choice
                         ++ "\nChoosenRules:" ++ show_lp queries
                         ++ "\nChoosenGRules simplified:\n" ++ show_lp gr_queries
-                        ++ "\nAnswerSet:" ++ show_as mas
-                        ++ "example simplified prg"++ show_lp example
+                        ++ "\nProposed AnswerSet extensions:\n" ++ show_as tas
+                        ++ "\nFinal AnswerSet:\n" ++ show_as ncons
+                        ++ "\nexample simplified prg\n"++ show_lp example
+                        ++ "\ninner as\n"++ show_as (concatMap inner list)
                         ++ "\n")
 
                         
@@ -233,7 +212,10 @@ ground_rules     = "f(b) :- f(a). \n"
 nonground_rules  = "y(X) :- x(X). \n"
                 ++ "q(X) :- f(X), not p(X), not r(X). \n"
                 ++ "p(X) :- f(X), not q(X), not r(X). \n"
-                ++ "r(X) :- f(X), not p(X), not q(X). \n"
+                ++ "r(X) :- f(X), not p(X), not q(X), not a(a1). \n"
+                ++ "q2(X) :- f(X), not p2(X), not r2(X). \n"
+                ++ "p2(X) :- f(X), not q2(X), not r2(X), not a(b1). \n"
+                ++ "r2(X) :- f(X), not p2(X), not q2(X). \n"                
                      
 ground_ics       = ":- r(a).\n"
                 ++ ":- a(a1),a(b1).\n"
