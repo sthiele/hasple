@@ -16,7 +16,12 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module Solver (
-   anssets, findas, sol, groundProgram, bla, consequences, simplifyProgramm, heads_p, get_query_rules, getpredval, groundRule, get_ics, Answer(..),
+   anssets, findas, sol, groundProgram, groundProgramx,
+   consequences, simplifyProgramm,
+     simplifyProgramm2,
+       heads_p, atoms_p,
+   get_query_rules, getpredval, getpredvalx, groundRule, get_ics, Answer(..),
+   MapOfSets, insert_mos  
   ) where
 
 import ASP
@@ -63,6 +68,13 @@ getpredval:: [Atom] -> MapOfSets
 getpredval [] = Map.empty
 getpredval ((Atom pred args):xs) = insert_mos (getpredval xs) (pred, (length args)) args
 
+
+getpredvalx:: MapOfSets -> [Atom] -> MapOfSets
+getpredvalx mos [] = mos
+getpredvalx mos ((Atom pred args):xs) =
+  let mos2 = insert_mos mos (pred, (length args)) args
+  in
+    getpredvalx mos2 xs
 
 
 -- can two terms be unified if yes return variable bindings
@@ -241,7 +253,14 @@ groundProgram p =
        then pg1
        else groundProgram pg1
       
-
+groundProgramx:: [Rule] -> MapOfSets -> [Rule]
+groundProgramx p mos =
+  let m = getpredvalx mos (heads_p  p)
+      pg1 = nub (concatMap  (groundRule m)  p)
+  in
+    if pg1==p
+       then pg1
+       else groundProgram pg1
 
       
 
@@ -250,8 +269,14 @@ groundProgram p =
 
 heads_p :: [Rule] -> [Atom]
 -- returns the head of all rules without the contradiction symbol "" (all consistent consequences)
-heads_p rules = filter (\i -> i/=__conflict ) (nub (map kopf rules))
+heads_p rules =
+  filter (\i -> i/=__conflict )
+  (nub (map kopf rules))
 
+atoms_p :: [Rule] -> [Atom]
+atoms_p rules =
+  filter (\i -> i/=__conflict )
+  (nub (map kopf rules)++ (concatMap pbody rules) ++ (concatMap pbody rules))
 
 subsets :: [a] -> [[a]]
 subsets []  = [[]]
@@ -293,8 +318,6 @@ reduct p x = [ (Rule (kopf r) (pbody r) []) |  r <- p,  (reducenbody (nbody r) x
 anssets p = filter (\i -> (sort (cn (reduct p i)))==(sort i)) (subsets (heads_p p))
 
 
-
-
 data Answer = SAT [[Atom]] | UNSAT [Atom]
 
 instance Show Answer where
@@ -326,8 +349,9 @@ findas:: [Rule] -> Int -> Answer
 -- return atmost n answer sets for program p
 findas p n =
   let variables= (heads_p p)
-  in check p (assignment_generator variables) n
-
+      falses = (atoms_p p) \\ variables
+      simplified_prg = simplifyProgramm p ([],falses)
+  in check simplified_prg (assignment_generator variables) n
   
 check:: [Rule] -> [[Atom]] -> Int -> Answer
 check cond [] num = UNSAT [__conflict]
@@ -344,17 +368,6 @@ check cond candidates num=
     --    let conflicts=conflictana
     check cond (tail candidates) (num)
 
-
-
-
--- splits a programm into ground and nonground rules
-bla:: [Rule] -> ([Rule],[Rule])
-bla [] = ([],[])
-bla (r:rs) =
-  let (ground,nonground) = bla rs in
-  if (is_groundRule r)
-  then ((r:ground), nonground)
-  else (ground, (r:nonground))
 
 -- returns the integrity constraints of a program  
 get_ics:: [Rule] -> [Rule]
@@ -384,37 +397,71 @@ is_groundTerms ((Constant x):xs) = is_groundTerms xs
 is_groundTerms ((Identifier x):xs) = is_groundTerms xs
 is_groundTerms _ = False
 
+-- does remove facts
+simplifyProgramm:: [Rule] -> ([Atom],[Atom]) -> [Rule]
+simplifyProgramm [] (t,f) = []
+simplifyProgramm x (t,f) = (mapMaybe (simplifyRule (t,f)) x)
+
+-- does not remove facts
+simplifyProgramm2:: [Rule] -> ([Atom],[Atom]) -> [Rule]
+simplifyProgramm2 [] (t,f) = []
+simplifyProgramm2 x (t,f) = (mapMaybe (simplifyRule2 (t,f)) x)
 
 
--- get ground facts and nonground facts
--- grfngrf:: [Rule] -> ([Atom],[Atom])
--- grfngrf p = let (ground,nonground) = bla p in
---          ((facts ground), (facts nonground))
-
-
-simplifyProgramm:: [Rule] -> [Atom]-> [Rule]
-simplifyProgramm [] x = []
-simplifyProgramm x f = (mapMaybe (simplifyRule f) x)
-
-
-simplifyRule:: [Atom] -> Rule -> Maybe Rule
-simplifyRule f (Rule h pb nb) =
-  if ( (elem h f) || not (null (intersect nb f)))
+simplifyRule:: ([Atom],[Atom]) -> Rule -> Maybe Rule
+simplifyRule (t,f) (Rule h pb nb) =
+  if ( (elem h t) || not (null (intersect nb t)) || not (null (intersect pb f)))
   then Nothing
   else
-  let newbody = (nub pb) \\ f in
-  Just (Rule h newbody nb)
-
-
+  let newpbody = (nub pb) \\ t
+      newnbody = (nub nb) \\ f
+  in
+  Just (Rule h newpbody newnbody)
+  
+-- does not remove facts
+simplifyRule2:: ([Atom],[Atom]) -> Rule -> Maybe Rule
+simplifyRule2 (t,f) (Rule h pb nb) =
+  if ( not (null (intersect nb t)) || not (null (intersect pb f)))
+  then Nothing
+  else
+  let newpbody = (nub pb) \\ t
+      newnbody = (nub nb) \\ f
+  in
+  Just (Rule h newpbody newnbody)  
          
 -- return consequences of a programm
-consequences :: [Rule] -> [Atom]
-consequences p =
-  let f = facts p in
-  if (null f)
-  then []
-  else f ++ (consequences (simplifyProgramm p f))
-  
+consequences :: [Rule] -> [Atom] -> [Atom] -> ([Atom],[Atom])
+consequences p t f=
+  let
+      simplified_prg = simplifyProgramm2 p (t,f)
+      trues = facts simplified_prg
+      falses  = nfacts simplified_prg
+  in
+  if (null (trues \\ t) && null (falses \\ f))
+  then (t,f)
+  else
+    let t2 = t ++ trues
+        f2 = f ++ falses
+    in
+      consequences simplified_prg t2 f2
+      
+-- return atoms of a programm that dont have a matching head
+nfacts :: [Rule] -> [Atom]
+nfacts prg =
+   let a = nub (atoms_p prg)
+       he = heads_p prg
+       nfact_candidates = (a \\ he)
+       discard = concatMap (testy he) nfact_candidates
+   in
+     nfact_candidates \\ discard
+     
+testy:: [Atom] -> Atom -> [Atom]
+testy [] a = []
+testy (x:xs) a =
+  case matchAtom a x of
+     Just x -> [a]
+     Nothing -> testy xs a
+     
 
 ac = (Atom "a" [(Identifier "c")])
 av = (Atom "a" [(Variable "X")])
@@ -426,23 +473,16 @@ bc = (Atom "b" [(Constant 1 )])
 rv = (Atom "r" [(Variable "X")])
 rc = (Atom "r" [(Identifier "x")])
 
-
-mm = getpredval [rc]
-mr = (Rule __conflict [rv] [])
-mr2 = (Rule ac [bc,rc] [])
-
 mp = [
         (Rule ac [] []),
-        (Rule bc [ac] []),          
-        (Rule rv [ac] [bv]),
-        mr
+        (Rule bv [av] [])
       ]
 
 x1 = (Atom "a" [(Variable "X"),(Variable "X")])
 t1 = [(Variable "X"),(Variable "X")]
 x2 = (Atom "a" [(Variable "Y"),(Variable "Z")])
 t2 = [(Variable "Y"),(Variable "Z")]
-x3 = (Atom "a" [(Identifier "a"),(Identifier "a")])
+x3 = (Atom "a" [(Constant 1),(Constant 1)])
 t3 = [(Identifier "a"),(Identifier "a")]
 x4 = (Atom "a" [(Identifier "a"),(Identifier "b")])
 t4 = [(Identifier "a"),(Identifier "b")]
@@ -456,13 +496,29 @@ t4 = [(Identifier "a"),(Identifier "b")]
 
 get_query_rules:: [Rule] -> Atom -> [Rule]
 get_query_rules [] _ = []
-get_query_rules (r:rs) a = 
+get_query_rules rules a =
+  let grules = get_query_rules2 rules a
+      next = (concatMap pbody grules) ++ (concatMap nbody grules)
+      nn = delete a next
+  in
+    nub (grules ++ (concatMap (get_query_rulesx rules [a]) nn))
+
+get_query_rulesx:: [Rule] -> [Atom] -> Atom -> [Rule]
+get_query_rulesx rules found a =
+  let grules = get_query_rules2 rules a
+      next = (concatMap pbody grules) ++ (concatMap nbody grules)
+      nn = next \\ (a:found)
+  in
+    grules ++ (concatMap (get_query_rulesx rules (a:found)) nn)
+
+
+
+get_query_rules2:: [Rule] -> Atom -> [Rule]
+get_query_rules2 [] _ = []
+get_query_rules2 (r:rs) a = 
   case matchAtom (kopf r) a of
        Just binding ->  let gr = groundRule2 r binding
-                            x = pbody gr
-                            y = nbody gr
-                            z = x ++ y
-                            c = concatMap (get_query_rules rs) z
+                            grs = get_query_rules2 rs a
                         in
-                        nub (gr: c)
-       Nothing -> get_query_rules rs a
+                        nub (gr: grs)
+       Nothing -> get_query_rules2 rs a
