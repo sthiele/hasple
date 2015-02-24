@@ -173,31 +173,35 @@ findas2 prg pchoice nchoice =
       choice = head choice_candidates
       simplified_prg1 = simplifyProgramm2 prg ([choice],[])
       simplified_prg2 = simplifyProgramm2 prg ([],[choice])
-      newpchoice1 = (choice:pchoice)
-      newnchoice2 = choice:nchoice
       (t1,f1) = consequences simplified_prg1 [choice] []
-      mos1 = getpredval t1
       (t2,f2) = consequences  simplified_prg2 [] [choice]
-      mos2 = getpredval t2
+      newpchoice1 = nub ((choice:pchoice))
+      newnchoice1 = nub (nchoice)
+      newpchoice2 = nub (pchoice)
+      newnchoice2 = nub ((choice:nchoice))
+      nt1 = newpchoice1++t1
+      nf1 = newnchoice1++f1
+      nt2 = newpchoice2++t2
+      nf2 = newnchoice2++f2
+      mos1 = getpredval nt1
+      mos2 = getpredval nt2
       ics = get_ics prg 
       gr_ics1 = simplifyProgramm (nub (concatMap (groundRule mos1) ics)) (t1,f1)
       gr_ics2 = simplifyProgramm (nub (concatMap (groundRule mos2) ics)) (t2,f2)
-      wfm1 = findas gr_ics1 1
-      wfm2 = findas gr_ics2 1
   in
     if (choice_candidates==[])
-    then [[]]
+    then [pchoice]
     else
-      if ( elem __conflict t1 || not (null (intersect t1 newpchoice1)) )
+      if ( elem __conflict t1 || not (null (intersect t1 newnchoice1)) || not (null (intersect f1 newpchoice1)) )
       then
-        if ( elem __conflict t2 ||  not (null (intersect t2 pchoice)) || not (null (intersect f2 newnchoice2)) )
+        if ( elem __conflict t2 ||  not (null (intersect t2 newnchoice2)) || not (null (intersect f2 newpchoice2)) )
         then []
-        else map (t2 ++) (findas2 (simplifyProgramm simplified_prg2 (t2,(choice:f2))) pchoice newnchoice2)
+        else map ([] ++) (findas2 (simplifyProgramm simplified_prg2 (nt2,nf2)) nt2 nf2)
       else
-        if ( elem __conflict t2 || not (null (intersect t2 pchoice)) || not (null (intersect f2 newnchoice2)) )
-        then map (t1 ++) (findas2 (simplifyProgramm simplified_prg1 ((choice:t1),f1)) newpchoice1 nchoice)
-        else (map (t1 ++) (findas2 (simplifyProgramm simplified_prg1 ((choice:t1),f1)) newpchoice1 nchoice))
-          ++ (map (t2 ++) (findas2 (simplifyProgramm simplified_prg2 (t2,(choice:f2))) pchoice newnchoice2))
+        if ( elem __conflict t2 || not (null (intersect t2 newnchoice2)) || not (null (intersect f2 newpchoice2)) )
+        then map ([] ++) (findas2 (simplifyProgramm simplified_prg1 (nt1,nf1)) nt1 nf1)
+        else (map ([] ++) (findas2 (simplifyProgramm simplified_prg1 (nt1,nf1)) nt1 nf1))
+          ++ (map ([] ++) (findas2 (simplifyProgramm simplified_prg2 (nt2,nf2)) nt2 nf2))
           
    
 prfindas2 prg pchoice nchoice =
@@ -205,28 +209,38 @@ prfindas2 prg pchoice nchoice =
       choice = head choice_candidates
       simplified_prg1 = simplifyProgramm2 prg ([choice],[])
       simplified_prg2 = simplifyProgramm2 prg ([],[choice])
-      newpchoice1 = (choice:pchoice)
-      newnchoice2 = choice:nchoice      
       (t1,f1) = consequences simplified_prg1 [choice] []
-      mos1 = getpredval t1
       (t2,f2) = consequences  simplified_prg2 [] [choice]
-      mos2 = getpredval t2
-      ics = get_ics prg
+      newpchoice1 = nub ((choice:pchoice))
+      newnchoice1 = nub (nchoice)
+      newpchoice2 = nub (pchoice)
+      newnchoice2 = nub ((choice:nchoice))
+      nt1 = newpchoice1++t1
+      nf1 = newnchoice1++f1
+      nt2 = newpchoice2++t2
+      nf2 = newnchoice2++f2
+      mos1 = getpredval nt1
+      mos2 = getpredval nt2
+      ics = get_ics prg 
       gr_ics1 = simplifyProgramm (nub (concatMap (groundRule mos1) ics)) (t1,f1)
       gr_ics2 = simplifyProgramm (nub (concatMap (groundRule mos2) ics)) (t2,f2)
-      wfm1 = findas gr_ics1 1
-      wfm2 = findas gr_ics2 1
-      nprg1 = (simplifyProgramm simplified_prg1 ((choice:t2),f2))
-      nprg2 = (simplifyProgramm simplified_prg2 (t2,(choice:f2)))
+      nprg1 = (simplifyProgramm simplified_prg1 (nt2,nf2))
+      nprg2 = (simplifyProgramm simplified_prg2 (nt2,nf2))
+      
   in
-    putStrLn ( "\nChoice Candidates:\n" ++ show choice_candidates
+    putStrLn ( "\n Program:\n" ++ show_lp prg 
+    ++ "\nChoice Candidates:\n" ++ show choice_candidates
     ++ "\n" ++ show (t1, f1)
     ++ "\n" ++ show (t2, f2)
-    ++ "\n" ++ show_lp simplified_prg1
-    ++ "\n" ++ show_lp simplified_prg2
-    ++ "\n" ++ show_lp nprg1
-    ++ "\n" ++ show_lp nprg2
-    
+    ++ "\n" ++ show (newpchoice1,newnchoice1)
+    ++ "\n" ++ show (newpchoice2, newnchoice2)
+--     ++ "\n" ++ show (newpchoice1, nchoice)
+--     ++ "\n" ++ show (pchoice, newnchoice2)
+    ++ "\na:" ++ show_lp simplified_prg1
+    ++ "\na:" ++ show_lp simplified_prg2
+    ++ "\nb:" ++ show_lp nprg1
+    ++ "\nb:" ++ show_lp nprg2
+    ++ "\nx:" ++ show (not (null (intersect t1 newnchoice1)))
     ++ "\n")
 
   
