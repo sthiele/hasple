@@ -42,7 +42,7 @@ instance Show Term where
 
 data Atom = Atom { predicate :: String
                  , arguments :: [Term]
-                 }
+                 }deriving (Eq, Ord)
 
 showlist :: (Show a) => [a] -> String
 showlist [] = ""
@@ -53,11 +53,6 @@ instance Show Atom where
     show (Atom pred []) =  pred
     show (Atom pred xs) =  pred ++"("++showlist xs++")"
     
-instance Eq Atom where
-  (Atom p1 args1) == (Atom p2 args2) = p1==p2 && args1==args2
-
-instance Ord Atom where
-  compare (Atom pred args) (Atom pred2 args2) = compare pred pred2
 
 __conflict = (Atom "conflict" [])
 

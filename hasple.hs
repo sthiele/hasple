@@ -20,7 +20,7 @@ import ASP
 import LPParser
 import Solver
 
-import Data.List (nub,(\\), intersect)
+import Data.List (nub,(\\), intersect, sort)
 
 show_lp [] = ""
 show_lp (x:xs) = (show x) ++ "\n" ++ (show_lp xs)
@@ -84,11 +84,11 @@ outer prg =
                      mos = getpredval cons
                      ics = get_ics prg
                      gr_ics = simplifyProgramm (nub (concatMap (groundRule mos) ics)) (cons,falses)
-                     wfm = findas gr_ics 1
+                     wfm = assi gr_ics
                      simplified_prg = simplifyProgramm prg (cons,falses)
                      choice_candidates = heads_p simplified_prg -- make sure ground atoms are first
                     in
-                    if ( sol wfm == [])                   
+                    if ( wfm == [])
                     then []
                     else
                       if (choice_candidates==[])
@@ -100,9 +100,7 @@ outer prg =
                           gr_queries = (simplifyProgramm (groundProgramx (queries++ics) mos) (cons,falses))
                           eval_atoms = nub (atoms_p gr_queries)
                           
---                           tas = sol (findas (gr_queries) 0)
---                           tas =  (anssets (gr_queries))
-                          tas =  (findas2 (gr_queries)) [] []
+                          tas =  (assi (gr_queries))
                           nfalses = map (nt falses eval_atoms) tas
                           ncons = map (cons ++) tas --as candidates
                           rest_prg = simplified_prg \\ queries
@@ -123,10 +121,10 @@ inner (prg, cons, falses) =
                      mos = getpredval cons
                      ics = get_ics prg
                      gr_ics = simplifyProgramm (nub (concatMap (groundRule mos) ics)) (cons,falses)
-                     wfm = findas gr_ics 1
+                     wfm = assi gr_ics
                      choice_candidates = heads_p prg
                     in
-                    if ( sol wfm == [])                   
+                    if ( wfm == [])
                     then []
                     else
                       if (choice_candidates==[])
@@ -138,9 +136,7 @@ inner (prg, cons, falses) =
                           gr_queries = (simplifyProgramm (groundProgramx (queries++ics) mos) (cons,falses))
                           eval_atoms = nub (atoms_p gr_queries)
                           
---                           tas = sol (findas (gr_queries) 0)
---                           tas =  (anssets (gr_queries))
-                          tas =  (findas2 (gr_queries) [] [])
+                          tas =  (assi (gr_queries))
                           nfalses = map (nt falses eval_atoms) tas
                           ncons = map (cons ++) tas  --as candidates
                           mixed = mix ncons nfalses
@@ -150,100 +146,61 @@ inner (prg, cons, falses) =
                         in
                         concatMap inner list                        
 
-a = (Atom "a" [])
-b = (Atom "b" [])
-c = (Atom "c" [])
 
-mp = [
-        (Rule a [] [b,c]),
-        (Rule b [] [a,c]),
-        (Rule c [] [a,b])
-        ]
-mp2 = [
-        (Rule a [] [b]),
-        (Rule b [] [a])
-        ]
-mp3 = [
-        (Rule a [b] []),
-        (Rule b [] [a])
-        ]        
-                        
+findas prg = findas2 prg [] []
+
 findas2 prg pchoice nchoice =
-  let choice_candidates = ((atoms_p prg) \\ pchoice) \\ nchoice
-      choice = head choice_candidates
-      simplified_prg1 = simplifyProgramm2 prg ([choice],[])
-      simplified_prg2 = simplifyProgramm2 prg ([],[choice])
-      (t1,f1) = consequences simplified_prg1 [choice] []
-      (t2,f2) = consequences  simplified_prg2 [] [choice]
-      newpchoice1 = nub ((choice:pchoice))
-      newnchoice1 = nub (nchoice)
-      newpchoice2 = nub (pchoice)
-      newnchoice2 = nub ((choice:nchoice))
-      nt1 = newpchoice1++t1
-      nf1 = newnchoice1++f1
-      nt2 = newpchoice2++t2
-      nf2 = newnchoice2++f2
-      mos1 = getpredval nt1
-      mos2 = getpredval nt2
-      ics = get_ics prg 
-      gr_ics1 = simplifyProgramm (nub (concatMap (groundRule mos1) ics)) (t1,f1)
-      gr_ics2 = simplifyProgramm (nub (concatMap (groundRule mos2) ics)) (t2,f2)
+  let reduced = reduct prg pchoice
+      lcons = sort (cn reduced)
+      choice_candidates = ((atoms_p prg) \\ pchoice) \\ nchoice
+      choice = head choice_candidates 
   in
-    if (choice_candidates==[])
+    if (lcons == pchoice)
     then [pchoice]
     else
-      if ( elem __conflict t1 || not (null (intersect t1 newnchoice1)) || not (null (intersect f1 newpchoice1)) )
-      then
-        if ( elem __conflict t2 ||  not (null (intersect t2 newnchoice2)) || not (null (intersect f2 newpchoice2)) )
-        then []
-        else map ([] ++) (findas2 (simplifyProgramm simplified_prg2 (nt2,nf2)) nt2 nf2)
+      if (choice_candidates==[])
+      then []
       else
-        if ( elem __conflict t2 || not (null (intersect t2 newnchoice2)) || not (null (intersect f2 newpchoice2)) )
-        then map ([] ++) (findas2 (simplifyProgramm simplified_prg1 (nt1,nf1)) nt1 nf1)
-        else (map ([] ++) (findas2 (simplifyProgramm simplified_prg1 (nt1,nf1)) nt1 nf1))
-          ++ (map ([] ++) (findas2 (simplifyProgramm simplified_prg2 (nt2,nf2)) nt2 nf2))
-          
-   
-prfindas2 prg pchoice nchoice =
-  let choice_candidates = ((atoms_p prg) \\ pchoice) \\ nchoice
-      choice = head choice_candidates
-      simplified_prg1 = simplifyProgramm2 prg ([choice],[])
-      simplified_prg2 = simplifyProgramm2 prg ([],[choice])
-      (t1,f1) = consequences simplified_prg1 [choice] []
-      (t2,f2) = consequences  simplified_prg2 [] [choice]
-      newpchoice1 = nub ((choice:pchoice))
-      newnchoice1 = nub (nchoice)
-      newpchoice2 = nub (pchoice)
-      newnchoice2 = nub ((choice:nchoice))
-      nt1 = newpchoice1++t1
-      nf1 = newnchoice1++f1
-      nt2 = newpchoice2++t2
-      nf2 = newnchoice2++f2
-      mos1 = getpredval nt1
-      mos2 = getpredval nt2
-      ics = get_ics prg 
-      gr_ics1 = simplifyProgramm (nub (concatMap (groundRule mos1) ics)) (t1,f1)
-      gr_ics2 = simplifyProgramm (nub (concatMap (groundRule mos2) ics)) (t2,f2)
-      nprg1 = (simplifyProgramm simplified_prg1 (nt2,nf2))
-      nprg2 = (simplifyProgramm simplified_prg2 (nt2,nf2))
-      
-  in
-    putStrLn ( "\n Program:\n" ++ show_lp prg 
-    ++ "\nChoice Candidates:\n" ++ show choice_candidates
-    ++ "\n" ++ show (t1, f1)
-    ++ "\n" ++ show (t2, f2)
-    ++ "\n" ++ show (newpchoice1,newnchoice1)
-    ++ "\n" ++ show (newpchoice2, newnchoice2)
---     ++ "\n" ++ show (newpchoice1, nchoice)
---     ++ "\n" ++ show (pchoice, newnchoice2)
-    ++ "\na:" ++ show_lp simplified_prg1
-    ++ "\na:" ++ show_lp simplified_prg2
-    ++ "\nb:" ++ show_lp nprg1
-    ++ "\nb:" ++ show_lp nprg2
-    ++ "\nx:" ++ show (not (null (intersect t1 newnchoice1)))
-    ++ "\n")
+        (findas2 prg (sort (choice:pchoice)) nchoice)
+        ++ (findas3 prg pchoice (choice:nchoice))
 
-  
+findas3 prg pchoice nchoice =
+   let reduced = reduct prg pchoice
+       choice_candidates = ((atoms_p prg) \\ pchoice) \\ nchoice
+       choice = head choice_candidates
+  in
+      if (choice_candidates==[])
+      then []
+      else
+        (findas2 prg (sort (choice:pchoice)) nchoice)
+        ++ (findas3 prg pchoice (choice:nchoice))
+        
+
+prfindas2:: [Rule] -> [Atom] -> [Atom] -> [Char]
+prfindas2 prg pchoice nchoice =
+  let reduced = reduct prg pchoice
+      lcons = sort (cn reduced)
+      nocons = (atoms_p prg \\ lcons)
+      cons = consequences prg pchoice []
+      choice_candidates = ((atoms_p prg) \\ pchoice) \\ nchoice
+      choice = head choice_candidates
+  in
+    if (sort lcons == sort pchoice)
+    then show [pchoice]++"\n"
+    else
+      if (choice_candidates==[])
+      then "not" ++ show (sort pchoice)++show(sort lcons)++"\n"
+      else
+        "choose: "++ show pchoice ++ show nchoice ++"\n"
+        ++ "lcons: "++ show lcons ++ "\n"
+        ++ "cons: "++ show cons ++ "\n"
+        ++ "nocons: "++ show nocons ++ "\n" ++
+        (prfindas2 prg (sort (choice:pchoice)) nchoice)
+        ++ (prfindas2 prg pchoice (choice:nchoice))
+        
+prfindas prg = prfindas2 prg [] []
+ 
+ 
   
                         
 test_new :: [Char] -> IO ()
@@ -267,11 +224,12 @@ test_verb x =
                      mos = getpredval cons
                      ics = get_ics prg
                      gr_ics = simplifyProgramm (nub (concatMap (groundRule mos) ics)) (cons,falses)
-                     wfm = findas gr_ics 1
+--                      wfm = anssets gr_ics
+                     wfm = assi gr_ics
                      simplified_prg = (simplifyProgramm prg (cons,falses))
                      choice_candidates = heads_p simplified_prg
                     in
-                    if ( sol wfm == [])                   
+                    if (wfm == [])
                     then putStrLn ("Program found:\n" ++ (show_lp prg)
                       ++"\nNo Solution."
                       ++ "\n")
@@ -291,9 +249,7 @@ test_verb x =
                           queries = get_query_rules simplified_prg choice
                           gr_queries = (simplifyProgramm (groundProgramx (queries++ics) mos) (cons,falses))
                           eval_atoms = nub (atoms_p gr_queries)
---                           tas = sol (findas (gr_queries) 0)
---                           tas =  (anssets (gr_queries))
-                          tas =  findas2 (gr_queries) [] []
+                          tas =  assi (gr_queries)
                           
 --                           intersectionas =  intersectAll tas
                           ncons = map (cons ++) tas
@@ -341,6 +297,10 @@ intersectAll (x:xs) = intersect x (intersectAll xs)
 nt:: [Atom] -> [Atom] -> [Atom] -> [Atom]
 nt old a t = old ++ (a \\ t)
 
+
+-- assi = anssets
+assi = findas
+
 ground_facts     = "f(a).\n"
                 ++ "f(b).\n"
                 ++ "f(c).\n"
@@ -372,20 +332,53 @@ myprg3 = "f(a).\n"
       ++ "f(c).\n"
       ++ "f(d).\n"
       ++ "f(e).\n"
-      ++ "f(f).\n"
-      ++ "q(X) :- f(X), not p(X). \n"
-      ++ "q(X):- f(X), not p(X), not r(X). \n"
-      ++ "p(X) :-f(X), not q(X), not r(X). \n"
-      ++ "r(X) :-f(X), not p(X), not q(X). \n"
-      ++ ":- r(X)."
+      ++ "q(X):- f(X), not p(X). \n"
+      ++ "p(X) :-f(X), not q(X). \n"
 
-myprg4 = "f(1).\n"
-      ++ "q(X):- f(X), not p(X).\n"
-      ++ "p(X) :-f(X), not q(X).\n"
-      ++ "r(X) :-f(X), not s(X).\n"
-      ++ "s(X) :-f(X), not r(X).\n"
-      ++ "f(2) :- s(1).\n"
+
+
+
+
+myprg4 = "f(a).\n"
+      ++ "f(b).\n"
+      ++ "q(X):- f(X), not p(X), not r(X).\n"
+      ++ "p(X) :-f(X), not q(X), not r(X).\n"
+      ++ "r(X) :-f(X), not p(X), not q(X).\n"
       ++ ":- r(X).\n"
+      
+Right mpr4 = readProgram myprg4      
 
 myprg5 = ":- r(X).\n"
-      
+
+
+mpr1a = " a :- not b.\n"
+
+Right mp1a = readProgram mpr1a
+
+
+mpr1 = "a :- not b, not c.\n"
+    ++ "b :- not a, not c.\n"
+    ++ "c :- not a, not b.\n"
+
+   
+Right mp1 = readProgram mpr1
+
+mpr1b = "q(a) :- not p(a).\n"
+     ++ "q(b) :- not p(b).\n"
+     ++ "p(a) :- not q(a).\n"
+     ++ "p(b) :- not q(b).\n"
+     
+Right mp1b = readProgram mpr1b
+     
+
+mpr2 = "a:-b.\n"
+    ++ "b:-a.\n"
+
+Right mp2 = readProgram mpr2
+
+mpr3 = "a :- b.\n"
+    ++ "b :- not a.\n"
+
+Right mp3 = readProgram mpr3
+
+    

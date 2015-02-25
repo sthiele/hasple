@@ -16,11 +16,13 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module Solver (
-   anssets, findas, sol, groundProgram, groundProgramx,
+   anssets,
+   reduct, cn,
+   groundProgram, groundProgramx,
    consequences, simplifyProgramm,
      simplifyProgramm2,
        heads_p, atoms_p,
-   get_query_rules, getpredval, getpredvalx, groundRule, get_ics, Answer(..),
+   get_query_rules, getpredval, getpredvalx, groundRule, get_ics,
    MapOfSets, insert_mos  
   ) where
 
@@ -283,14 +285,15 @@ subsets []  = [[]]
 subsets (x:xs) = subsets xs ++ map (x:) (subsets xs)
 
 
-reducepbody :: [Atom] -> [Atom] -> [Atom]
--- reduces a positive body
-reducepbody x y = [a | a <- x, not( a `elem` y)]
+-- \\ in reducebasicprogram
+-- reducepbody :: [Atom] -> [Atom] -> [Atom]
+-- -- reduces a positive body
+-- reducepbody x y = [a | a <- x, not( a `elem` y)]
 
-
-reducenbody :: [Atom] -> [Atom] -> [Atom]
--- reduces the negative body
-reducenbody x y = [a | a <- x, a `elem` y]
+-- intersect in reducebasicprogram
+-- reducenbody :: [Atom] -> [Atom] -> [Atom]
+-- -- reduces the negative body
+-- reducenbody x y = [a | a <- x, a `elem` y]
 
 
 facts :: [Rule] -> [Atom]
@@ -299,7 +302,7 @@ facts p = [ (kopf r) |  r <- p,  (null (pbody r)), (null (nbody r)) ]
 
 
 reducebasicprogram :: [Rule] -> [Atom] -> [Rule]
-reducebasicprogram p x = [ (Rule (kopf r) (reducepbody (pbody r) x) []) | r <- p, (pbody r)/=[] ]
+reducebasicprogram p x = [ (Rule (kopf r) ((pbody r)\\ x) []) | r <- p, (pbody r)/=[] ]
 
 
 cn :: [Rule] -> [Atom]
@@ -309,64 +312,18 @@ cn p = if (reducebasicprogram p (facts p)) == p
    then (facts p)
    else nub ((facts p) ++ (cn (reducebasicprogram p (facts p))))
 
-
+   
 reduct :: [Rule] -> [Atom] -> [Rule]
 -- return the reduct of a logic program with x
-reduct p x = [ (Rule (kopf r) (pbody r) []) |  r <- p,  (reducenbody (nbody r) x)==[] ]
+reduct p x = [ (Rule (kopf r) (pbody r) []) |  r <- p,  (intersect (nbody r) x)==[] ]
 
 
 anssets p = filter (\i -> (sort (cn (reduct p i)))==(sort i)) (subsets (heads_p p))
 
 
-data Answer = SAT [[Atom]] | UNSAT [Atom]
-
-instance Show Answer where
-  show (SAT x) =  "SAT: " ++ show x
-  show (UNSAT x)   =  "UNSAT: " ++ show x
 
 
-sol :: Answer -> [[Atom]]
-sol (UNSAT s) = []
-sol (SAT s) = s
 
-
--- given a list of boolean Variables returns all possible interpretations
-assignment_generator c = (subsets c)
-
--- test whether cond is satified by candidate
--- tester for an answer set
-test:: [Rule] -> [Atom] -> Bool
-test p candidate = (sort (cn (reduct p candidate)))==(sort candidate)
-
-
--- choose heuristic
--- use info to reorder the candidates such that the most prefered is first
-choose:: [a] -> info -> [a]
--- very stupid heuristic
-choose x info = x
-
-findas:: [Rule] -> Int -> Answer
--- return atmost n answer sets for program p
-findas p n =
-  let variables= (heads_p p)
-      falses = (atoms_p p) \\ variables
-      simplified_prg = simplifyProgramm p ([],falses)
-  in check simplified_prg (assignment_generator variables) n
-  
-check:: [Rule] -> [[Atom]] -> Int -> Answer
-check cond [] num = UNSAT [__conflict]
-check cond candidates num=
-  let choice = head candidates in
-  if (test cond choice)
-  then
-    if (num==1)
-    then SAT [choice]
-    else
-      --    learn answer
-      SAT (choice: sol (check cond (tail candidates) (num-1)))
-  else
-    --    let conflicts=conflictana
-    check cond (tail candidates) (num)
 
 
 -- returns the integrity constraints of a program  
@@ -430,9 +387,24 @@ simplifyRule2 (t,f) (Rule h pb nb) =
   Just (Rule h newpbody newnbody)  
          
 -- return consequences of a programm
+-- consequences :: [Rule] -> [Atom] -> [Atom] -> ([Atom],[Atom])
+-- consequences p t f=
+--   let
+--       simplified_prg = simplifyProgramm2 p (t,f)
+--       trues = facts simplified_prg
+--       falses  = nfacts simplified_prg
+--   in
+--   if (null (trues \\ t) && null (falses \\ f))
+--   then (t,f)
+--   else
+--     let t2 = t ++ trues
+--         f2 = f ++ falses
+--     in
+--       consequences simplified_prg t2 f2
+
 consequences :: [Rule] -> [Atom] -> [Atom] -> ([Atom],[Atom])
 consequences p t f=
-  let
+  let reduced = reduct p t
       simplified_prg = simplifyProgramm2 p (t,f)
       trues = facts simplified_prg
       falses  = nfacts simplified_prg
@@ -486,12 +458,7 @@ x3 = (Atom "a" [(Constant 1),(Constant 1)])
 t3 = [(Identifier "a"),(Identifier "a")]
 x4 = (Atom "a" [(Identifier "a"),(Identifier "b")])
 t4 = [(Identifier "a"),(Identifier "b")]
-      
--- unify:: Atom -> Atom -> Bool
--- unify a1 a2 = 
---   case (matchAtom a1 a2) of
---     Nothing -> False
---     Just x  -> True
+
 
 
 get_query_rules:: [Rule] -> Atom -> [Rule]
