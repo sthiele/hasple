@@ -469,44 +469,74 @@ get_query_rules2 (r:rs) a =
        
 data Stuff = Lit Atom
            | Body [Atom] [Atom]
+           deriving (Show)
+
 
 mogrify:: [Atom] -> [Stuff]
 mogrify [] = []
 mogrify (a:as) = ((Lit a):mogrify as)
 
-bodies_p:: [Rule] -> [Stuff]
+-- returns all bodies of a program
+bodies_p:: [Rule] -> [([Atom],[Atom])]
 bodies_p [] = []
-bodies_p (r:rs) = ((Body (pbody r) (nbody r)):(bodies_p rs))
+bodies_p (r:rs) = (((pbody r),(nbody r)):(bodies_p rs))
 
+-- returns all bodies of rules with the atom as head
+bodies:: [Rule] -> Atom -> [([Atom],[Atom])]
+bodies [] a = []
+bodies (r:rs) a  = 
+  if (kopf r)==a
+  then (((pbody r),(nbody r)):(bodies rs a))
+  else (bodies rs a)
 
 type Clause = ([Stuff],[Stuff])
 
 
 nogoods_of_lp:: [Rule] -> [Clause]
-nogoods_of_lp (r:rs) =
-  let a = mogrify (atoms_p (r:rs))
-      b = bodies_p (r:rs)
+nogoods_of_lp p =
+  let a = atoms_p p
+      b = bodies_p p
       ng1 = map get_ng1 b
       ng2 = concatMap get_ng2 b
+      ng3 = concatMap (get_ng3 p) a
+      ng4 = map (get_ng4 p) a
   in
-  ng1++ng2
+  ng1++ng2++ng3++ng4
 
-get_ng1:: Stuff -> Clause  
-get_ng1 (Body pb nb) = ( (mogrify nb) , ((Body pb nb):(mogrify pb)) )
 
-get_ng2:: Stuff -> [Clause]
-get_ng2 body =
-  let (Body ps ns) = body
-      p_clauses = map ( makepair1 body) (mogrify ps)
-      n_clauses = map ( makepair2 body) (mogrify ns)
+get_ng4:: [Rule] -> Atom -> Clause
+get_ng4 p a =
+  let b = bodies p a in
+  ([(Lit a)], (murkel b))    
+
+-- Bodies 2 Stuff
+murkel:: [([Atom],[Atom])] -> [Stuff]
+murkel [] = []
+murkel ((pb,nb):bs) = ((Body pb nb):(murkel bs))
+
+get_ng3:: [Rule] -> Atom -> [Clause]
+get_ng3 p a =
+  let b = bodies p a
   in
-    p_clauses ++ n_clauses
+  map (melt (Lit a)) (murkel b)
+
+melt:: Stuff -> Stuff -> Clause
+melt atom body = ([body],[atom])
+
+get_ng1:: ([Atom],[Atom]) -> Clause  
+get_ng1 (pb,nb) = ( (mogrify nb) , ((Body pb nb):(mogrify pb)) )
+
+get_ng2:: ([Atom],[Atom]) -> [Clause]
+get_ng2 (pb,nb) =
+  let p_clauses = map ( makepair1 (Body pb nb)) (mogrify pb)
+      n_clauses = map ( makepair2 (Body pb nb)) (mogrify nb)
+  in
+  p_clauses ++ n_clauses
 
 makepair1 body atom = ([body],[atom])
 makepair2 body atom = ([body,atom],[])
 
--- get_ng3:: Stuff -> Clause
--- get_ng3 
+ 
 
 
 ac = (Atom "a" [(Identifier "c")])
