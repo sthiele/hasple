@@ -435,32 +435,6 @@ testy (x:xs) a =
      Nothing -> testy xs a
      
 
-ac = (Atom "a" [(Identifier "c")])
-av = (Atom "a" [(Variable "X")])
-
-bv = (Atom "b" [(Variable "X")])
-bc = (Atom "b" [(Constant 1 )])
-
-
-rv = (Atom "r" [(Variable "X")])
-rc = (Atom "r" [(Identifier "x")])
-
-mp = [
-        (Rule ac [] []),
-        (Rule bv [av] [])
-      ]
-
-x1 = (Atom "a" [(Variable "X"),(Variable "X")])
-t1 = [(Variable "X"),(Variable "X")]
-x2 = (Atom "a" [(Variable "Y"),(Variable "Z")])
-t2 = [(Variable "Y"),(Variable "Z")]
-x3 = (Atom "a" [(Constant 1),(Constant 1)])
-t3 = [(Identifier "a"),(Identifier "a")]
-x4 = (Atom "a" [(Identifier "a"),(Identifier "b")])
-t4 = [(Identifier "a"),(Identifier "b")]
-
-
-
 get_query_rules:: [Rule] -> Atom -> [Rule]
 get_query_rules [] _ = []
 get_query_rules rules a =
@@ -489,3 +463,72 @@ get_query_rules2 (r:rs) a =
                         in
                         nub (gr: grs)
        Nothing -> get_query_rules2 rs a
+
+
+-- ------------------------------------------------------------
+       
+data Stuff = Lit Atom
+           | Body [Atom] [Atom]
+
+mogrify:: [Atom] -> [Stuff]
+mogrify [] = []
+mogrify (a:as) = ((Lit a):mogrify as)
+
+bodies_p:: [Rule] -> [Stuff]
+bodies_p [] = []
+bodies_p (r:rs) = ((Body (pbody r) (nbody r)):(bodies_p rs))
+
+
+type Clause = ([Stuff],[Stuff])
+
+
+nogoods_of_lp:: [Rule] -> [Clause]
+nogoods_of_lp (r:rs) =
+  let a = mogrify (atoms_p (r:rs))
+      b = bodies_p (r:rs)
+      ng1 = map get_ng1 b
+      ng2 = concatMap get_ng2 b
+  in
+  ng1++ng2
+
+get_ng1:: Stuff -> Clause  
+get_ng1 (Body pb nb) = ( (mogrify nb) , ((Body pb nb):(mogrify pb)) )
+
+get_ng2:: Stuff -> [Clause]
+get_ng2 body =
+  let (Body ps ns) = body
+      p_clauses = map ( makepair1 body) (mogrify ps)
+      n_clauses = map ( makepair2 body) (mogrify ns)
+  in
+    p_clauses ++ n_clauses
+
+makepair1 body atom = ([body],[atom])
+makepair2 body atom = ([body,atom],[])
+
+-- get_ng3:: Stuff -> Clause
+-- get_ng3 
+
+
+ac = (Atom "a" [(Identifier "c")])
+av = (Atom "a" [(Variable "X")])
+
+bv = (Atom "b" [(Variable "X")])
+bc = (Atom "b" [(Constant 1 )])
+
+
+rv = (Atom "r" [(Variable "X")])
+rc = (Atom "r" [(Identifier "x")])
+
+mp = [
+        (Rule ac [] []),
+        (Rule bv [av] [])
+      ]
+
+x1 = (Atom "a" [(Variable "X"),(Variable "X")])
+t1 = [(Variable "X"),(Variable "X")]
+x2 = (Atom "a" [(Variable "Y"),(Variable "Z")])
+t2 = [(Variable "Y"),(Variable "Z")]
+x3 = (Atom "a" [(Constant 1),(Constant 1)])
+t3 = [(Identifier "a"),(Identifier "a")]
+x4 = (Atom "a" [(Identifier "a"),(Identifier "b")])
+t4 = [(Identifier "a"),(Identifier "b")]

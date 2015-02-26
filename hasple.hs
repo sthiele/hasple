@@ -62,7 +62,7 @@ test_old x =
            Left  err -> putStrLn ("ParseError: " ++ show err)
            Right val -> putStrLn ("Program found:\n" ++
                         show_lp val 
---                      ++ show_as (sol (findas (groundProgram val) 0))
+                        ++ show_as  (assi (groundProgram val))
                         )
       
 
@@ -147,58 +147,11 @@ inner (prg, cons, falses) =
                         concatMap inner list                        
 
 
-findas prg = findas2 prg [] []
+-- findas prg = let (answers, nogoods) = findas2 prg [] [] [] []
+--              in answers
 
-findas2 prg pchoice nchoice =
-  let reduced = reduct prg pchoice
-      lcons = sort (cn reduced)
-      choice_candidates = ((atoms_p prg) \\ pchoice) \\ nchoice
-      choice = head choice_candidates 
-  in
-    if (lcons == pchoice)
-    then [pchoice]
-    else
-      if (choice_candidates==[])
-      then []
-      else
-        (findas2 prg (sort (choice:pchoice)) nchoice)
-        ++ (findas3 prg pchoice (choice:nchoice))
 
-findas3 prg pchoice nchoice =
-   let reduced = reduct prg pchoice
-       choice_candidates = ((atoms_p prg) \\ pchoice) \\ nchoice
-       choice = head choice_candidates
-  in
-      if (choice_candidates==[])
-      then []
-      else
-        (findas2 prg (sort (choice:pchoice)) nchoice)
-        ++ (findas3 prg pchoice (choice:nchoice))
-        
 
-prfindas2:: [Rule] -> [Atom] -> [Atom] -> [Char]
-prfindas2 prg pchoice nchoice =
-  let reduced = reduct prg pchoice
-      lcons = sort (cn reduced)
-      nocons = (atoms_p prg \\ lcons)
-      cons = consequences prg pchoice []
-      choice_candidates = ((atoms_p prg) \\ pchoice) \\ nchoice
-      choice = head choice_candidates
-  in
-    if (sort lcons == sort pchoice)
-    then show [pchoice]++"\n"
-    else
-      if (choice_candidates==[])
-      then "not" ++ show (sort pchoice)++show(sort lcons)++"\n"
-      else
-        "choose: "++ show pchoice ++ show nchoice ++"\n"
-        ++ "lcons: "++ show lcons ++ "\n"
-        ++ "cons: "++ show cons ++ "\n"
-        ++ "nocons: "++ show nocons ++ "\n" ++
-        (prfindas2 prg (sort (choice:pchoice)) nchoice)
-        ++ (prfindas2 prg pchoice (choice:nchoice))
-        
-prfindas prg = prfindas2 prg [] []
  
  
   
@@ -298,8 +251,8 @@ nt:: [Atom] -> [Atom] -> [Atom] -> [Atom]
 nt old a t = old ++ (a \\ t)
 
 
--- assi = anssets
-assi = findas
+assi = anssets
+
 
 ground_facts     = "f(a).\n"
                 ++ "f(b).\n"
@@ -332,15 +285,16 @@ myprg3 = "f(a).\n"
       ++ "f(c).\n"
       ++ "f(d).\n"
       ++ "f(e).\n"
+      ++ "f(f).\n"
       ++ "q(X):- f(X), not p(X). \n"
       ++ "p(X) :-f(X), not q(X). \n"
 
 
-
-
-
 myprg4 = "f(a).\n"
       ++ "f(b).\n"
+      ++ "f(c).\n"
+      ++ "f(d).\n"
+      ++ "f(e).\n"
       ++ "q(X):- f(X), not p(X), not r(X).\n"
       ++ "p(X) :-f(X), not q(X), not r(X).\n"
       ++ "r(X) :-f(X), not p(X), not q(X).\n"
