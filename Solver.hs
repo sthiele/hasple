@@ -423,10 +423,17 @@ nfacts prg =
    let a = nub (atoms_p prg)
        he = heads_p prg
        nfact_candidates = (a \\ he)
-       discard = concatMap (testy he) nfact_candidates
    in
-     nfact_candidates \\ discard
-     
+   [ a | a <-nfact_candidates, not (hasmatch a he) ]
+
+hasmatch:: Atom -> [Atom] -> Bool
+-- returns True if a matching atom exists in the list
+hasmatch a [] = False  
+hasmatch a (b:bs) =
+  case matchAtom a b of
+    Just x  -> True
+    Nothing -> hasmatch a bs
+    
 testy:: [Atom] -> Atom -> [Atom]
 testy [] a = []
 testy (x:xs) a =
@@ -435,6 +442,8 @@ testy (x:xs) a =
      Nothing -> testy xs a
      
 
+
+     
 get_query_rules:: [Rule] -> Atom -> [Rule]
 get_query_rules [] _ = []
 get_query_rules rules a =
@@ -467,30 +476,31 @@ get_query_rules2 (r:rs) a =
 
 -- ------------------------------------------------------------
        
-data Stuff = Lit Atom
-           | Body [Atom] [Atom]
-           deriving (Show)
+data Lit = ALit Atom
+         | BLit [Atom] [Atom]
+         deriving (Show,Eq)
+           
+type Clause = ([Lit],[Lit])
 
 
-mogrify:: [Atom] -> [Stuff]
-mogrify [] = []
-mogrify (a:as) = ((Lit a):mogrify as)
+atoms2lits:: [Atom] -> [Lit]
+atoms2lits as = [(ALit a) | a <- as ]
 
--- returns all bodies of a program
+bodies2lits:: [([Atom],[Atom])] -> [Lit]
+bodies2lits bs = [(BLit pb nb) | (pb,nb) <- bs ]
+
+
 bodies_p:: [Rule] -> [([Atom],[Atom])]
-bodies_p [] = []
-bodies_p (r:rs) = (((pbody r),(nbody r)):(bodies_p rs))
+-- returns all bodies of a program
+bodies_p p = [((pbody r),(nbody r)) | r <-p ]
 
--- returns all bodies of rules with the atom as head
+
 bodies:: [Rule] -> Atom -> [([Atom],[Atom])]
-bodies [] a = []
-bodies (r:rs) a  = 
-  if (kopf r)==a
-  then (((pbody r),(nbody r)):(bodies rs a))
-  else (bodies rs a)
+-- returns all bodies of rules with the atom as head
+bodies p a  = [((pbody r),(nbody r)) | r<-p , (kopf r)==a ]
 
-type Clause = ([Stuff],[Stuff])
 
+-- no_good generation ------------------------------
 
 nogoods_of_lp:: [Rule] -> [Clause]
 nogoods_of_lp p =
@@ -504,39 +514,71 @@ nogoods_of_lp p =
   ng1++ng2++ng3++ng4
 
 
-get_ng4:: [Rule] -> Atom -> Clause
-get_ng4 p a =
-  let b = bodies p a in
-  ([(Lit a)], (murkel b))    
+get_ng1:: ([Atom],[Atom]) -> Clause
+get_ng1 (pb,nb) = ( (atoms2lits nb) , ((BLit pb nb):(atoms2lits pb)) )
 
--- Bodies 2 Stuff
-murkel:: [([Atom],[Atom])] -> [Stuff]
-murkel [] = []
-murkel ((pb,nb):bs) = ((Body pb nb):(murkel bs))
-
-get_ng3:: [Rule] -> Atom -> [Clause]
-get_ng3 p a =
-  let b = bodies p a
-  in
-  map (melt (Lit a)) (murkel b)
-
-melt:: Stuff -> Stuff -> Clause
-melt atom body = ([body],[atom])
-
-get_ng1:: ([Atom],[Atom]) -> Clause  
-get_ng1 (pb,nb) = ( (mogrify nb) , ((Body pb nb):(mogrify pb)) )
 
 get_ng2:: ([Atom],[Atom]) -> [Clause]
 get_ng2 (pb,nb) =
-  let p_clauses = map ( makepair1 (Body pb nb)) (mogrify pb)
-      n_clauses = map ( makepair2 (Body pb nb)) (mogrify nb)
+  let
+    clauses1 = [ ([(BLit pb nb)],[(ALit atom)]) | atom <- pb ]
+    clauses2 = [ ([(BLit pb nb),(ALit atom)],[]) | atom <- nb ]
   in
-  p_clauses ++ n_clauses
+  clauses1 ++ clauses2
 
-makepair1 body atom = ([body],[atom])
-makepair2 body atom = ([body,atom],[])
 
- 
+get_ng3:: [Rule] -> Atom -> [Clause]
+get_ng3 p a = [ ([(BLit pb nb)],[(ALit a)]) | (pb,nb) <- (bodies p a) ]
+
+
+get_ng4:: [Rule] -> Atom -> Clause
+get_ng4 p a = ([(ALit a)], (bodies2lits (bodies p a)))
+
+
+external_bodies:: [Rule] -> [Atom] -> [([Atom],[Atom])]
+-- returns the external bodies
+external_bodies p u =
+  [ ((pbody r),(nbody r)) |  r <- p, elem (kopf r) u, (intersect (pbody r) u)==[] ]
+
+
+loop_nogood:: Atom -> [([Atom],[Atom])] -> Clause
+-- returns the loop nogood for an atom in an unfounded set(characterized by the external bodies)
+loop_nogood a bodies = ([(ALit a)],(bodies2lits bodies))
+
+
+loop_nogoods:: [Rule] -> [Atom] -> [Clause]
+-- return the loop nogoods of the program for a given unfounded
+loop_nogoods p u = [ (loop_nogood atom (external_bodies p u)) | atom<-u  ]
+
+
+-- ---------------------------------------------------------------------------------
+
+
+
+-- unfounded_set:: [Rule] -> ([Atom],[Atom]) -> [Atom]
+-- returns an unfounded set for the program given a partial assignment
+
+
+local_propagation:: [Rule] -> [Clause] -> ([Lit],[Lit]) -> ([Lit],[Lit])
+-- takes a program a set of nogoods and an assignment and returns a new assignment
+local_propagation p ngs assig =
+  let ngs_p = nogoods_of_lp
+
+  in
+  assig
+
+-- unitresulting:: Clause -> ([Lit],[Lit]) ->
+
+
+is_solution:: ([Lit],[Lit]) -> [Clause] -> Bool
+-- An assignment violates a set nogoods if one nogood is contained in the assignment
+is_solution a (ng:ngs) =  (is_sol a ng) && (is_solution a ngs)
+
+is_sol:: ([Lit],[Lit]) -> Clause -> Bool
+-- An assignment violates a nogoods if the nogood is contained in the assignment
+is_sol (at,af) (ngt,ngf) =   (intersect ngt at)/=ngt || (intersect ngf af)/=ngf
+
+
 
 
 ac = (Atom "a" [(Identifier "c")])
