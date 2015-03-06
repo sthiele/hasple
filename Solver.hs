@@ -569,8 +569,19 @@ local_propagation p ngs assig =
 
   
 
--- unitresult:: Clause -> ([Lit],[Lit]) ->
+unitpropagate:: ([Lit],[Lit]) -> [Clause] -> Maybe ([Lit],[Lit])
+unitpropagate (at, af) [] = Just (at, af)
+unitpropagate (at, af) (ng:ngs) =
+  let x = unitresult (at,af) ng in
+  case x of
+       Just ([nt],[]) -> unitpropagate ((nt:at),af) ngs
+       Just ([],[nf]) -> unitpropagate (at,(nf:af)) ngs
+       Nothing        -> Nothing -- return conflict clauses
+       
+       
+  
 unitresult:: ([Lit],[Lit]) -> Clause -> Maybe ([Lit],[Lit])
+-- An assignement a nogood  maybe a new assignment or a conflict
 unitresult (at, af) (ngt, ngf) =
   case (ngt \\ at) of
     []      -> case (ngf \\ af) of
