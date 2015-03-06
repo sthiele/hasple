@@ -547,7 +547,7 @@ loop_nogood a bodies = ([(ALit a)],(bodies2lits bodies))
 
 
 loop_nogoods:: [Rule] -> [Atom] -> [Clause]
--- return the loop nogoods of the program for a given unfounded
+-- return the loop nogoods of the program for a given unfounded set
 loop_nogoods p u = [ (loop_nogood atom (external_bodies p u)) | atom<-u  ]
 
 
@@ -567,7 +567,22 @@ local_propagation p ngs assig =
   in
   assig
 
--- unitresulting:: Clause -> ([Lit],[Lit]) ->
+  
+
+-- unitresult:: Clause -> ([Lit],[Lit]) ->
+unitresult:: ([Lit],[Lit]) -> Clause -> Maybe ([Lit],[Lit])
+unitresult (at, af) (ngt, ngf) =
+  case (ngt \\ at) of
+    []      -> case (ngf \\ af) of
+                 []      -> Nothing -- return conflict clauses1
+                 [sigma] -> Just ([sigma],[])
+                 _       -> Just ([],[]) -- nothing can be derived
+         
+    [sigma] -> case (ngf \\ af) of
+                 []      -> Just ([],[sigma])
+                 _       -> Just ([],[]) -- nothing can be derived
+    
+    _ -> Just ([],[]) -- nothing can be derived
 
 
 is_solution:: ([Lit],[Lit]) -> [Clause] -> Bool
