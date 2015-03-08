@@ -555,17 +555,24 @@ loop_nogoods p u = [ (loop_nogood atom (external_bodies p u)) | atom<-u  ]
 
 
 
--- unfounded_set:: [Rule] -> ([Atom],[Atom]) -> [Atom]
+unfounded_set:: [Rule] -> ([Lit],[Lit]) -> [Atom]
 -- returns an unfounded set for the program given a partial assignment
+unfounded_set p assig = []
 
 
-local_propagation:: [Rule] -> [Clause] -> ([Lit],[Lit]) -> ([Lit],[Lit])
+
+local_propagation:: [Rule] -> [Clause] -> ([Lit],[Lit]) -> Maybe ([Lit],[Lit])
 -- takes a program a set of nogoods and an assignment and returns a new assignment
 local_propagation p ngs assig =
-  let ngs_p = nogoods_of_lp
-
+  let ngs_p = (nogoods_of_lp p) ++ ngs
+      up = unitpropagate assig ngs_p
   in
-  assig
+    case up of
+      Just newassig -> if newassig == assig
+                       then Just assig
+		       else local_propagation [] ngs_p newassig
+      Nothing       -> Nothing -- return conflict clause
+
 
   
 
