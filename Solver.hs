@@ -553,6 +553,30 @@ loop_nogoods p u = [ (loop_nogood atom (external_bodies p u)) | atom<-u  ]
 
 -- ---------------------------------------------------------------------------------
 
+pos_dependent:: Atom -> [Rule] -> [Atom]
+-- returns the head atoms of rules which have a in the positive body
+pos_dependent a (r:rs) = [ (head r) | elem a (pbody r) ] ++ (pos_dependent a rs)
+
+
+scc:: Atom -> [Atom] -> [Rule] ->  [Atom]
+scc a _ p =
+  let deps = pos_dependent a p
+  in
+
+
+
+cyclic:: Atom -> [Rule] -> Bool
+cyclic a p =
+  let scc_a = scc a p
+  in
+  check_scc scc_a p
+
+  
+check_scc:: [Atom] -> [Rule] -> Bool
+-- returns True if there is a rule with head in scc and body+ with not empty
+check_scc sc [] = False
+check_scc sc (r:rs) =
+ ( (elem (kopf r) sc) && ((intersect (pbody r) sc) /= [])) || (check_scc sc rs)
 
 
 unfounded_set:: [Rule] -> ([Lit],[Lit]) -> [Atom]
