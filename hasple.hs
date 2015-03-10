@@ -280,7 +280,34 @@ myprg1 = ground_facts ++ nonground_facts ++ ground_rules ++ nonground_rules ++ g
 
 myprg2 = myprg1++"r(b).\n"
 
-myprg3 = "f(a).\n"
+
+mpr1a = " a :- not b.\n"
+Right mp1a = readProgram mpr1a
+
+
+mpr1 = "a :- not b, not c.\n"
+    ++ "b :- not a, not c.\n"
+    ++ "c :- not a, not b.\n" 
+Right mp1 = readProgram mpr1
+
+mpr1b = "q(a) :- not p(a).\n"
+     ++ "q(b) :- not p(b).\n"
+     ++ "p(a) :- not q(a).\n"
+     ++ "p(b) :- not q(b).\n"    
+Right mp1b = readProgram mpr1b
+     
+
+mpr2 = "a:-b.\n"
+    ++ "b:-a.\n"
+Right mp2 = readProgram mpr2
+
+mpr2b = "a :- b.\n"
+    ++ "b :- not a.\n"
+Right mp2b = readProgram mpr2b
+
+
+
+mpr3 = "f(a).\n"
       ++ "f(b).\n"
       ++ "f(c).\n"
       ++ "f(d).\n"
@@ -288,9 +315,9 @@ myprg3 = "f(a).\n"
       ++ "f(f).\n"
       ++ "q(X):- f(X), not p(X). \n"
       ++ "p(X) :-f(X), not q(X). \n"
+Right mp3 = readProgram mpr3
 
-
-myprg4 = "f(a).\n"
+mpr4 = "f(a).\n"
       ++ "f(b).\n"
       ++ "f(c).\n"
       ++ "f(d).\n"
@@ -299,40 +326,19 @@ myprg4 = "f(a).\n"
       ++ "p(X) :-f(X), not q(X), not r(X).\n"
       ++ "r(X) :-f(X), not p(X), not q(X).\n"
       ++ ":- r(X).\n"
-      
-Right mpr4 = readProgram myprg4      
 
-myprg5 = ":- r(X).\n"
+Right mp4 = readProgram mpr4
 
+mpr5 = ":- r(X).\n"
 
-mpr1a = " a :- not b.\n"
-
-Right mp1a = readProgram mpr1a
-
-
-mpr1 = "a :- not b, not c.\n"
-    ++ "b :- not a, not c.\n"
-    ++ "c :- not a, not b.\n"
-
-   
-Right mp1 = readProgram mpr1
-
-mpr1b = "q(a) :- not p(a).\n"
-     ++ "q(b) :- not p(b).\n"
-     ++ "p(a) :- not q(a).\n"
-     ++ "p(b) :- not q(b).\n"
-     
-Right mp1b = readProgram mpr1b
-     
-
-mpr2 = "a:-b.\n"
-    ++ "b:-a.\n"
-
-Right mp2 = readProgram mpr2
-
-mpr3 = "a :- b.\n"
+mpr6 = "a.\n"
     ++ "b :- not a.\n"
-
-Right mp3 = readProgram mpr3
+    ++ "c :- a, not d.\n"
+    ++ "d :- not c, not e.\n"
+    ++ "e :- b.\n"
+    ++ "e :- e.\n"
+    
+Right mp6 = readProgram mpr6
+    
 
     

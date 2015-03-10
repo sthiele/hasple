@@ -23,7 +23,11 @@ module Solver (
      simplifyProgramm2,
        heads_p, atoms_p,
    get_query_rules, getpredval, getpredvalx, groundRule, get_ics,
-   MapOfSets, insert_mos  
+   MapOfSets, insert_mos,
+   pos_dep_graph,
+   scc,
+   tarjan,
+   
   ) where
 
 import ASP
@@ -553,23 +557,53 @@ loop_nogoods p u = [ (loop_nogood atom (external_bodies p u)) | atom<-u  ]
 
 -- ---------------------------------------------------------------------------------
 
+
+pos_dep_graph:: [Rule] -> (Map.Map Atom [Atom])
+pos_dep_graph [] = Map.empty
+pos_dep_graph (r:rs) =
+  let h = kopf r
+      pb = pbody r 
+      rg = pos_dep_graph rs
+  in
+  case Map.lookup h rg of
+      Nothing -> Map.insert h pb rg
+      Just x  -> Map.insert h (pb++x) rg
+
+      
 pos_dependent:: Atom -> [Rule] -> [Atom]
 -- returns the head atoms of rules which have a in the positive body
-pos_dependent a (r:rs) = [ (head r) | elem a (pbody r) ] ++ (pos_dependent a rs)
+pos_dependent a (r:rs) = [ (kopf r) | elem a (pbody r) ] ++ (pos_dependent a rs)
 
 
-scc:: Atom -> [Atom] -> [Rule] ->  [Atom]
-scc a _ p =
-  let deps = pos_dependent a p
-  in
+scc:: Atom -> (Map.Map Atom [Atom]) -> [Atom]
+scc a depg =
+  case Map.lookup a depg of
+       Nothing -> [a]
+       Just x  -> (a:(concatMap (tarjan depg [a]) x))
+
+tarjan:: (Map.Map Atom [Atom]) -> [Atom] -> Atom -> [Atom]
+tarjan depg visited a =
+   if (elem a visited)
+   then [a]
+   else
+     case Map.lookup a depg of
+       Nothing -> [a]
+       Just x  -> let next = x \\ visited in
+                  (concatMap (tarjan depg (a:visited)) next)
+
+
+-- scc:: Atom -> [Atom] -> [Rule] ->  [Atom]
+-- scc a _ p =
+--   let deps = pos_dependent a p
+--   in
 
 
 
-cyclic:: Atom -> [Rule] -> Bool
-cyclic a p =
-  let scc_a = scc a p
-  in
-  check_scc scc_a p
+-- cyclic:: Atom -> [Rule] -> Bool
+-- cyclic a p =
+--   let scc_a = scc a p
+--   in
+--   check_scc scc_a p
 
   
 check_scc:: [Atom] -> [Rule] -> Bool
