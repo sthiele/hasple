@@ -586,6 +586,7 @@ pos_dep_graph (r:rs) =
       Nothing -> Map.insert h pb rg
       Just x  -> Map.insert h (pb++x) rg
 
+      
 
 scc:: Atom -> PosDepGraph -> [Atom]
 -- returns the strongly connected componet of an atom
@@ -628,6 +629,18 @@ unfounded_set p assig =
       -- bis line 5
   in
   []
+  
+whilo:: [Rule] -> ([Lit],[Lit]) ->[Atom] -> [Atom]
+whilo p assig [] = []
+whilo p assig (a:as) =
+  let u = [a]
+      eb = (external_bodies p u)
+  in
+  if ((intersect eb (af assig))==eb)
+  then u
+  else
+    let beta = (head (eb \\ (af assig))) in
+    if	
 
 
 collect_nonfalse_cyclic_atoms:: ([Lit],[Lit]) -> [Rule] -> [Atom]
