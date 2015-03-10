@@ -586,28 +586,24 @@ pos_dep_graph (r:rs) =
       Nothing -> Map.insert h pb rg
       Just x  -> Map.insert h (pb++x) rg
 
-      
-pos_dependent:: Atom -> [Rule] -> [Atom]
--- returns the head atoms of rules which have a in the positive body
-pos_dependent a (r:rs) = [ (kopf r) | elem a (pbody r) ] ++ (pos_dependent a rs)
-
 
 scc:: Atom -> PosDepGraph -> [Atom]
 -- returns the strongly connected componet of an atom
-scc a depg =
-  case Map.lookup a depg of
-       Nothing -> [a]
-       Just x  -> (a:(concatMap (tarjan depg [a]) x))
+scc a depg = tarjan depg [] [] a
 
-tarjan:: PosDepGraph -> [Atom] -> Atom -> [Atom]
-tarjan depg visited a =
+tarjan:: PosDepGraph -> [Atom] -> [Atom] -> Atom -> [Atom]
+tarjan depg visited visited2 a =
    if (elem a visited)
-   then [a]
+   then 
+     case Map.lookup a depg of
+       Nothing -> []
+       Just x  -> let next = x \\ visited2 in
+                  (a:(concatMap (tarjan depg visited (a:visited2)) next))
    else
      case Map.lookup a depg of
-       Nothing -> [a]
-       Just x  -> let next = x \\ visited in
-                  (concatMap (tarjan depg (a:visited)) next)
+       Nothing -> []
+       Just x  -> let next = x \\ visited2 in
+                  (concatMap (tarjan depg (a:visited) visited2) next)
 
 
 
