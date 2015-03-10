@@ -628,6 +628,8 @@ unfounded_set:: [Rule] -> ([Lit],[Lit]) -> [Atom]
 -- returns an unfounded set for the program given a partial assignment
 unfounded_set p assig =
   let s = collect_nonfalse_cyclic_atoms assig p
+      s2 = extend p assig emptysourcep s
+      -- bis line 5
   in
   []
 
@@ -639,13 +641,17 @@ collect_nonfalse_cyclic_atoms (ast,asf) p =
   [ a | a<- atoms , not (cyclic a p)]
       
 
-extend:: [Rule] -> ([Lit],[Lit]) -> SourcePointerConf -> [Atom] -> [a] -> [Atom]
-extend p assig spc s x =
-  let helper1 =  (af assig)++s
-      atoms = (atoms_p p)
-      helper2 = atoms \\ helper1
+extend:: [Rule] -> ([Lit],[Lit]) -> SourcePointerConf -> [Atom]  -> [Atom]
+extend p assig spc s =
+  let
+    helper1 =  (af assig)++s
+    atoms = (atoms_p p)
+    helper2 = atoms \\ helper1
+    t =[ a | a <- helper2, (intersect (sourcep a spc) (intersect (scc a (pos_dep_graph p)) s)) /= [] ]
   in
-  [ a | a <- helper2, (intersect (sourcep a spc) (intersect (scc a (pos_dep_graph p)) s)) /= [] ]
+    if t==[]
+    then s++t
+    else extend p assig spc (s++t) 
   
 
 type SourcePointerConf =   (Map.Map Atom Lit)
@@ -667,7 +673,6 @@ sourcep a spc =
   in
   pb
       
-
 
 
 
