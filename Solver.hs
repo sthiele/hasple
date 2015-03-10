@@ -504,6 +504,22 @@ bodies:: [Rule] -> Atom -> [([Atom],[Atom])]
 bodies p a  = [((pbody r),(nbody r)) | r<-p , (kopf r)==a ]
 
 
+at:: ([Lit],[Lit]) -> [Atom]
+-- return the atoms that are true in the assignement
+at (ast,asf) = concatMap truelit2trueatoms ast
+
+af:: ([Lit],[Lit]) -> [Atom]
+-- return the atoms that are false in the assignement
+af (ast,asf) = concatMap falselit2falseatoms asf
+
+
+truelit2trueatoms (ALit a) = [a]
+truelit2trueatoms (BLit pb nb) = pb
+
+falselit2falseatoms (ALit a) = [a]
+falselit2falseatoms (BLit pb nb) = []
+
+
 -- no_good generation ------------------------------
 
 nogoods_of_lp:: [Rule] -> [Clause]
@@ -556,9 +572,10 @@ loop_nogoods p u = [ (loop_nogood atom (external_bodies p u)) | atom<-u  ]
 
 
 -- ---------------------------------------------------------------------------------
+type PosDepGraph = (Map.Map Atom [Atom])
 
-
-pos_dep_graph:: [Rule] -> (Map.Map Atom [Atom])
+pos_dep_graph:: [Rule] -> PosDepGraph
+-- returns the positive dependency graph of a program
 pos_dep_graph [] = Map.empty
 pos_dep_graph (r:rs) =
   let h = kopf r
@@ -575,13 +592,14 @@ pos_dependent:: Atom -> [Rule] -> [Atom]
 pos_dependent a (r:rs) = [ (kopf r) | elem a (pbody r) ] ++ (pos_dependent a rs)
 
 
-scc:: Atom -> (Map.Map Atom [Atom]) -> [Atom]
+scc:: Atom -> PosDepGraph -> [Atom]
+-- returns the strongly connected componet of an atom
 scc a depg =
   case Map.lookup a depg of
        Nothing -> [a]
        Just x  -> (a:(concatMap (tarjan depg [a]) x))
 
-tarjan:: (Map.Map Atom [Atom]) -> [Atom] -> Atom -> [Atom]
+tarjan:: PosDepGraph -> [Atom] -> Atom -> [Atom]
 tarjan depg visited a =
    if (elem a visited)
    then [a]
@@ -592,20 +610,13 @@ tarjan depg visited a =
                   (concatMap (tarjan depg (a:visited)) next)
 
 
--- scc:: Atom -> [Atom] -> [Rule] ->  [Atom]
--- scc a _ p =
---   let deps = pos_dependent a p
---   in
 
+cyclic:: Atom -> [Rule] -> Bool
+cyclic a p =
+  let scc_a = scc a (pos_dep_graph p)
+  in
+  check_scc scc_a p
 
-
--- cyclic:: Atom -> [Rule] -> Bool
--- cyclic a p =
---   let scc_a = scc a p
---   in
---   check_scc scc_a p
-
-  
 check_scc:: [Atom] -> [Rule] -> Bool
 -- returns True if there is a rule with head in scc and body+ with not empty
 check_scc sc [] = False
@@ -615,7 +626,52 @@ check_scc sc (r:rs) =
 
 unfounded_set:: [Rule] -> ([Lit],[Lit]) -> [Atom]
 -- returns an unfounded set for the program given a partial assignment
-unfounded_set p assig = []
+unfounded_set p assig =
+  let s = collect_nonfalse_cyclic_atoms assig p
+  in
+  []
+
+
+collect_nonfalse_cyclic_atoms:: ([Lit],[Lit]) -> [Rule] -> [Atom]
+collect_nonfalse_cyclic_atoms (ast,asf) p =
+  let atoms = (atoms_p p)
+  in
+  [ a | a<- atoms , not (cyclic a p)]
+      
+
+extend:: [Rule] -> ([Lit],[Lit]) -> SourcePointerConf -> [Atom] -> [a] -> [Atom]
+extend p assig spc s x =
+  let helper1 =  (af assig)++s
+      atoms = (atoms_p p)
+      helper2 = atoms \\ helper1
+  in
+  [ a | a <- helper2, (intersect (sourcep a spc) (intersect (scc a (pos_dep_graph p)) s)) /= [] ]
+  
+
+type SourcePointerConf =   (Map.Map Atom Lit)
+emptysourcep:: SourcePointerConf
+emptysourcep = Map.empty
+
+
+bottom = (ALit __conflict)
+
+source:: Atom -> SourcePointerConf -> Lit
+source a spc =
+   case Map.lookup a spc of
+       Nothing -> bottom
+       Just x  ->  x
+
+sourcep:: Atom -> SourcePointerConf -> [Atom]
+sourcep a spc =
+  let (BLit pb nb)= (source a spc)
+  in
+  pb
+      
+
+
+
+
+
 
 
 
@@ -628,7 +684,7 @@ local_propagation p ngs assig =
     case up of
       Just newassig -> if newassig == assig
                        then Just assig
-		       else local_propagation [] ngs_p newassig
+                       else local_propagation [] ngs_p newassig
       Nothing       -> Nothing -- return conflict clause
 
 
