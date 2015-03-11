@@ -331,9 +331,6 @@ Right mp4 = readProgram mpr4
 
 mpr5 = ":- r(X).\n"
 
-mprx = "b :- not a.\n"
-Right mpx = readProgram mprx
-
 mpr6 = "a.\n"
     ++ "b :- not a.\n"
     ++ "c :- a, not d.\n"

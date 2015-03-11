@@ -748,7 +748,7 @@ ng_prop prg ngs assig u =
     spc = emptyspc
     maybeassig = (local_propagation prg ngs assig)
   in
-  case maybeassig of
+  case maybeassig of -- TODO if prg is tight skip unfounded set check
        ASSIGNMENT assig2 -> let u2 = u \\ (af assig2) in
                             if (u2 == [])
                             then let u3 = (unfounded_set prg spc assig2) in
@@ -779,7 +779,7 @@ ng_prop prg ngs assig u =
                                 in
                                 ng_prop prg ngs assig3 u2
        
-       Conflict cf -> (assig,(cf:ngs)) -- Todo learn add conflic clause
+       Conflict cf -> (assig,(cf:ngs)) -- TODO learn add conflic clause
   
 
   
