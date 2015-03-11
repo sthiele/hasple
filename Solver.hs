@@ -630,17 +630,53 @@ unfounded_set p assig =
   in
   []
   
-whilo:: [Rule] -> ([Lit],[Lit]) ->[Atom] -> [Atom]
-whilo p assig [] = []
-whilo p assig (a:as) =
-  let u = [a]
-      eb = (external_bodies p u)
+loop_s:: [Rule] -> SourcePointerConf -> ([Lit],[Lit]) ->[Atom] -> [Atom]
+loop_s prg spc assig [] = [] -- no unfounded_set
+loop_s prg spc assig s =
+  let u = head s
+      eb = bodies2lits (external_bodies prg [u])
+      (spc2,u2,s2,found) = loop_u prg spc assig s [u] u
   in
-  if ((intersect eb (af assig))==eb)
-  then u
+  if found
+  then u2
+  else loop_s prg spc2 assig s2
+  
+
+loop_u:: [Rule] -> SourcePointerConf -> ([Lit],[Lit]) -> [Atom] -> [Atom] -> Atom -> (SourcePointerConf, [Atom], [Atom], Bool)
+loop_u prg spc assig s [] p  = (spc, s, [], False)
+loop_u prg spc (at,af) s u p  =
+  let eb = bodies2lits (external_bodies prg u)
+  in
+  if ((intersect eb af )==eb)
+  then (spc, s, u, True) -- unfounded set found
   else
-    let beta = (head (eb \\ (af assig))) in
-    if	
+    let
+      (BLit pb nb) = (head (eb \\ af))
+      scc_p = (scc p (pos_dep_graph prg))
+    in
+    if ((intersect pb (intersect scc_p s))==[])
+    then
+      let (spc2, remove) = (shrink_u prg spc u (BLit pb nb))
+          u2 = (u \\ remove)
+          s2 = (s \\ remove)
+      in
+      (loop_u prg spc2 (at,af) s2 u2 p)
+    else
+      let u2 = u ++ (intersect pb (intersect scc_p s)) in
+      (loop_u prg spc (at,af) s u2 p)  
+      
+    
+shrink_u:: [Rule] -> SourcePointerConf -> [Atom] ->  Lit -> (SourcePointerConf, [Atom])
+-- returns an updated spc and a list of atoms to be removed from U and S
+shrink_u prg spc [] l = (spc,[])
+shrink_u prg spc (q:qs) l =
+  if (elem l (bodies2lits (bodies prg q)))
+  then
+    let (spcn,remove) = (shrink_u prg spc qs l)  in
+    ((add_source spcn q l), (q:remove))
+  else (shrink_u prg spc qs l)
+
+
 
 
 collect_nonfalse_cyclic_atoms:: ([Lit],[Lit]) -> [Rule] -> [Atom]
@@ -669,6 +705,11 @@ emptysourcep = Map.empty
 
 
 bottom = (ALit __conflict)
+
+
+add_source::  SourcePointerConf -> Atom -> Lit -> SourcePointerConf
+-- add a new sourcep for an atom
+add_source spc a l =  Map.insert a l spc
 
 source:: Atom -> SourcePointerConf -> Lit
 source a spc =
