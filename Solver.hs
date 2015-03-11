@@ -27,6 +27,12 @@ module Solver (
    pos_dep_graph,
    scc,
    tarjan,
+   collect_nonfalse_cyclic_atoms, extend,emptyspc, loop_s, loop_u,
+   cyclic, external_bodies,
+   Lit(..),
+   ng_prop, local_propagation, unitpropagate, unitresult, PropRes(..),
+   nogoods_of_lp,
+   bodies_p,get_ng1,get_ng2,get_ng3, get_ng4,
    
   ) where
 
@@ -535,7 +541,7 @@ nogoods_of_lp p =
 
 
 get_ng1:: ([Atom],[Atom]) -> Clause
-get_ng1 (pb,nb) = ( (atoms2lits nb) , ((BLit pb nb):(atoms2lits pb)) )
+get_ng1 (pb,nb) = ( (atoms2lits pb) , ((BLit pb nb):(atoms2lits nb)) )
 
 
 get_ng2:: ([Atom],[Atom]) -> [Clause]
@@ -572,6 +578,7 @@ loop_nogoods p u = [ (loop_nogood atom (external_bodies p u)) | atom<-u  ]
 
 
 -- ---------------------------------------------------------------------------------
+
 type PosDepGraph = (Map.Map Atom [Atom])
 
 pos_dep_graph:: [Rule] -> PosDepGraph
@@ -590,7 +597,7 @@ pos_dep_graph (r:rs) =
 
 scc:: Atom -> PosDepGraph -> [Atom]
 -- returns the strongly connected componet of an atom
-scc a depg = tarjan depg [] [] a
+scc a depg = nub (tarjan depg [] [] a)
 
 tarjan:: PosDepGraph -> [Atom] -> [Atom] -> Atom -> [Atom]
 tarjan depg visited visited2 a =
@@ -607,13 +614,45 @@ tarjan depg visited visited2 a =
                   (concatMap (tarjan depg (a:visited) visited2) next)
 
 
+-- ---------------------------------------------------------------------------------                  
+
+type SourcePointerConf =   (Map.Map Atom Lit)
+emptyspc:: SourcePointerConf
+emptyspc = Map.empty
+
+__bottom = (ALit __conflict)
+
+add_source::  SourcePointerConf -> Atom -> Lit -> SourcePointerConf
+-- add a new sourcep for an atom
+add_source spc a l =  Map.insert a l spc
+
+source:: Atom -> SourcePointerConf -> Lit
+source a spc =
+   case Map.lookup a spc of
+       Nothing -> __bottom
+       Just x  ->  x
+
+sourcep:: Atom -> SourcePointerConf -> [Atom]
+sourcep a spc =
+  case (source a spc) of
+  (BLit pb nb) ->  pb
+  __bottom -> []
+  
+                  
+-- ---------------------------------------------------------------------------------
+
 
 cyclic:: Atom -> [Rule] -> Bool
+-- test if an atom has a cyclic definition might be easier, if scc\=[]
 cyclic a p =
   let scc_a = scc a (pos_dep_graph p)
   in
-  check_scc scc_a p
+--   check_scc scc_a p
+  if scc_a == []
+     then False
+     else True
 
+  
 check_scc:: [Atom] -> [Rule] -> Bool
 -- returns True if there is a rule with head in scc and body+ with not empty
 check_scc sc [] = False
@@ -621,14 +660,34 @@ check_scc sc (r:rs) =
  ( (elem (kopf r) sc) && ((intersect (pbody r) sc) /= [])) || (check_scc sc rs)
 
 
-unfounded_set:: [Rule] -> ([Lit],[Lit]) -> [Atom]
+unfounded_set:: [Rule] -> SourcePointerConf -> ([Lit],[Lit]) -> [Atom]
 -- returns an unfounded set for the program given a partial assignment
-unfounded_set p assig =
-  let s = collect_nonfalse_cyclic_atoms assig p
-      s2 = extend p assig emptysourcep s
-      -- bis line 5
+unfounded_set prg spc assig =
+  let s = collect_nonfalse_cyclic_atoms assig prg
+      s2 = extend prg assig spc s   -- bis line 5
   in
-  []
+  loop_s prg spc assig s2
+
+  
+collect_nonfalse_cyclic_atoms:: ([Lit],[Lit]) -> [Rule] -> [Atom]
+collect_nonfalse_cyclic_atoms assig p =
+  let atoms = nub (atoms_p p) \\ (af assig)
+  in
+  [ a | a <- atoms, (cyclic a p)]
+
+
+extend:: [Rule] -> ([Lit],[Lit]) -> SourcePointerConf -> [Atom]  -> [Atom]
+extend p assig spc s =
+  let
+    helper1 =  (af assig)++s
+    atoms = (atoms_p p)
+    helper2 = atoms \\ helper1
+    t =[ a | a <- helper2, (intersect (sourcep a spc) (intersect (scc a (pos_dep_graph p)) s)) /= [] ]
+  in
+    if t==[]
+    then s++t
+    else extend p assig spc (s++t)
+
   
 loop_s:: [Rule] -> SourcePointerConf -> ([Lit],[Lit]) ->[Atom] -> [Atom]
 loop_s prg spc assig [] = [] -- no unfounded_set
@@ -676,101 +735,99 @@ shrink_u prg spc (q:qs) l =
     ((add_source spcn q l), (q:remove))
   else (shrink_u prg spc qs l)
 
+-- ------------------------------------------------------------------------------------
 
+call_ng_prop prg ngs assig =
+  let u = [] in
+  ng_prop prg ngs assig u
 
+ng_prop:: [Rule] -> [Clause] -> ([Lit],[Lit]) -> [Atom] -> (([Lit],[Lit]),[Clause])
 
-collect_nonfalse_cyclic_atoms:: ([Lit],[Lit]) -> [Rule] -> [Atom]
-collect_nonfalse_cyclic_atoms (ast,asf) p =
-  let atoms = (atoms_p p)
-  in
-  [ a | a<- atoms , not (cyclic a p)]
-      
-
-extend:: [Rule] -> ([Lit],[Lit]) -> SourcePointerConf -> [Atom]  -> [Atom]
-extend p assig spc s =
+ng_prop prg ngs assig u =
   let
-    helper1 =  (af assig)++s
-    atoms = (atoms_p p)
-    helper2 = atoms \\ helper1
-    t =[ a | a <- helper2, (intersect (sourcep a spc) (intersect (scc a (pos_dep_graph p)) s)) /= [] ]
+    spc = emptyspc
+    maybeassig = (local_propagation prg ngs assig)
   in
-    if t==[]
-    then s++t
-    else extend p assig spc (s++t) 
+  case maybeassig of
+       ASSIGNMENT assig2 -> let u2 = u \\ (af assig2) in
+                            if (u2 == [])
+                            then let u3 = (unfounded_set prg spc assig2) in
+                              if (u3==[])
+                              then (assig2,ngs)
+                              else -- learn loop nogood
+                                let p = (head u3)
+                                    ngs2 = ngs ++ (loop_nogoods prg u3)
+                                in
+                                if (elem p (at assig2))
+                                then (assig2,ngs2)
+                                else
+                                  let
+                                    (at2,af2) = assig2
+                                    assig3 = (at2,((ALit p):af2))
+                                  in
+                                  ng_prop prg ngs assig3 u3
+                            else -- learn loop nogood from u2
+                              let p = (head u2)
+                                  ngs2 = ngs ++ (loop_nogoods prg u2)
+                              in
+                              if (elem p (at assig2))
+                              then (assig2,ngs2)
+                              else
+                                let
+                                  (at2,af2) = assig2
+                                  assig3 = (at2,((ALit p):af2))
+                                in
+                                ng_prop prg ngs assig3 u2
+       
+       Conflict cf -> (assig,(cf:ngs)) -- Todo learn add conflic clause
   
 
-type SourcePointerConf =   (Map.Map Atom Lit)
-emptysourcep:: SourcePointerConf
-emptysourcep = Map.empty
-
-
-bottom = (ALit __conflict)
-
-
-add_source::  SourcePointerConf -> Atom -> Lit -> SourcePointerConf
--- add a new sourcep for an atom
-add_source spc a l =  Map.insert a l spc
-
-source:: Atom -> SourcePointerConf -> Lit
-source a spc =
-   case Map.lookup a spc of
-       Nothing -> bottom
-       Just x  ->  x
-
-sourcep:: Atom -> SourcePointerConf -> [Atom]
-sourcep a spc =
-  let (BLit pb nb)= (source a spc)
-  in
-  pb
-      
-
-
-
-
-
-
-
-local_propagation:: [Rule] -> [Clause] -> ([Lit],[Lit]) -> Maybe ([Lit],[Lit])
+  
+local_propagation:: [Rule] -> [Clause] -> ([Lit],[Lit]) -> PropRes
 -- takes a program a set of nogoods and an assignment and returns a new assignment
 local_propagation p ngs assig =
   let ngs_p = (nogoods_of_lp p) ++ ngs
       up = unitpropagate assig ngs_p
   in
     case up of
-      Just newassig -> if newassig == assig
-                       then Just assig
-                       else local_propagation [] ngs_p newassig
-      Nothing       -> Nothing -- return conflict clause
+      ASSIGNMENT newassig -> if newassig == assig
+                             then ASSIGNMENT assig
+                             else local_propagation [] ngs_p newassig
+      Conflict cf      -> Conflict cf -- return conflict clause
 
 
   
 
-unitpropagate:: ([Lit],[Lit]) -> [Clause] -> Maybe ([Lit],[Lit])
-unitpropagate (at, af) [] = Just (at, af)
+unitpropagate:: ([Lit],[Lit]) -> [Clause] -> PropRes
+unitpropagate (at, af) [] = ASSIGNMENT (at, af)
 unitpropagate (at, af) (ng:ngs) =
   let x = unitresult (at,af) ng in
   case x of
-       Just ([nt],[]) -> unitpropagate ((nt:at),af) ngs
-       Just ([],[nf]) -> unitpropagate (at,(nf:af)) ngs
-       Nothing        -> Nothing -- return conflict clauses
-       
+       ASSIGNMENT ([nt],[]) -> unitpropagate ( nub (nt:at),af) ngs
+       ASSIGNMENT ([],[nf]) -> unitpropagate (at,nub (nf:af)) ngs
+       ASSIGNMENT ([],[])   -> unitpropagate (at,af) ngs
+       Conflict (at,af) -> Conflict (at,af)
        
   
-unitresult:: ([Lit],[Lit]) -> Clause -> Maybe ([Lit],[Lit])
+unitresult:: ([Lit],[Lit]) -> Clause -> PropRes
 -- An assignement a nogood  maybe a new assignment or a conflict
 unitresult (at, af) (ngt, ngf) =
   case (ngt \\ at) of
     []      -> case (ngf \\ af) of
-                 []      -> Nothing -- return conflict clauses1
-                 [sigma] -> Just ([sigma],[])
-                 _       -> Just ([],[]) -- nothing can be derived
+                 []      -> Conflict (at,af)
+                 [sigma] -> ASSIGNMENT ([sigma],[])
+                 _       -> ASSIGNMENT ([],[]) -- nothing can be derived
          
     [sigma] -> case (ngf \\ af) of
-                 []      -> Just ([],[sigma])
-                 _       -> Just ([],[]) -- nothing can be derived
+                 []      -> ASSIGNMENT ([],[sigma])
+                 _       -> ASSIGNMENT ([],[]) -- nothing can be derived
     
-    _ -> Just ([],[]) -- nothing can be derived
+    _ -> ASSIGNMENT ([],[]) -- nothing can be derived
 
+data PropRes =  ASSIGNMENT ([Lit],[Lit])
+         | Conflict Clause
+         deriving (Show,Eq)
+    
 
 is_solution:: ([Lit],[Lit]) -> [Clause] -> Bool
 -- An assignment violates a set nogoods if one nogood is contained in the assignment
