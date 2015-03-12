@@ -326,10 +326,10 @@ mpr4 = "f(a).\n"
       ++ "p(X) :-f(X), not q(X), not r(X).\n"
       ++ "r(X) :-f(X), not p(X), not q(X).\n"
       ++ ":- r(X).\n"
-
 Right mp4 = readProgram mpr4
 
 mpr5 = ":- r(X).\n"
+Right mp5 = readProgram mpr5
 
 mpr6 = "a.\n"
     ++ "b :- not a.\n"

@@ -33,7 +33,7 @@ module Solver (
    ng_prop, local_propagation, unitpropagate, unitresult, PropRes(..),
    nogoods_of_lp,
    bodies_p,get_ng1,get_ng2,get_ng3, get_ng4,
-   
+   cdnl,
   ) where
 
 import ASP
@@ -488,11 +488,8 @@ get_query_rules2 (r:rs) a =
        
 data Lit = ALit Atom
          | BLit [Atom] [Atom]
-         deriving (Show,Eq)
+         deriving (Show,Eq,Ord)
            
-type Clause = ([Lit],[Lit])
-
-
 atoms2lits:: [Atom] -> [Lit]
 atoms2lits as = [(ALit a) | a <- as ]
 
@@ -510,13 +507,39 @@ bodies:: [Rule] -> Atom -> [([Atom],[Atom])]
 bodies p a  = [((pbody r),(nbody r)) | r<-p , (kopf r)==a ]
 
 
-at:: ([Lit],[Lit]) -> [Atom]
--- return the atoms that are true in the assignement
-at (ast,asf) = concatMap truelit2trueatoms ast
+data SignedLit = T Lit
+         | F Lit
+         deriving (Show,Eq)
 
-af:: ([Lit],[Lit]) -> [Atom]
+unsign:: SignedLit -> Lit
+unsign (T l) = l
+unsign (F l) = l
+
+type Assignment = [SignedLit]
+type Clause = Assignment
+
+assignment2lits assig = [ (unsign sl) | sl <- assig ]
+
+trueatoms:: Assignment -> [Atom]
+-- return the atoms that are true in the assignment
+trueatoms assig =
+  let truelits = [tl |  (T tl) <- assig ] in
+  concatMap truelit2trueatoms truelits
+
+falseatoms:: Assignment -> [Atom]
 -- return the atoms that are false in the assignement
-af (ast,asf) = concatMap falselit2falseatoms asf
+falseatoms assig =
+  let falselits = [fl |  (F fl) <- assig ] in
+  concatMap falselit2falseatoms falselits
+
+
+-- at:: ([Lit],[Lit]) -> [Atom]
+-- -- return the atoms that are true in the assignement
+-- at (ast,asf) = concatMap truelit2trueatoms ast
+-- 
+-- af:: ([Lit],[Lit]) -> [Atom]
+-- -- return the atoms that are false in the assignement
+-- af (ast,asf) = concatMap falselit2falseatoms asf
 
 
 truelit2trueatoms (ALit a) = [a]
@@ -541,24 +564,26 @@ nogoods_of_lp p =
 
 
 get_ng1:: ([Atom],[Atom]) -> Clause
-get_ng1 (pb,nb) = ( (atoms2lits pb) , ((BLit pb nb):(atoms2lits nb)) )
+get_ng1 (pb,nb) =
+  map T (atoms2lits pb)
+  ++ map F ((BLit pb nb):(atoms2lits nb))
 
 
 get_ng2:: ([Atom],[Atom]) -> [Clause]
 get_ng2 (pb,nb) =
   let
-    clauses1 = [ ([(BLit pb nb)],[(ALit atom)]) | atom <- pb ]
-    clauses2 = [ ([(BLit pb nb),(ALit atom)],[]) | atom <- nb ]
+    clauses1 = [ [(T (BLit pb nb)),(F (ALit atom))] | atom <- pb ]
+    clauses2 = [ [(T (BLit pb nb)),(T (ALit atom))] | atom <- nb ]
   in
   clauses1 ++ clauses2
 
 
 get_ng3:: [Rule] -> Atom -> [Clause]
-get_ng3 p a = [ ([(BLit pb nb)],[(ALit a)]) | (pb,nb) <- (bodies p a) ]
+get_ng3 p a = [ [(T (BLit pb nb)), (F (ALit a))] | (pb,nb) <- (bodies p a) ]
 
 
 get_ng4:: [Rule] -> Atom -> Clause
-get_ng4 p a = ([(ALit a)], (bodies2lits (bodies p a)))
+get_ng4 p a = [ (T (ALit a))] ++ (map F (bodies2lits (bodies p a)))
 
 
 external_bodies:: [Rule] -> [Atom] -> [([Atom],[Atom])]
@@ -569,7 +594,7 @@ external_bodies p u =
 
 loop_nogood:: Atom -> [([Atom],[Atom])] -> Clause
 -- returns the loop nogood for an atom in an unfounded set(characterized by the external bodies)
-loop_nogood a bodies = ([(ALit a)],(bodies2lits bodies))
+loop_nogood a bodies = [(T (ALit a))]++ (map F (bodies2lits bodies))
 
 
 loop_nogoods:: [Rule] -> [Atom] -> [Clause]
@@ -660,7 +685,7 @@ check_scc sc (r:rs) =
  ( (elem (kopf r) sc) && ((intersect (pbody r) sc) /= [])) || (check_scc sc rs)
 
 
-unfounded_set:: [Rule] -> SourcePointerConf -> ([Lit],[Lit]) -> [Atom]
+unfounded_set:: [Rule] -> SourcePointerConf -> Assignment -> [Atom]
 -- returns an unfounded set for the program given a partial assignment
 unfounded_set prg spc assig =
   let s = collect_nonfalse_cyclic_atoms assig prg
@@ -669,17 +694,17 @@ unfounded_set prg spc assig =
   loop_s prg spc assig s2
 
   
-collect_nonfalse_cyclic_atoms:: ([Lit],[Lit]) -> [Rule] -> [Atom]
+collect_nonfalse_cyclic_atoms:: Assignment -> [Rule] -> [Atom]
 collect_nonfalse_cyclic_atoms assig p =
-  let atoms = nub (atoms_p p) \\ (af assig)
+  let atoms = nub (atoms_p p) \\ (falseatoms assig)
   in
   [ a | a <- atoms, (cyclic a p)]
 
 
-extend:: [Rule] -> ([Lit],[Lit]) -> SourcePointerConf -> [Atom]  -> [Atom]
+extend:: [Rule] -> Assignment -> SourcePointerConf -> [Atom]  -> [Atom]
 extend p assig spc s =
   let
-    helper1 =  (af assig)++s
+    helper1 =  (falseatoms assig)++s
     atoms = (atoms_p p)
     helper2 = atoms \\ helper1
     t =[ a | a <- helper2, (intersect (sourcep a spc) (intersect (scc a (pos_dep_graph p)) s)) /= [] ]
@@ -689,7 +714,7 @@ extend p assig spc s =
     else extend p assig spc (s++t)
 
   
-loop_s:: [Rule] -> SourcePointerConf -> ([Lit],[Lit]) ->[Atom] -> [Atom]
+loop_s:: [Rule] -> SourcePointerConf -> Assignment ->[Atom] -> [Atom]
 loop_s prg spc assig [] = [] -- no unfounded_set
 loop_s prg spc assig s =
   let u = head s
@@ -701,10 +726,11 @@ loop_s prg spc assig s =
   else loop_s prg spc2 assig s2
   
 
-loop_u:: [Rule] -> SourcePointerConf -> ([Lit],[Lit]) -> [Atom] -> [Atom] -> Atom -> (SourcePointerConf, [Atom], [Atom], Bool)
+loop_u:: [Rule] -> SourcePointerConf -> Assignment -> [Atom] -> [Atom] -> Atom -> (SourcePointerConf, [Atom], [Atom], Bool)
 loop_u prg spc assig s [] p  = (spc, s, [], False)
-loop_u prg spc (at,af) s u p  =
+loop_u prg spc assig s u p  =
   let eb = bodies2lits (external_bodies prg u)
+      af = [ l | (F l) <- assig ]
   in
   if ((intersect eb af )==eb)
   then (spc, s, u, True) -- unfounded set found
@@ -719,10 +745,10 @@ loop_u prg spc (at,af) s u p  =
           u2 = (u \\ remove)
           s2 = (s \\ remove)
       in
-      (loop_u prg spc2 (at,af) s2 u2 p)
+      (loop_u prg spc2 assig s2 u2 p)
     else
       let u2 = u ++ (intersect pb (intersect scc_p s)) in
-      (loop_u prg spc (at,af) s u2 p)  
+      (loop_u prg spc assig s u2 p)
       
     
 shrink_u:: [Rule] -> SourcePointerConf -> [Atom] ->  Lit -> (SourcePointerConf, [Atom])
@@ -737,107 +763,156 @@ shrink_u prg spc (q:qs) l =
 
 -- ------------------------------------------------------------------------------------
 
-call_ng_prop prg ngs assig =
-  let u = [] in
-  ng_prop prg ngs assig u
+type DLT = (Map.Map Lit Int) -- DecisionLevelTracker
+emptyDLT:: (Map.Map Lit Int)
+emptyDLT =  Map.empty
 
-ng_prop:: [Rule] -> [Clause] -> ([Lit],[Lit]) -> [Atom] -> (([Lit],[Lit]),[Clause])
 
-ng_prop prg ngs assig u =
+
+  
+           
+cdnl:: [Rule] -> [[Atom]]
+cdnl prg =
+  let
+    dl= 0
+    dlt = emptyDLT
+    ngs = []
+    assig = []
+    (assig2,ngs2,sat) = ng_prop prg dl dlt ngs assig []
+  in
+  if sat
+  then-- if no conflict /
+    let all_lits = (bodies2lits(bodies_p prg))++ (atoms2lits (atoms_p prg))
+        selectable = (all_lits \\ (assignment2lits (assig2)))
+    in
+    if (selectable==[])
+    then -- if all atoms answer set
+      [trueatoms (assig2)]
+      
+    else -- select new lit
+      let s = head selectable
+          dl2 = dl+1
+          dlt2 = Map.insert s dl2 dlt -- extend assignment
+      in
+      cdnl_loop dl2 dlt2 ngs2 assig2 prg
+  else  -- if conflict / -- dl==0 no answer
+    []
+
+cdnl_loop dl dlt ngs assig prg =
+  let
+    (assig2,ngs2,sat) = ng_prop prg dl dlt ngs assig []
+  in
+  if sat
+  then-- if no conflict /
+    let all_lits = (bodies2lits(bodies_p prg))++ (atoms2lits (atoms_p prg))
+        selectable = (all_lits \\ (assignment2lits (assig2)))
+    in
+    if (selectable==[])
+    then -- if all atoms answer set
+      [(trueatoms assig2)]
+    else -- select new lit
+      let s = head selectable
+          dl2 = dl+1
+          dlt2 = Map.insert s dl2 dlt -- extend assignment
+      in
+      cdnl_loop dl2 dlt2 ngs2 ((T s):assig2) prg
+    else  -- if conflict /
+  if dl==0
+  then [] -- no answer
+  else [] --conflict analysis  
+
+
+-- conflict_analysis:: [Rule] -> Clause -> ([Lit],[Lit]) -> (Clause, Int)
+-- conflict_analysis prg (ngt,nf) (ast,asf) =
+--   let sigmas = [ sigma | sigma
+
+ng_prop:: [Rule] -> Int -> DLT -> [Clause] -> Assignment -> [Atom] -> (Assignment,[Clause],Bool)
+ng_prop prg dl dlt ngs assig u =
   let
     spc = emptyspc
-    maybeassig = (local_propagation prg ngs assig)
+    maybeassig = (local_propagation prg dl dlt ngs assig)
   in
   case maybeassig of -- TODO if prg is tight skip unfounded set check
-       ASSIGNMENT assig2 -> let u2 = u \\ (af assig2) in
+       ASSIGNMENT assig2 -> let
+--                                 u2 = u \\ (af assig2)
+                                u2 = u \\ (falseatoms assig2)
+                            in
                             if (u2 == [])
-                            then let u3 = (unfounded_set prg spc assig2) in
+                            then -- unfounded set check
+                              let u3 = (unfounded_set prg spc assig2) in
                               if (u3==[])
-                              then (assig2,ngs)
+                              then (assig2,ngs, True)
                               else -- learn loop nogood
                                 let p = (head u3)
-                                    ngs2 = ngs ++ (loop_nogoods prg u3)
                                 in
-                                if (elem p (at assig2))
-                                then (assig2,ngs2)
+--                                 if (elem p (at assig2))
+                                if (elem p (trueatoms assig2))
+                                then (assig2,(loop_nogoods prg u3),True)
                                 else
                                   let
-                                    (at2,af2) = assig2
-                                    assig3 = (at2,((ALit p):af2))
+                                    assig3 = ((F (ALit p)):assig2)
+                                    dlt2 = Map.insert (ALit p) dl dlt
                                   in
-                                  ng_prop prg ngs assig3 u3
+                                  ng_prop prg dl dlt2 ngs assig3 u3
                             else -- learn loop nogood from u2
                               let p = (head u2)
-                                  ngs2 = ngs ++ (loop_nogoods prg u2)
                               in
-                              if (elem p (at assig2))
-                              then (assig2,ngs2)
+                              if (elem p (trueatoms assig2))
+                              then (assig2,(loop_nogoods prg u2),True)
                               else
                                 let
-                                  (at2,af2) = assig2
-                                  assig3 = (at2,((ALit p):af2))
+                                  assig3 = ((F (ALit p)):assig2)
+                                  dlt2 = Map.insert (ALit p) dl dlt  -- extend assignment
                                 in
-                                ng_prop prg ngs assig3 u2
+                                ng_prop prg dl dlt2 ngs assig3 u2
        
-       Conflict cf -> (assig,(cf:ngs)) -- TODO learn add conflic clause
+       Conflict cf -> (assig, [cf], False) -- TODO learn add conflic clause
   
 
   
-local_propagation:: [Rule] -> [Clause] -> ([Lit],[Lit]) -> PropRes
+local_propagation:: [Rule] -> Int -> DLT -> [Clause] -> Assignment -> PropRes
 -- takes a program a set of nogoods and an assignment and returns a new assignment
-local_propagation p ngs assig =
+local_propagation p dl dlt ngs assig =
   let ngs_p = (nogoods_of_lp p) ++ ngs
-      up = unitpropagate assig ngs_p
+      up = unitpropagate dl dlt assig ngs_p
   in
     case up of
       ASSIGNMENT newassig -> if newassig == assig
                              then ASSIGNMENT assig
-                             else local_propagation [] ngs_p newassig
+                             else local_propagation p dl dlt ngs_p newassig
       Conflict cf      -> Conflict cf -- return conflict clause
 
 
   
 
-unitpropagate:: ([Lit],[Lit]) -> [Clause] -> PropRes
-unitpropagate (at, af) [] = ASSIGNMENT (at, af)
-unitpropagate (at, af) (ng:ngs) =
-  let x = unitresult (at,af) ng in
+unitpropagate:: Int -> DLT -> Assignment -> [Clause] -> PropRes
+unitpropagate dl dlt assig [] = ASSIGNMENT assig
+unitpropagate dl dlt assig (ng:ngs) =
+  let x = unitresult assig ng in
   case x of
-       ASSIGNMENT ([nt],[]) -> unitpropagate ( nub (nt:at),af) ngs
-       ASSIGNMENT ([],[nf]) -> unitpropagate (at,nub (nf:af)) ngs
-       ASSIGNMENT ([],[])   -> unitpropagate (at,af) ngs
-       Conflict (at,af) -> Conflict (at,af)
+       ASSIGNMENT [(T l)] -> let dlt2 = Map.insert l dl dlt in
+                               unitpropagate dl dlt2 (nub ((T l):assig)) ngs
+                               
+       ASSIGNMENT [(F l)] -> let dlt2 = Map.insert l dl dlt in
+                               unitpropagate dl dlt2 (nub ((F l):assig)) ngs
+                               
+       ASSIGNMENT []      -> unitpropagate dl dlt assig ngs
+       Conflict cf        -> Conflict cf
        
   
-unitresult:: ([Lit],[Lit]) -> Clause -> PropRes
+unitresult:: Assignment -> Clause -> PropRes
 -- An assignement a nogood  maybe a new assignment or a conflict
-unitresult (at, af) (ngt, ngf) =
-  case (ngt \\ at) of
-    []      -> case (ngf \\ af) of
-                 []      -> Conflict (at,af)
-                 [sigma] -> ASSIGNMENT ([sigma],[])
-                 _       -> ASSIGNMENT ([],[]) -- nothing can be derived
-         
-    [sigma] -> case (ngf \\ af) of
-                 []      -> ASSIGNMENT ([],[sigma])
-                 _       -> ASSIGNMENT ([],[]) -- nothing can be derived
-    
-    _ -> ASSIGNMENT ([],[]) -- nothing can be derived
+unitresult assig nogood =
+  case (nogood \\ assig) of
+    []      -> Conflict assig
+    [(T l)] -> ASSIGNMENT [(F l)]
+    [(F l)] -> ASSIGNMENT [(T l)]
+    _ -> ASSIGNMENT [] -- nothing can be derived
 
-data PropRes =  ASSIGNMENT ([Lit],[Lit])
+data PropRes =  ASSIGNMENT Assignment
          | Conflict Clause
          deriving (Show,Eq)
     
-
-is_solution:: ([Lit],[Lit]) -> [Clause] -> Bool
--- An assignment violates a set nogoods if one nogood is contained in the assignment
-is_solution a (ng:ngs) =  (is_sol a ng) && (is_solution a ngs)
-
-is_sol:: ([Lit],[Lit]) -> Clause -> Bool
--- An assignment violates a nogoods if the nogood is contained in the assignment
-is_sol (at,af) (ngt,ngf) =   (intersect ngt at)/=ngt || (intersect ngf af)/=ngf
-
-
 
 
 ac = (Atom "a" [(Identifier "c")])
