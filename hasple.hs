@@ -332,11 +332,11 @@ mpr5 = ":- r(X).\n"
 Right mp5 = readProgram mpr5
 
 mpr6 = "a.\n"
-    ++ "b :- not a.\n"
+--     ++ "b :- not a.\n"
     ++ "c :- a, not d.\n"
     ++ "d :- not c, not e.\n"
-    ++ "e :- b.\n"
-    ++ "e :- e.\n"
+--     ++ "e :- b.\n"
+--     ++ "e :- e.\n"
 Right mp6 = readProgram mpr6
     
 mpr7 = "a :- not b.\n"
