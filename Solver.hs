@@ -789,53 +789,56 @@ cdnl prg =
     assig = []
     (assig2,ngs2,sat, dlt2) = ng_prop prg dl dlt ngs_p ngs assig []
   in
-  (error ((show assig2)++"\n"++(show ngs2)++"\n"++(show sat)++"\n"++(show dlt2)))
---   if sat
---   then-- if no conflict /
---     let all_lits = nub ((bodies2lits(bodies_p prg))++ (atoms2lits (atoms_p prg)))
---         selectable = (all_lits \\ (assignment2lits (assig2)))
---     in
--- --     (error ((show all_lits)++"\n"++(show (assignment2lits (assig2)))++"\n"++(show selectable)))
---     if (selectable==[])
---     then -- if all atoms answer set
---       [trueatoms (assig2)]
---     else -- select new lit
---       let s = head selectable
---           dltn = Map.insert s (dl+1) dlt2 -- extend assignment
---       in
--- --       (error ((show s)++"\n"++(show assig2)))
---       cdnl_loop prg (dl+1) dltn ngs_p ngs2 ((T s):assig2)
---   else  -- if conflict / -- dl==0 no answer
---     []
+--   (error ((show assig2)++"\n"++(show ngs2)++"\n"++(show sat)++"\n"++(show dlt2)))
+  if sat
+  then-- if no conflict /
+    let all_lits = nub ((bodies2lits(bodies_p prg))++ (atoms2lits (atoms_p prg)))
+        selectable = (all_lits \\ (assignment2lits (assig2)))
+    in
+--     (error ((show all_lits)++"\n"++(show (assignment2lits (assig2)))++"\n"++(show selectable)))
+    if (selectable==[])
+    then -- if all atoms answer set
+      [trueatoms (assig2)]
+    else -- select new lit
+      let s = head selectable
+          dltn = Map.insert s (dl+1) dlt2 -- extend assignment
+      in
+--       (error ((show s)++"\n"++(show assig2)))
+      cdnl_loop prg (dl+1) dltn ngs_p ngs2 ((T s):assig2)
+  else  -- if conflict / -- dl==0 no answer
+    []
 
 cdnl_loop prg dl dlt ngs_p ngs assig  =
   let
     (assig2,ngs2,sat,dlt2) = ng_prop prg dl dlt ngs_p ngs assig []
   in
-  (error ("\n"++(show assig)++"\n"++(show assig2)++"\n"++(show ngs2)++"\n"++(show sat)++"\n"++(show dlt2)))
---   if sat
---   then-- if no conflict /
---     let all_lits = (bodies2lits(bodies_p prg))++ (atoms2lits (atoms_p prg))
---         selectable = (all_lits \\ (assignment2lits (assig2)))
---     in
---     if (selectable==[])
---     then -- if all atoms answer set
---       [(trueatoms assig2)]
---     else -- select new lit
---       let s = head selectable
---           dltn = Map.insert s (dl+1) dlt2 -- extend assignment
---       in
---       cdnl_loop prg (dl+1) dltn ngs_p ngs2 ((T s):assig2)
---   else  -- if conflict /
---     if dl==0
---     then [] -- no answer
---     else --conflict analysis
---       let [cf] = ngs2
---           (nogood, dl3) = conflict_analysis dlt2 (ngs_p++ngs) cf assig2
---           ngs3 = (nogood:ngs)
---           assig3 = backtrack assig2 dlt2 dl3
---       in
---       cdnl_loop prg dl3 dlt2 ngs_p ngs3 assig3
+  if (dl==1)
+  then (error ("\n"++(show assig)++"\n"++(show assig2)++"\n"++(show ngs2)++"\n"++(show sat)++"\n"++(show dlt2)))
+  else
+  if sat
+  then-- if no conflict /
+    let all_lits = nub ((bodies2lits(bodies_p prg))++ (atoms2lits (atoms_p prg)))
+        selectable = (all_lits \\ (assignment2lits (assig2)))
+    in
+    if (selectable==[])
+    then -- if all atoms answer set
+      [(trueatoms assig2)]
+    else -- select new lit
+      let s = head selectable
+          dltn = Map.insert s (dl+1) dlt2 -- extend assignment
+      in
+--       (error (show all_lits)++(show selectable))
+      cdnl_loop prg (dl+1) dltn ngs_p ngs2 ((T s):assig2)
+  else  -- if conflict /
+    if dl==0
+    then [] -- no answer
+    else --conflict analysis
+      let [cf] = ngs2
+          (nogood, dl3) = conflict_analysis dlt2 (ngs_p++ngs) cf assig2
+          ngs3 = (nogood:ngs)
+          assig3 = backtrack assig2 dlt2 dl3
+      in
+      cdnl_loop prg dl3 dlt2 ngs_p ngs3 assig3
 
 
 backtrack:: Assignment -> DLT -> Int -> Assignment
