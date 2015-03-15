@@ -343,9 +343,9 @@ mpr7 = "a :- not b.\n"
     ++ "b :- not a.\n"
     ++ "c :- a.\n"
     ++ "c :- b, d.\n"
-    ++ "d :- b, c.\n"
+--     ++ "d :- b, c.\n"
     ++ "d :- e.\n"
-    ++ "e :- b, not a.\n"
+--     ++ "e :- b, not a.\n"
     ++ "e :- c, d.\n"
 Right mp7 = readProgram mpr7
     

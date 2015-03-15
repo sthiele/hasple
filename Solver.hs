@@ -784,7 +784,7 @@ cdnl prg =
   let
     dl= 0
     dlt = emptyDLT
-    ngs_p = nogoods_of_lp prg
+    ngs_p = nub (nogoods_of_lp prg)
     ngs = []
     assig = []
     (assig2,ngs2,sat, dlt2) = ng_prop prg dl dlt ngs_p ngs assig []
@@ -812,9 +812,9 @@ cdnl_loop prg dl dlt ngs_p ngs assig  =
   let
     (assig2,ngs2,sat,dlt2) = ng_prop prg dl dlt ngs_p ngs assig []
   in
-  if (dl==1)
-  then (error ("\n"++(show assig)++"\n"++(show assig2)++"\n"++(show ngs2)++"\n"++(show sat)++"\n"++(show dlt2)))
-  else
+--   if (dl==1)
+--   then (error ("\n"++(show assig)++"\n"++(show assig2)++"\n"++(show ngs_p)++"\n"++(show ngs2)++"\n"++(show sat)++"\n"++(show dlt2)))
+--   else
   if sat
   then-- if no conflict /
     let all_lits = nub ((bodies2lits(bodies_p prg))++ (atoms2lits (atoms_p prg)))
@@ -889,8 +889,12 @@ ng_prop:: [Rule] -> Int -> DLT -> [Clause] -> [Clause] -> Assignment -> [Atom] -
 ng_prop prg dl dlt ngs_p ngs assig u =
   let
     spc = emptyspc
-    (maybeassig,dlt2) = (local_propagation prg dl dlt (ngs_p++ngs) assig)
+    (maybeassig,dlt2) = (local_propagation 0 prg dl dlt (ngs_p++ngs) assig)
   in
+{-  if (dl==1)
+  then (error ("\nng_prop dl="++(show dl)++"\n"
+    ++(show maybeassig)++"\n"++(show dlt2)))
+  else-}    
   case maybeassig of -- TODO if prg is tight skip unfounded set check
        ASSIGNMENT assig2 -> let
                                 u2 = u \\ (falseatoms assig2)
@@ -928,39 +932,45 @@ ng_prop prg dl dlt ngs_p ngs assig u =
   
 
   
-local_propagation:: [Rule] -> Int -> DLT -> [Clause] -> Assignment -> (PropRes,DLT)
+local_propagation:: Int -> [Rule] -> Int -> DLT -> [Clause] -> Assignment -> (PropRes,DLT)
 -- takes a program a set of nogoods and an assignment and returns a new assignment
-local_propagation p dl dlt nogoods assig =
-  let (up,dlt2) = unitpropagate dl dlt assig nogoods
+local_propagation lpc p dl dlt nogoods assig =
+  let (up,dlt2) = unitpropagate lpc 0 dl dlt assig nogoods
   in
+--   if (dl==2)
+--   then (error ("\nlocal_propagation dl="++(show dl)++"\n"
+--     ++(show assig)++"\n"
+--     ++(show up)))
+--   else  
     case up of
       ASSIGNMENT newassig -> if newassig == assig
                              then (ASSIGNMENT assig,dlt2)
-                             else local_propagation p dl dlt2 nogoods newassig
+			     else local_propagation (lpc+1) p dl dlt2 nogoods newassig
       Conflict cf      -> (Conflict cf,dlt2) -- return conflict clause
 
 
   
 
-unitpropagate:: Int -> DLT -> Assignment -> [Clause] -> (PropRes,DLT)
-unitpropagate dl dlt assig [] = (ASSIGNMENT assig, dlt)
-unitpropagate dl dlt assig (ng:ngs) =
+unitpropagate:: Int -> Int -> Int -> DLT -> Assignment -> [Clause] -> (PropRes,DLT)
+unitpropagate lpc i dl dlt assig [] = (ASSIGNMENT assig, dlt)
+unitpropagate lpc i dl dlt assig (ng:ngs) =
   let x = unitresult assig ng in
+  if (dl==1 && lpc==1 && i==7)
+  then (error ("\nunitpropagate dl="++(show dl)++"\n"
+    ++(show assig)++"\n"++(show ng)++"\n"++(show x)))
+  else   
   case x of
-       ASSIGNMENT [(T l)] -> let dlt2 = Map.insert l dl dlt in
-                               unitpropagate dl dlt2 (nub ((T l):assig)) ngs
+       ASSIGNMENT [sl] -> let dlt2 = Map.insert (unsign sl) dl dlt in
+                               unitpropagate lpc (i+1) dl dlt2 (nub (sl:assig)) ngs
                                
-       ASSIGNMENT [(F l)] -> let dlt2 = Map.insert l dl dlt in
-                               unitpropagate dl dlt2 (nub ((F l):assig)) ngs
-                               
-       ASSIGNMENT []      -> unitpropagate dl dlt assig ngs
+       ASSIGNMENT []      -> unitpropagate lpc (i+1) dl dlt assig ngs
        Conflict cf        -> (Conflict cf,dlt)
        
   
 unitresult:: Assignment -> Clause -> PropRes
 -- An assignement a nogood  maybe a new assignment or a conflict
 unitresult assig nogood =
-  case (nogood \\ assig) of
+  case (nub (nogood \\ assig)) of
     []      -> Conflict assig
     [(T l)] -> ASSIGNMENT [(F l)]
     [(F l)] -> ASSIGNMENT [(T l)]
