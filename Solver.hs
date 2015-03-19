@@ -625,7 +625,7 @@ pos_dep_graph (r:rs) =
       
 
 scc:: Atom -> PosDepGraph -> [Atom]
--- returns the strongly connected componet of an atom
+-- returns the strongly connected component of an atom
 scc a depg = nub (tarjan depg [] [] a)
 
 tarjan:: PosDepGraph -> [Atom] -> [Atom] -> Atom -> [Atom]
@@ -695,7 +695,7 @@ unfounded_set prg spc assig =
   let s = collect_nonfalse_cyclic_atoms assig prg
       s2 = extend prg assig spc s   -- bis line 5
   in
-  loop_s prg spc assig s2
+  loop_s 0 prg spc assig s2
 
   
 collect_nonfalse_cyclic_atoms:: Assignment -> [Rule] -> [Atom]
@@ -718,21 +718,22 @@ extend p assig spc s =
     else extend p assig spc (s++t)
 
   
-loop_s:: [Rule] -> SourcePointerConf -> Assignment ->[Atom] -> [Atom]
-loop_s prg spc assig [] = [] -- no unfounded_set
-loop_s prg spc assig s =
+loop_s:: Int -> [Rule] -> SourcePointerConf -> Assignment ->[Atom] -> [Atom]
+loop_s num prg spc assig [] = [] -- no unfounded_set
+loop_s num prg spc assig s =
   let u = head s
       eb = bodies2lits (external_bodies prg [u])
-      (spc2,u2,s2,found) = loop_u prg spc assig s [u] u
+      (spc2,s2,u2,found) = loop_u 0 num prg spc assig s [u] u
   in
   if found
   then u2
-  else loop_s prg spc2 assig s2
+  else
+    loop_s 1 prg spc2 assig s2
   
 
-loop_u:: [Rule] -> SourcePointerConf -> Assignment -> [Atom] -> [Atom] -> Atom -> (SourcePointerConf, [Atom], [Atom], Bool)
-loop_u prg spc assig s [] p  = (spc, s, [], False)
-loop_u prg spc assig s u p  =
+loop_u:: Int-> Int -> [Rule] -> SourcePointerConf -> Assignment -> [Atom] -> [Atom] -> Atom -> (SourcePointerConf, [Atom], [Atom], Bool)
+loop_u num nums prg spc assig s [] p  = (spc, s, [], False)
+loop_u num nums prg spc assig s u p  =
   let eb = bodies2lits (external_bodies prg u)
       af = [ l | (F l) <- assig ]
   in
@@ -749,10 +750,10 @@ loop_u prg spc assig s u p  =
           u2 = (u \\ remove)
           s2 = (s \\ remove)
       in
-      (loop_u prg spc2 assig s2 u2 p)
+      (loop_u 1 nums prg spc2 assig s2 u2 p)
     else
       let u2 = u ++ (intersect pb (intersect scc_p s)) in
-      (loop_u prg spc assig s u2 p)
+      (loop_u 1 nums prg spc assig s u2 p)
       
     
 shrink_u:: [Rule] -> SourcePointerConf -> [Atom] ->  Lit -> (SourcePointerConf, [Atom])
@@ -789,13 +790,11 @@ cdnl prg =
     assig = []
     (assig2,ngs2,sat, dlt2) = ng_prop prg dl dlt ngs_p ngs assig []
   in
---   (error ((show assig2)++"\n"++(show ngs2)++"\n"++(show sat)++"\n"++(show dlt2)))
   if sat
   then-- if no conflict /
     let all_lits = nub ((bodies2lits(bodies_p prg))++ (atoms2lits (atoms_p prg)))
         selectable = (all_lits \\ (assignment2lits (assig2)))
     in
---     (error ((show all_lits)++"\n"++(show (assignment2lits (assig2)))++"\n"++(show selectable)))
     if (selectable==[])
     then -- if all atoms answer set
       [trueatoms (assig2)]
@@ -803,7 +802,6 @@ cdnl prg =
       let s = head selectable
           dltn = Map.insert s (dl+1) dlt2 -- extend assignment
       in
---       (error ((show s)++"\n"++(show assig2)))
       cdnl_loop prg (dl+1) dltn ngs_p ngs2 ((T s):assig2)
   else  -- if conflict / -- dl==0 no answer
     []
@@ -812,9 +810,6 @@ cdnl_loop prg dl dlt ngs_p ngs assig  =
   let
     (assig2,ngs2,sat,dlt2) = ng_prop prg dl dlt ngs_p ngs assig []
   in
---   if (dl==1)
---   then (error ("\n"++(show assig)++"\n"++(show assig2)++"\n"++(show ngs_p)++"\n"++(show ngs2)++"\n"++(show sat)++"\n"++(show dlt2)))
---   else
   if sat
   then-- if no conflict /
     let all_lits = nub ((bodies2lits(bodies_p prg))++ (atoms2lits (atoms_p prg)))
@@ -891,10 +886,6 @@ ng_prop prg dl dlt ngs_p ngs assig u =
     spc = emptyspc
     (maybeassig,dlt2) = (local_propagation 0 prg dl dlt (ngs_p++ngs) assig)
   in
-{-  if (dl==1)
-  then (error ("\nng_prop dl="++(show dl)++"\n"
-    ++(show maybeassig)++"\n"++(show dlt2)))
-  else-}    
   case maybeassig of -- TODO if prg is tight skip unfounded set check
        ASSIGNMENT assig2 -> let
                                 u2 = u \\ (falseatoms assig2)
@@ -937,11 +928,6 @@ local_propagation:: Int -> [Rule] -> Int -> DLT -> [Clause] -> Assignment -> (Pr
 local_propagation lpc p dl dlt nogoods assig =
   let (up,dlt2) = unitpropagate lpc 0 dl dlt assig nogoods
   in
---   if (dl==2)
---   then (error ("\nlocal_propagation dl="++(show dl)++"\n"
---     ++(show assig)++"\n"
---     ++(show up)))
---   else  
     case up of
       ASSIGNMENT newassig -> if newassig == assig
                              then (ASSIGNMENT assig,dlt2)
@@ -955,10 +941,7 @@ unitpropagate:: Int -> Int -> Int -> DLT -> Assignment -> [Clause] -> (PropRes,D
 unitpropagate lpc i dl dlt assig [] = (ASSIGNMENT assig, dlt)
 unitpropagate lpc i dl dlt assig (ng:ngs) =
   let x = unitresult assig ng in
-  if (dl==1 && lpc==1 && i==7)
-  then (error ("\nunitpropagate dl="++(show dl)++"\n"
-    ++(show assig)++"\n"++(show ng)++"\n"++(show x)))
-  else   
+
   case x of
        ASSIGNMENT [sl] -> let dlt2 = Map.insert (unsign sl) dl dlt in
                                unitpropagate lpc (i+1) dl dlt2 (nub (sl:assig)) ngs
