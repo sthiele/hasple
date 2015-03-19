@@ -682,11 +682,11 @@ cyclic a p =
      else True
 
   
-check_scc:: [Atom] -> [Rule] -> Bool
--- returns True if there is a rule with head in scc and body+ with not empty
-check_scc sc [] = False
-check_scc sc (r:rs) =
- ( (elem (kopf r) sc) && ((intersect (pbody r) sc) /= [])) || (check_scc sc rs)
+-- check_scc:: [Atom] -> [Rule] -> Bool
+-- -- returns True if there is a rule with head in scc and body+ with not empty
+-- check_scc sc [] = False
+-- check_scc sc (r:rs) =
+--  ( (elem (kopf r) sc) && ((intersect (pbody r) sc) /= [])) || (check_scc sc rs)
 
 
 unfounded_set:: [Rule] -> SourcePointerConf -> Assignment -> [Atom]
@@ -797,7 +797,7 @@ cdnl prg =
     in
     if (selectable==[])
     then -- if all atoms answer set
-      [trueatoms (assig2)]
+       [nub (trueatoms assig2)]
     else -- select new lit
       let s = head selectable
           dltn = Map.insert (T s) (dl+1) dlt2 -- extend assignment
@@ -820,7 +820,7 @@ cdnl_loop prg dl dlt ngs_p ngs assig  =
     in
     if (selectable==[])
     then -- if all atoms answer set
-      [(trueatoms assig2)]
+      [nub (trueatoms assig2)]
     else -- select new lit
       let s = head selectable
           dltn = Map.insert (T s) (dl+1) dlt2 -- extend assignment
@@ -971,7 +971,7 @@ unitpropagate cdnlc lpc i dl dlt assig (ng:ngs) =
        ASSIGNMENT [sl] -> let dlt2 = Map.insert sl dl dlt in
                           case ( Map.lookup sl dlt) of
                             Just x  -> unitpropagate cdnlc lpc (i+1) dl dlt assig ngs
-                            Nothing -> unitpropagate cdnlc lpc (i+1) dl dlt2 (nub (sl:assig)) ngs
+                            Nothing -> unitpropagate cdnlc lpc (i+1) dl dlt2 (sl:assig) ngs
                                
        ASSIGNMENT []      -> unitpropagate cdnlc lpc (i+1) dl dlt assig ngs
        Conflict cf        -> (Conflict cf,dlt)
