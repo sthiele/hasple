@@ -33,7 +33,7 @@ module Solver (
    ng_prop, local_propagation, unitpropagate, unitresult, PropRes(..),
    nogoods_of_lp,
    bodies_p,get_ng1,get_ng2,get_ng3, get_ng4,
-   cdnl,
+   cdnl_enum,
   ) where
 
 import ASP
@@ -785,7 +785,8 @@ cdnl_enum prg s =
   let
     dl= 0 -- decision level
     bl= 0 -- backtracking level
-    dlt = emptyDLT
+    dlt = emptyDLT -- decision level tracker
+    dliteral = [] -- decision literal tracker
     ngs_p = nub (nogoods_of_lp prg)
     ngs = []
     assig = []
@@ -800,30 +801,32 @@ cdnl_enum prg s =
     if (selectable==[])
     then -- if all atoms answer set
        let s2= s-1 in
-       if (s==0) 
+       if (s2==0) 
        then -- last answer set
          [nub (trueatoms assig2)]
-       else -- remaining answer sets
-         let sigma_d = (dliteral dl)
+       else -- backtrack and remaining answer sets
+         let sigma_d = ((reverse dliteral) !! (dl-1))
              dl2 = dl-1
              bl2 = dl2
-             assig3 = ((invert sigma_d):(nbacktrack assig2 dl2))
+             assig3 = ((invert sigma_d):(nbacktrack assig2 dlt2 dl2))
              dlt3 = Map.insert (invert sigma_d) dl2 dlt2
-             remaining_as = cdnl_enum_loop prg s2 dl2 bl2 dlt3 ngs_p ngs2 assig3
+             remaining_as = cdnl_enum_loop prg s2 dl2 bl2 dlt3 dliteral ngs_p ngs2 assig3
          in
-         (nub (trueatoms assig2)):remaining_as)
+         ((nub (trueatoms assig2)):remaining_as)
     else -- select new lit
       let sigma_d = head selectable
           dltn = Map.insert (T sigma_d) (dl+1) dlt2 -- extend assignment
-          (dliteral dl+1) = sigma_d
+--           (dliteral dl+1) = sigma_d
+          dliteral2 = ((T sigma_d):dliteral)
       in
       case (Map.lookup (T sigma_d) dlt2) of
-           Just x  ->  cdnl_enum_loop prg s (dl+1) bl dlt2 ngs_p ngs2 assig2
-           Nothing ->  cdnl_enum_loop prg s (dl+1) bl dltn ngs_p ngs2 ((T sigma_d):assig2)
+           Just x  ->  cdnl_enum_loop prg s (dl+1) bl dlt2 dliteral2 ngs_p ngs2 assig2
+           Nothing ->  cdnl_enum_loop prg s (dl+1) bl dltn dliteral2 ngs_p ngs2 ((T sigma_d):assig2)
   else  -- if conflict / -- dl==0 no answer
     []
-
-cdnl_enum_loop prg s dl bl dlt ngs_p ngs assig  =
+    
+cdnl_enum_loop:: [Rule] -> Int -> Int -> Int -> DLT -> [SignedLit] -> [Clause] -> [Clause] -> Assignment -> [[Atom]]
+cdnl_enum_loop prg s dl bl dlt dliteral ngs_p ngs assig  =
   let
     (assig2,ngs2,sat,dlt2) = ng_prop prg dl dlt ngs_p ngs assig []
   in
@@ -836,25 +839,26 @@ cdnl_enum_loop prg s dl bl dlt ngs_p ngs assig  =
     if (selectable==[])
     then -- if all atoms answer set
        let s2= s-1 in
-       if (s==0)
+       if (s2==0)
        then -- last answer set
          [nub (trueatoms assig2)]
-       else -- remaining answer sets
-         let sigma_d = (dliteral dl)
+       else -- backtrack and remaining answer sets
+         let sigma_d = ((reverse dliteral) !! (dl-1))
              dl2 = dl-1
              bl2 = dl2
-             assig3 = ((invert sigma_d):(nbacktrack assig2 dl2))
+             assig3 = ((invert sigma_d):(nbacktrack assig2 dlt2 dl2))
              dlt3 = Map.insert (invert sigma_d) dl2 dlt2
-             remaining_as = cdnl_enum_loop prg s2 dl2 bl2 dlt3 ngs_p ngs2 assig3
+             remaining_as = cdnl_enum_loop prg s2 dl2 bl2 dlt3 dliteral ngs_p ngs2 assig3
          in
-         (nub (trueatoms assig2)):remaining_as)
+         ((nub (trueatoms assig2)):remaining_as)
     else -- select new lit
-      let s = head selectable
-          dltn = Map.insert (T s) (dl+1) dlt2 -- extend assignment
+      let sigma_d = head selectable
+          dltn = Map.insert (T sigma_d) (dl+1) dlt2 -- extend assignment
+          dliteral2 = ((T sigma_d):dliteral)
       in
-      case (Map.lookup (T s) dlt2) of
-           Just x  ->  cdnl_loop prg (dl+1) dlt2 ngs_p ngs2 assig2
-           Nothing ->  cdnl_loop prg (dl+1) dltn ngs_p ngs2 ((T s):assig2)
+      case (Map.lookup (T sigma_d) dlt2) of
+           Just x  ->  cdnl_enum_loop prg s (dl+1) bl dlt2 dliteral2 ngs_p ngs2 assig2
+           Nothing ->  cdnl_enum_loop prg s (dl+1) bl dltn dliteral2 ngs_p ngs2 ((T sigma_d):assig2)
   else  -- if conflict /
     if dl==0
     then [] -- no answer
@@ -866,18 +870,21 @@ cdnl_enum_loop prg s dl bl dlt ngs_p ngs assig  =
             ngs3 = (nogood:ngs)
             assig3 = backtrack assig2 dlt2 dl3
         in
-        cdnl_loop prg dl3 dlt2 ngs_p ngs3 assig3
+        cdnl_enum_loop prg s dl3 bl dlt2 dliteral ngs_p ngs3 assig3
       else
-         let sigma_d = (dliteral dl)
+         let sigma_d = ((reverse dliteral) !! (dl-1))
              dl2 = dl-1
              bl2 = dl2
-             assig3 = ((invert sigma_d):(nbacktrack assig2 dl2))
+             assig3 = ((invert sigma_d):(nbacktrack assig2 dlt2 dl2))
              dlt3 = Map.insert (invert sigma_d) dl2 dlt2
-             remaining_as = cdnl_enum_loop prg s2 dl2 bl2 dlt3 ngs_p ngs2 assig3
+             remaining_as = cdnl_enum_loop prg s dl2 bl2 dlt3 dliteral ngs_p ngs2 assig3
          in      
          remaining_as
 
 
+nbacktrack:: Assignment -> DLT -> Int -> Assignment
+nbacktrack assig dlt dl = [ sl | sl <- assig, (get_dl dlt sl) < dl ]
+         
 backtrack:: Assignment -> DLT -> Int -> Assignment
 backtrack [] dlt dl = [] --error?
 backtrack (a:as) dlt dl=
