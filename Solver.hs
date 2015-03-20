@@ -35,7 +35,8 @@ module Solver (
    bodies_p,get_ng1,get_ng2,get_ng3, get_ng4,
    cdnl_enum,
   ) where
-
+    
+import Debug.Trace
 import ASP
 import Data.List (sort, nub, intersect, (\\), delete )
 import Data.Maybe -- for mapMaybe
@@ -792,6 +793,13 @@ cdnl_enum prg s =
     assig = []
     (assig2,ngs2,sat, dlt2) = ng_prop prg dl dlt ngs_p ngs assig []
   in
+  trace ("cdnl_loop\n"
+    ++ "[]" ++"\n"
+    ++ (show assig2) ++"\n"
+    ++ (show ngs2) ++"\n"
+    ++ (show dlt2) ++"\n"
+    ++ "[]" ++"\n"
+  ) $
   if sat
   then -- no conflict /
     let
@@ -830,6 +838,16 @@ cdnl_enum_loop prg s dl bl dlt dliteral ngs_p ngs assig  =
   let
     (assig2,ngs2,sat,dlt2) = ng_prop prg dl dlt ngs_p ngs assig []
   in
+  trace ("cdnl_loop\n"
+    ++ (show assig) ++"\n"
+    ++ (show assig2) ++"\n"
+    ++ (show ngs2) ++"\n"
+    ++ (show dlt2) ++"\n"
+    ++ (show dliteral) ++"\n"
+  ) $
+  if ( (length dliteral) == 4)
+  then error "long dlit"
+  else
   if sat
   then -- no conflict /
     let
@@ -850,6 +868,14 @@ cdnl_enum_loop prg s dl bl dlt dliteral ngs_p ngs assig  =
              dlt3 = Map.insert (invert sigma_d) dl2 dlt2
              remaining_as = cdnl_enum_loop prg s2 dl2 bl2 dlt3 dliteral ngs_p ngs2 assig3
          in
+--          trace ("next as\n"
+--             ++ (show assig2) ++"\n"
+--             ++ (show sigma_d) ++"\n"
+--             ++ (show (nbacktrack assig2 dlt2 dl2)) ++"\n"
+--             ++ (show dlt2) ++"\n"
+--             ++ (show dlt3) ++"\n"
+--             ++ (show dliteral) ++"\n"
+--          ) $
          ((nub (trueatoms assig2)):remaining_as)
     else -- select new lit
       let sigma_d = head selectable
