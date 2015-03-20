@@ -868,7 +868,14 @@ cdnl_enum_loop prg s dl bl dlt ngs_p ngs assig  =
         in
         cdnl_loop prg dl3 dlt2 ngs_p ngs3 assig3
       else
-
+         let sigma_d = (dliteral dl)
+             dl2 = dl-1
+             bl2 = dl2
+             assig3 = ((invert sigma_d):(nbacktrack assig2 dl2))
+             dlt3 = Map.insert (invert sigma_d) dl2 dlt2
+             remaining_as = cdnl_enum_loop prg s2 dl2 bl2 dlt3 ngs_p ngs2 assig3
+         in      
+         remaining_as
 
 
 backtrack:: Assignment -> DLT -> Int -> Assignment
