@@ -780,47 +780,74 @@ get_dl dlt l =
        Nothing -> 0
   
            
-cdnl:: [Rule] -> [[Atom]]
-cdnl prg =
+cdnl_enum:: [Rule] -> Int -> [[Atom]]
+cdnl_enum prg s =
   let
-    dl= 0
+    dl= 0 -- decision level
+    bl= 0 -- backtracking level
     dlt = emptyDLT
     ngs_p = nub (nogoods_of_lp prg)
     ngs = []
     assig = []
-    (assig2,ngs2,sat, dlt2) = ng_prop 0 prg dl dlt ngs_p ngs assig []
+    (assig2,ngs2,sat, dlt2) = ng_prop prg dl dlt ngs_p ngs assig []
   in
   if sat
-  then-- if no conflict /
-    let all_lits = nub ((bodies2lits(bodies_p prg))++ (atoms2lits (atoms_p prg)))
+  then -- no conflict /
+    let
+        all_lits = nub ((bodies2lits(bodies_p prg)) ++ (atoms2lits (atoms_p prg)))
         selectable = (all_lits \\ (assignment2lits (assig2)))
     in
     if (selectable==[])
     then -- if all atoms answer set
-       [nub (trueatoms assig2)]
+       let s2= s-1 in
+       if (s==0) 
+       then -- last answer set
+         [nub (trueatoms assig2)]
+       else -- remaining answer sets
+         let sigma_d = (dliteral dl)
+             dl2 = dl-1
+             bl2 = dl2
+             assig3 = ((invert sigma_d):(nbacktrack assig2 dl2))
+             dlt3 = Map.insert (invert sigma_d) dl2 dlt2
+             remaining_as = cdnl_enum_loop prg s2 dl2 bl2 dlt3 ngs_p ngs2 assig3
+         in
+         (nub (trueatoms assig2)):remaining_as)
     else -- select new lit
-      let s = head selectable
-          dltn = Map.insert (T s) (dl+1) dlt2 -- extend assignment
+      let sigma_d = head selectable
+          dltn = Map.insert (T sigma_d) (dl+1) dlt2 -- extend assignment
+          (dliteral dl+1) = sigma_d
       in
-      case (Map.lookup (T s) dlt2) of
-           Just x  ->  cdnl_loop prg (dl+1) dlt2 ngs_p ngs2 assig2
-           Nothing ->  cdnl_loop prg (dl+1) dltn ngs_p ngs2 ((T s):assig2)
+      case (Map.lookup (T sigma_d) dlt2) of
+           Just x  ->  cdnl_enum_loop prg s (dl+1) bl dlt2 ngs_p ngs2 assig2
+           Nothing ->  cdnl_enum_loop prg s (dl+1) bl dltn ngs_p ngs2 ((T sigma_d):assig2)
   else  -- if conflict / -- dl==0 no answer
     []
 
-cdnl_loop prg dl dlt ngs_p ngs assig  =
+cdnl_enum_loop prg s dl bl dlt ngs_p ngs assig  =
   let
-    (assig2,ngs2,sat,dlt2) = ng_prop 1 prg dl dlt ngs_p ngs assig []
+    (assig2,ngs2,sat,dlt2) = ng_prop prg dl dlt ngs_p ngs assig []
   in
---   (error ("cdnl\n"++(show assig)++"\n"++(show assig2)))
   if sat
-  then-- if no conflict /
-    let all_lits = nub ((bodies2lits(bodies_p prg))++ (atoms2lits (atoms_p prg)))
+  then -- no conflict /
+    let
+        all_lits = nub ((bodies2lits(bodies_p prg)) ++ (atoms2lits (atoms_p prg)))
         selectable = (all_lits \\ (assignment2lits (assig2)))
     in
     if (selectable==[])
     then -- if all atoms answer set
-      [nub (trueatoms assig2)]
+       let s2= s-1 in
+       if (s==0)
+       then -- last answer set
+         [nub (trueatoms assig2)]
+       else -- remaining answer sets
+         let sigma_d = (dliteral dl)
+             dl2 = dl-1
+             bl2 = dl2
+             assig3 = ((invert sigma_d):(nbacktrack assig2 dl2))
+             dlt3 = Map.insert (invert sigma_d) dl2 dlt2
+             remaining_as = cdnl_enum_loop prg s2 dl2 bl2 dlt3 ngs_p ngs2 assig3
+         in
+         (nub (trueatoms assig2)):remaining_as)
     else -- select new lit
       let s = head selectable
           dltn = Map.insert (T s) (dl+1) dlt2 -- extend assignment
@@ -832,16 +859,16 @@ cdnl_loop prg dl dlt ngs_p ngs assig  =
     if dl==0
     then [] -- no answer
     else --conflict analysis
---       (error ("cdnl\n"++(show assig)++"\n"++(show assig2)++(show ngs2)))
-      let [cf] = ngs2
-          (nogood, dl3) = conflict_analysis 0 dlt2 (ngs_p++ngs) cf assig2
-          ngs3 = (nogood:ngs)
-          assig3 = backtrack assig2 dlt2 dl3
-      in
---       (error ("after bt \n"++ (show assig2) ++"\n"++ (show assig3)
---       ++"\n"++ (show dlt2)
---       ))
-      cdnl_loop prg dl3 dlt2 ngs_p ngs3 assig3
+      if (bl < dl)
+      then
+        let [cf] = ngs2
+            (nogood, dl3) = conflict_analysis  dlt2 (ngs_p++ngs) cf assig2
+            ngs3 = (nogood:ngs)
+            assig3 = backtrack assig2 dlt2 dl3
+        in
+        cdnl_loop prg dl3 dlt2 ngs_p ngs3 assig3
+      else
+
 
 
 backtrack:: Assignment -> DLT -> Int -> Assignment
@@ -851,25 +878,19 @@ backtrack (a:as) dlt dl=
   then (a:as)
   else (backtrack as dlt dl)
 
-conflict_analysis:: Int -> DLT -> [Clause] -> Clause -> Assignment -> (Clause, Int)
-conflict_analysis c dlt nogoods nogood assig =
+conflict_analysis:: DLT -> [Clause] -> Clause -> Assignment -> (Clause, Int)
+conflict_analysis  dlt nogoods nogood assig =
   let (prefix, sigma) = (get_sigma nogood assig)
       ng_sans_sigma = (nub (nogood \\ [sigma]))
       dls = (map (get_dl dlt) ng_sans_sigma)++[0]
       k = maximum dls
   in
---   if (c==0) -- && (sigma /= (T (ALit (Atom "a" []))) ))
---   then
---   (error ("conflictana "++(show c)++"\n"++(show assig)++"\n"++(show nogood)++"\n"++(show prefix)++"\n"++(show sigma)
---    ++"\n"++(show dlt) ++"\n"++(show k)
---   ))
---   else
   if (k == (get_dl dlt sigma))
   then
     let eps = get_epsilon nogoods sigma prefix
         nogood2 = nub (ng_sans_sigma ++ (eps \\ [(invert sigma)]))
     in
-    (conflict_analysis 1 dlt nogoods nogood2 assig)
+    (conflict_analysis  dlt nogoods nogood2 assig)
 
   else
   (nogood, k)
@@ -895,15 +916,12 @@ get_epsilon (ng:ngs) sigma prefix =
   
   
 
-ng_prop:: Int -> [Rule] -> Int -> DLT -> [Clause] -> [Clause] -> Assignment -> [Atom] -> (Assignment,[Clause],Bool,DLT)
-ng_prop cdnlc prg dl dlt ngs_p ngs assig u =
+ng_prop::  [Rule] -> Int -> DLT -> [Clause] -> [Clause] -> Assignment -> [Atom] -> (Assignment,[Clause],Bool,DLT)
+ng_prop prg dl dlt ngs_p ngs assig u =
   let
     spc = emptyspc
-    (maybeassig,dlt2) = (local_propagation cdnlc 0 prg dl dlt (ngs_p++ngs) assig)
+    (maybeassig,dlt2) = (local_propagation prg dl dlt (ngs_p++ngs) assig)
   in
---   if (cdnlc==1)
---   then (error ("ng_prop\n"++(show assig)++"\n"++(show maybeassig)))
---   else
   case maybeassig of -- TODO if prg is tight skip unfounded set check
        ASSIGNMENT assig2 -> let
                                 u2 = u \\ (falseatoms assig2)
@@ -924,8 +942,8 @@ ng_prop cdnlc prg dl dlt ngs_p ngs assig u =
                                     dltn = Map.insert (F (ALit p)) dl dlt2
                                   in
                                   case (Map.lookup (F (ALit p)) dlt2) of
-                                    Just x  -> ng_prop cdnlc prg dl dlt2 ngs_p ngs assig2 u3
-                                    Nothing -> ng_prop cdnlc prg dl dltn ngs_p ngs assig3 u3
+                                    Just x  -> ng_prop prg dl dlt2 ngs_p ngs assig2 u3
+                                    Nothing -> ng_prop prg dl dltn ngs_p ngs assig3 u3
                             else -- learn loop nogood from u2
                               let p = (head u2)
                                   ngs2 = (loop_nogoods prg u2)++ngs
@@ -938,42 +956,39 @@ ng_prop cdnlc prg dl dlt ngs_p ngs assig u =
                                   dltn = Map.insert (F (ALit p)) dl dlt2  -- extend assignment
                                 in
                                 case (Map.lookup (F (ALit p)) dlt2) of
-                                  Just x  -> ng_prop cdnlc prg dl dlt2 ngs_p ngs2 assig2 u2
-                                  Nothing -> ng_prop cdnlc prg dl dltn ngs_p ngs2 assig3 u2
+                                  Just x  -> ng_prop prg dl dlt2 ngs_p ngs2 assig2 u2
+                                  Nothing -> ng_prop prg dl dltn ngs_p ngs2 assig3 u2
        Conflict cf -> (assig, [cf], False, dlt2) -- TODO learn add conflic clause
   
 
   
-local_propagation:: Int-> Int -> [Rule] -> Int -> DLT -> [Clause] -> Assignment -> (PropRes,DLT)
+local_propagation::  [Rule] -> Int -> DLT -> [Clause] -> Assignment -> (PropRes,DLT)
 -- takes a program a set of nogoods and an assignment and returns a new assignment
-local_propagation cdnlc lpc p dl dlt nogoods assig =
-  let (up,dlt2) = unitpropagate cdnlc lpc 0 dl dlt assig nogoods
+local_propagation p dl dlt nogoods assig =
+  let (up,dlt2) = unitpropagate dl dlt assig nogoods
   in
---   if ( cdnlc==1)
---   then (error ("lp\n"++(show assig)++"\n"++(show up)))
---   else
   case up of
     ASSIGNMENT newassig -> if newassig == assig
                              then (ASSIGNMENT assig,dlt2)
-                             else local_propagation cdnlc (lpc+1) p dl dlt2 nogoods newassig
+                             else local_propagation  p dl dlt2 nogoods newassig
     Conflict cf    -> (Conflict cf,dlt2) -- return conflict clause
 
 
   
 
-unitpropagate:: Int -> Int -> Int -> Int -> DLT -> Assignment -> [Clause] -> (PropRes,DLT)
-unitpropagate cdnlc lpc i dl dlt assig [] = (ASSIGNMENT assig, dlt)
-unitpropagate cdnlc lpc i dl dlt assig (ng:ngs) =
+unitpropagate:: Int -> DLT -> Assignment -> [Clause] -> (PropRes,DLT)
+unitpropagate dl dlt assig [] = (ASSIGNMENT assig, dlt)
+unitpropagate dl dlt assig (ng:ngs) =
   let x = unitresult assig ng in
 
 
   case x of
        ASSIGNMENT [sl] -> let dlt2 = Map.insert sl dl dlt in
                           case ( Map.lookup sl dlt) of
-                            Just x  -> unitpropagate cdnlc lpc (i+1) dl dlt assig ngs
-                            Nothing -> unitpropagate cdnlc lpc (i+1) dl dlt2 (sl:assig) ngs
+                            Just x  -> unitpropagate dl dlt assig ngs
+                            Nothing -> unitpropagate dl dlt2 (sl:assig) ngs
                                
-       ASSIGNMENT []      -> unitpropagate cdnlc lpc (i+1) dl dlt assig ngs
+       ASSIGNMENT []      -> unitpropagate dl dlt assig ngs
        Conflict cf        -> (Conflict cf,dlt)
        
   
