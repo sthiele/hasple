@@ -1,6 +1,23 @@
+-- Copyright (c) 2015, Sven Thiele <sthiele78@gmail.com>
+
+-- This file is part of hasple.
+
+-- hasple is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU General Public License as published by
+-- the Free Software Foundation, either version 3 of the License, or
+-- (at your option) any later version.
+
+-- hasple is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-- GNU General Public License for more details.
+
+-- You should have received a copy of the GNU General Public License
+-- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
+
 module GrounderSolver (
  show_as,
- outer,
+ gr_solve,
 )where
 
 import Grounder
@@ -155,93 +172,79 @@ get_query_rules2 (r:rs) a =
 -- ------------------------------------------------------------
 
 
--- outer, returns the answer sets of a program
-outer prg =
-                   let
-                     (cons_t,falses_t) = consequences prg [] []
-                     cons = nub cons_t
-                     falses = nub falses_t
-                     mos = insert_atoms emptyAtomMap cons
-                     ics = get_ics prg
-                     gr_ics = simplifyProgramm (nub (concatMap (groundRule mos) ics)) (cons,falses)
-                     wfm = assi gr_ics
-                     simplified_prg = simplifyProgramm prg (cons,falses)
-                     choice_candidates = heads_p simplified_prg -- make sure ground atoms are first
-                    in
-                    if ( wfm == [])
-                    then []
-                    else
-                      if (choice_candidates==[])
-                      then
-                        [cons]
-                      else
-                        let
-                          choice = head choice_candidates
-                          queries = get_query_rules simplified_prg choice
-                          gr_queries = (simplifyProgramm (groundProgramx (queries++ics) mos) (cons,falses))
-                          eval_atoms = nub (atoms_p gr_queries)
-
-                          tas =  (assi (gr_queries))
-                          nfalses = map (nt falses eval_atoms) tas
-                          ncons = map (cons ++) tas --as candidates
-                          rest_prg = simplified_prg \\ queries
-
-                          mixed = zip ncons nfalses
-                          nsimplified_prg =  map (simplifyProgramm rest_prg) mixed
-                          list = zip3 nsimplified_prg ncons nfalses
-                        in
-                        concatMap inner list
+-- gr_solve, returns the answer sets of a program
+gr_solve:: [Rule] -> [[Atom]]
+gr_solve prg =  gr_solve_l (prg,[],[])
+-- gr_solve prg =
+--   let
+--     (cons_t,falses_t) = consequences prg [] []
+--     cons = nub cons_t
+--     falses = nub falses_t
+--     mos = insert_atoms emptyAtomMap cons
+--     ics = get_ics prg
+--     gr_ics = simplifyProgramm (nub (concatMap (groundRule mos) ics)) (cons,falses)
+--     wfm = assi gr_ics
+--     simplified_prg = simplifyProgramm prg (cons,falses)
+--     choice_candidates = heads_p simplified_prg -- make sure ground atoms are first
+--    in
+--    if ( wfm == [])
+--    then []
+--    else
+--      if (choice_candidates==[])
+--      then
+--        [cons]
+--      else
+--        let
+--          choice = head choice_candidates
+--          queries = get_query_rules simplified_prg choice
+--          gr_queries = (simplifyProgramm (groundProgramx (queries++ics) mos) (cons,falses))
+--          eval_atoms = nub (atoms_p gr_queries)
+-- 
+--          tas =  (assi (gr_queries))
+--          nfalses = map (nt falses eval_atoms) tas
+--          ncons = map (cons ++) tas --as candidates
+--          rest_prg = simplified_prg \\ queries
+-- 
+--          mixed = zip ncons nfalses
+--          nsimplified_prg =  map (simplifyProgramm rest_prg) mixed
+--          list = zip3 nsimplified_prg ncons nfalses
+--        in
+--        concatMap gr_solve_l list
 
 
 
 
 -- returns the answer sets of a program that are consistent with the answer candidate
-inner:: ([Rule],[Atom],[Atom]) -> [[Atom]]
-inner (prg, cons, falses) =
-                   let
-                     mos = insert_atoms emptyAtomMap cons
-                     ics = get_ics prg
-                     gr_ics = simplifyProgramm (nub (concatMap (groundRule mos) ics)) (cons,falses)
-                     wfm = assi gr_ics
-                     choice_candidates = heads_p prg
-                    in
-                    if ( wfm == [])
-                    then
---                       trace "no solution" $
-                      []
-                    else
---                       trace (
---                        "wfm:" ++ (show wfm)++(show cons)++(show falses)
---                       ) $
-                      if (choice_candidates==[])
-                      then
---                         trace ("as found" ++ (show cons)
---                         )$
-                        [cons]
-                      else
-                        let
-                          choice = head choice_candidates
-                          queries = get_query_rules prg choice
-                          gr_queries = (simplifyProgramm (groundProgramx (queries++ics) mos) (cons,falses))
-                          eval_atoms = nub (atoms_p gr_queries)
+gr_solve_l:: ([Rule],[Atom],[Atom]) -> [[Atom]]
+gr_solve_l (prg, cons, falses) =
+  let
+    mos = insert_atoms emptyAtomMap cons
+    ics = get_ics prg
+    gr_ics = simplifyProgramm (nub (concatMap (groundRule mos) ics)) (cons,falses)
+    wfm = assi gr_ics
+    choice_candidates = heads_p prg                                     -- TODO: make sure ground atoms are first
+   in
+   if ( wfm == [])
+   then []
+   else
+     if (choice_candidates==[])
+     then [cons]
+     else
+       let
+         choice = head choice_candidates
+         queries = get_query_rules prg choice
+         gr_queries = (simplifyProgramm (groundProgramx (queries++ics) mos) (cons,falses))
+         eval_atoms = nub (atoms_p gr_queries)
 
-                          tas =  (assi (gr_queries))
-                          nfalses = map (nt falses eval_atoms) tas
-                          ncons = map (cons ++) tas  --as candidates
-                          mixed = zip ncons nfalses
-                          rest_prg = prg \\ queries
-                          nsimplified_prg =  map (simplifyProgramm rest_prg) mixed
-                          list = zip3 nsimplified_prg ncons nfalses
-                        in
---                         trace ( "sub program:\n"
---                          ++ (show gr_queries) ++"\n"
---                          ++ "sub as: "++ (show tas)  ++"\n"
---                         ) $
-                        concatMap inner list
-
-
-
-
+         tas =  (assi (gr_queries))
+         nfalses = map (nt falses eval_atoms) tas
+         ncons = map (cons ++) tas  --as candidates
+         mixed = zip ncons nfalses
+         rest_prg = prg \\ queries
+         nsimplified_prg =  map (simplifyProgramm rest_prg) mixed
+         list = zip3 nsimplified_prg ncons nfalses
+       in
+       concatMap gr_solve_l list
 
 
 
@@ -276,12 +279,7 @@ test_new x=
   do
     case readProgram x of
       Left  err -> putStrLn ("ParseError: " ++ show err)
-      Right prg ->  putStrLn (show_as (outer prg))
-
-
-
-
-
+      Right prg ->  putStrLn (show_as (gr_solve prg))
 
 
 ground_facts     = "f(a).\n"

@@ -346,33 +346,34 @@ get_dliteral ((i1,sl):xs) i2
   
   
 cdnl_enum:: [Rule] -> Int -> [[Atom]]
-cdnl_enum prg s =
-  let
-    dl= 0                                                                         -- initialize decision level
-    bl= 0                                                                         -- initialize backtracking level
-    dlt = []                                                                      -- initialize decision level tracker
-    dliteral = []                                                                 -- initialize decision literal tracker
-    ngs_p = nub (nogoods_of_lp prg)
-    ngs = []
-    assig = []
-    (assig2,ngs2,sat, dlt2) = ng_prop prg dl dlt ngs_p ngs assig []
-  in
-  if sat
-  then                                                                            -- no conflict
-    let
-        all_lits = nub ((bodies2lits(bodies_p prg)) ++ (atoms2lits (atoms_p prg)))
-        selectable = (all_lits \\ (assignment2lits (assig2)))
-    in
-    if (selectable==[])
-    then                                                                          -- if all atoms answer set then its the only answer set
-      [nub (trueatoms assig2)]
-    else                                                                          -- select new lit
-      let sigma_d = head selectable
-          dltn = (((dl+1),(T sigma_d)):dlt2)                                      -- extend assignment
-          dliteral2 = (((dl+1),(T sigma_d)):dliteral)
-      in
-      cdnl_enum_loop prg s (dl+1) bl dltn dliteral2 ngs_p ngs2 ((T sigma_d):assig2)
-  else []                                                                         -- conflict no answer set
+cdnl_enum prg s = cdnl_enum_loop prg 0 0 0 [] [] (nub (nogoods_of_lp prg)) [] []
+-- cdnl_enum prg s =
+--   let
+--     dl= 0                                                                         -- initialize decision level
+--     bl= 0                                                                         -- initialize backtracking level
+--     dlt = []                                                                      -- initialize decision level tracker
+--     dliteral = []                                                                 -- initialize decision literal tracker
+--     ngs_p = nub (nogoods_of_lp prg)
+--     ngs = []
+--     assig = []
+--     (assig2,ngs2,sat, dlt2) = ng_prop prg dl dlt ngs_p ngs assig []
+--   in
+--   if sat
+--   then                                                                            -- no conflict
+--     let
+--         all_lits = nub ((bodies2lits(bodies_p prg)) ++ (atoms2lits (atoms_p prg)))
+--         selectable = (all_lits \\ (assignment2lits (assig2)))
+--     in
+--     if (selectable==[])
+--     then                                                                          -- if all atoms answer set then its the only answer set
+--       [nub (trueatoms assig2)]
+--     else                                                                          -- select new lit
+--       let sigma_d = head selectable
+--           dltn = (((dl+1),(T sigma_d)):dlt2)                                      -- extend assignment
+--           dliteral2 = (((dl+1),(T sigma_d)):dliteral)
+--       in
+--       cdnl_enum_loop prg s (dl+1) bl dltn dliteral2 ngs_p ngs2 ((T sigma_d):assig2)
+--   else []                                                                         -- conflict no answer set
 
     
 cdnl_enum_loop:: [Rule] -> Int -> Int -> Int -> DLT -> [(Int,SignedLit)] -> [Clause] -> [Clause] -> Assignment -> [[Atom]]
