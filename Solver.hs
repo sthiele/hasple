@@ -332,7 +332,7 @@ shrink_u prg spc (q:qs) l =
 -- ------------------------------------------------------------------------------------
 -- cdnl_enum
 
-type DLT = [(Int,SignedLit)]                                                     -- DecisionLevelTracker
+type DLT = [(Int,SignedLit)]                                                          -- DecisionLevelTracker
 
 get_dlevel:: [(Int,SignedLit)] -> SignedLit -> Int
 get_dlevel ((i,sl1):xs) sl2
@@ -494,11 +494,11 @@ ng_prop prg dl dlt ngs_p ngs assig u =
                                 u2 = u \\ (falseatoms assig2)
                             in
                             if (u2 == [])
-                            then                                          -- unfounded set check
+                            then                                                -- unfounded set check
                               let u3 = (unfounded_set prg spc assig2) in
                               if (u3==[])
                               then (assig2,ngs, True,dlt2)
-                              else                                        -- learn loop nogood
+                              else                                              -- learn loop nogood
                                 let p = (head u3)
                                 in
                                 if (elem p (trueatoms assig2))
@@ -511,7 +511,7 @@ ng_prop prg dl dlt ngs_p ngs assig u =
                                   case elem (F (ALit p)) assig2 of
                                     True  -> ng_prop prg dl dlt2 ngs_p ngs assig2 u3
                                     False -> ng_prop prg dl dltn ngs_p ngs assig3 u3
-                            else                                          -- learn loop nogood from u2
+                            else                                                -- learn loop nogood from u2
                               let p = (head u2)
                                   ngs2 = (loop_nogoods prg u2)++ngs
                               in
@@ -520,16 +520,20 @@ ng_prop prg dl dlt ngs_p ngs assig u =
                               else
                                 let
                                   assig3 = ((F (ALit p)):assig2)
-                                  dltn = ((dl,(F (ALit p))):dlt2)        -- extend assignment
+                                  dltn = ((dl,(F (ALit p))):dlt2)               -- extend assignment
                                 in
                                 if (elem (F (ALit p)) assig2) 
                                 then
                                   ng_prop prg dl dlt2 ngs_p ngs2 assig2 u2
                                 else
                                   ng_prop prg dl dltn ngs_p ngs2 assig3 u2
-       Conflict cf -> (assig, [cf], False, dlt2)                         -- return conflic clause
-  
+                                  
+       Conflict cf       -> (assig, [cf], False, dlt2)                          -- return conflic clause
 
+  
+data PropRes =  ASSIGNMENT Assignment  -- result of propagation can either be a conflict or a new assignment
+         | Conflict Clause
+         deriving (Show,Eq)
   
 local_propagation::  [Rule] -> Int -> DLT -> [Clause] -> Assignment -> (PropRes,DLT)
 -- takes a program a set of nogoods and an assignment and returns a new assignment
@@ -538,9 +542,9 @@ local_propagation p dl dlt nogoods assig =
   in
   case up of
     ASSIGNMENT newassig -> if newassig == assig                         
-                             then (ASSIGNMENT assig,dlt2)               -- return new assignment
+                             then (ASSIGNMENT assig,dlt2)                      -- return new assignment
                              else local_propagation  p dl dlt2 nogoods newassig
-    Conflict cf    -> (Conflict cf,dlt2)                                -- return conflict clause
+    Conflict cf         -> (Conflict cf,dlt2)                                  -- return conflict clause
 
 
   
@@ -554,10 +558,10 @@ unitpropagate dl dlt assig (ng:ngs) =
                         if ( elem sl assig)
                         then
                           unitpropagate dl dlt assig ngs              
-                        else unitpropagate dl dlt2 (sl:assig) ngs     -- extend assignment
+                        else unitpropagate dl dlt2 (sl:assig) ngs             -- extend assignment
                              
      ASSIGNMENT []      -> unitpropagate dl dlt assig ngs
-     Conflict cf        -> (Conflict cf,dlt)                          -- return conflict clause
+     Conflict cf        -> (Conflict cf,dlt)                                  -- return conflict clause
        
   
 unitresult:: Assignment -> Clause -> PropRes
@@ -567,11 +571,9 @@ unitresult assig nogood =
     []      -> Conflict assig
     [(T l)] -> ASSIGNMENT [(F l)]
     [(F l)] -> ASSIGNMENT [(T l)]
-    _       -> ASSIGNMENT []                                          -- nothing can be derived
+    _       -> ASSIGNMENT []                                                  -- nothing can be derived
       
-data PropRes =  ASSIGNMENT Assignment
-         | Conflict Clause
-         deriving (Show,Eq)
+
     
 
 

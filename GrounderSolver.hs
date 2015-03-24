@@ -16,8 +16,9 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module GrounderSolver (
- show_as,
- gr_solve,
+  show_as,
+--   show_as3,
+  gr_solve,
 )where
 
 import Grounder

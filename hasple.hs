@@ -18,10 +18,10 @@
 import System.Environment
 import ASP
 import LPParser
--- import Grounder -- for old style grounding->solving
--- import Solver   -- for old style grounding->solving
+-- import Grounder       -- for old style grounding->solving
+-- import Solver         -- for old style grounding->solving
 import GrounderSolver -- for interleaved grounding/solving
-
+-- import qualified Data.ByteString.Char8 as BC
 
 get_answersets:: [Rule] -> Int -> [[Atom]]
 -- get_answersets prg i = anssets (groundProgram prg)    -- for old style grounding->solving
@@ -38,9 +38,8 @@ main =
          contents <- readFile (head args)
          case readProgram contents of
            Left  err -> putStrLn ("ParseError: " ++ show err)
-           Right val -> putStrLn $
-                        show_as (get_answersets val 0)
-
-            
-
+           Right val -> putStrLn $ show_as (get_answersets val 0)
+--               let bytestring = BC.pack (show_as (get_answersets val 0)) in
+--               BC.putStrLn bytestring
+                  
 
