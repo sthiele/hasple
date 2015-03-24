@@ -15,6 +15,7 @@
 -- You should have received a copy of the GNU General Public License
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
+import Debug.Trace
 import System.Environment
 import ASP
 import LPParser
@@ -37,7 +38,8 @@ show_as3:: [Atom] -> [Char]
 show_as3 [] = ""
 show_as3 (x:xs) =  (show x) ++ " " ++ (show_as3 xs)
 
-
+-- assi x = anssets x
+assi x = cdnl_enum x 0
 
 main :: IO ()  
 main =
@@ -46,24 +48,33 @@ main =
     if args==[]
        then putStrLn "No arguments given!"
        else do
-         putStrLn ("Answer Set Solver in Haskell by Sven Thiele 2014.\n")
+         putStrLn ("Answer Set Solver in Haskell by Sven Thiele 2015.")
          contents <- readFile (head args)
          case readProgram contents of
            Left  err -> putStrLn ("ParseError: " ++ show err)
-           Right val -> putStrLn $ "Program found:"
-                        ++ show_lp val
---                         ++ show_as (sol (findas (groundProgram val) 0)))
-                        ++ show_as (outer val)
-                        
+           Right val -> putStrLn $
+--                         "Program found:" ++
+--                          show_lp val ++
+                        show_as (outer val)
 
+            
 test_old x =
     do
          case readProgram x of
            Left  err -> putStrLn ("ParseError: " ++ show err)
-           Right val -> putStrLn ("Program found:\n" ++
-                        show_lp val 
-                        ++ show_as  (assi (groundProgram val))
+           Right val -> putStrLn (
+--                         "Program found:\n" ++
+--                         show_lp val ++
+                        show_as  (assi (groundProgram val))
                         )
+
+
+test_new :: [Char] -> IO ()
+test_new x=
+  do
+    case readProgram x of
+      Left  err -> putStrLn ("ParseError: " ++ show err)
+      Right prg ->  putStrLn (show_as (outer prg))
       
 
 mix:: [[Atom]] -> [[Atom]] -> [([Atom],[Atom])]
@@ -80,7 +91,9 @@ mix3 (x:xs) (y:ys) (z:zs)= ((x,y,z):(mix3 xs ys zs))
 -- outer, returns the answer sets of a program
 outer prg =
                    let
-                     (cons,falses) = consequences prg [] []
+                     (cons_t,falses_t) = consequences prg [] []
+                     cons = nub cons_t
+                     falses = nub falses_t                     
                      mos = getpredval cons
                      ics = get_ics prg
                      gr_ics = simplifyProgramm (nub (concatMap (groundRule mos) ics)) (cons,falses)
@@ -89,10 +102,18 @@ outer prg =
                      choice_candidates = heads_p simplified_prg -- make sure ground atoms are first
                     in
                     if ( wfm == [])
-                    then []
+                    then
+--                       trace "no solution" $
+                      []
                     else
+--                       trace (
+--                        "wfm:" ++ (show wfm)++(show cons)++(show falses)
+--                       ) $
                       if (choice_candidates==[])
-                      then [cons]                      
+                      then
+--                         trace ("as found" ++ (show cons)
+--                         )$
+                        [cons]                      
                       else
                         let
                           choice = head choice_candidates
@@ -109,6 +130,12 @@ outer prg =
                           nsimplified_prg =  map (simplifyProgramm rest_prg) mixed
                           list = mix3 nsimplified_prg ncons nfalses
                         in
+--                         trace ( "sub programm:\n"
+--                          ++ "choice " ++ (show choice) ++ "\n"
+-- --                          ++ (show queries) ++"\n"
+-- --                          ++ (show gr_queries) ++"\n"
+-- --                          ++ "sub as: "++ (show tas)  ++"\n"
+--                         ) $
                         concatMap inner list
 
 
@@ -125,10 +152,18 @@ inner (prg, cons, falses) =
                      choice_candidates = heads_p prg
                     in
                     if ( wfm == [])
-                    then []
+                    then
+--                       trace "no solution" $
+                      []
                     else
+--                       trace (
+--                        "wfm:" ++ (show wfm)++(show cons)++(show falses)
+--                       ) $
                       if (choice_candidates==[])
-                      then [cons]                      
+                      then
+--                         trace ("as found" ++ (show cons)
+--                         )$
+                        [cons]
                       else
                         let
                           choice = head choice_candidates
@@ -144,101 +179,18 @@ inner (prg, cons, falses) =
                           nsimplified_prg =  map (simplifyProgramm rest_prg) mixed
                           list = mix3 nsimplified_prg ncons nfalses
                         in
+--                         trace ( "sub program:\n"
+--                          ++ (show gr_queries) ++"\n"
+--                          ++ "sub as: "++ (show tas)  ++"\n"
+--                         ) $
                         concatMap inner list                        
 
 
--- findas prg = let (answers, nogoods) = findas2 prg [] [] [] []
---              in answers
-
-
-
- 
  
   
                         
-test_new :: [Char] -> IO ()
-test_new x=
-  do
-    case readProgram x of
-      Left  err -> putStrLn ("ParseError: " ++ show err)
-      Right prg ->  putStrLn (show_as (outer prg))
 
 
-                        
-                        
-test_verb :: [Char] -> IO ()
-test_verb x =
-  do
-    case readProgram x of
-      Left  err -> putStrLn ("ParseError: " ++ show err)
-      Right prg -> 
-                   let
-                     (cons,falses) = consequences prg [] []
-                     mos = getpredval cons
-                     ics = get_ics prg
-                     gr_ics = simplifyProgramm (nub (concatMap (groundRule mos) ics)) (cons,falses)
---                      wfm = anssets gr_ics
-                     wfm = assi gr_ics
-                     simplified_prg = (simplifyProgramm prg (cons,falses))
-                     choice_candidates = heads_p simplified_prg
-                    in
-                    if (wfm == [])
-                    then putStrLn ("Program found:\n" ++ (show_lp prg)
-                      ++"\nNo Solution."
-                      ++ "\n")
-                    else
-                      if (choice_candidates==[])
-                      then
-                        putStrLn ("Program found:\n" ++ (show_lp prg)
-                        ++ "\nPosConsequences:\n"
-                        ++ show cons ++"\n"
-                        ++ "\nNegConsequences:\n"
-                        ++ show falses ++"\n"
-                        ++ "\nNo Choice left"
-                        ++ "\n")
-                      else
-                        let
-                          choice = head choice_candidates
-                          queries = get_query_rules simplified_prg choice
-                          gr_queries = (simplifyProgramm (groundProgramx (queries++ics) mos) (cons,falses))
-                          eval_atoms = nub (atoms_p gr_queries)
-                          tas =  assi (gr_queries)
-                          
---                           intersectionas =  intersectAll tas
-                          ncons = map (cons ++) tas
-                          intersectionncons =  intersectAll ncons
-                          nfalses = map (nt falses eval_atoms) tas
-                          intersectionnfalses = intersectAll nfalses
-                          mixed = mix ncons nfalses
---                           mixedintersection = (intersectionncons, intersectionnfalses)
---                           rest_prg = simplifyProgramm (simplified_prg \\ queries) mixedintersection
-                          rest_prg = simplified_prg \\ queries
-                          nsimplified_prg =   map (simplifyProgramm rest_prg) mixed
-                          example = head nsimplified_prg                         
-                          list = mix3 nsimplified_prg ncons nfalses
-                        in
-                        putStrLn ("Program found:\n" ++ (show_lp prg)
-
-                        ++ "\nPosConsequences:\n"
-                        ++ show cons ++"\n"
-                        ++ "\nNegConsequences:\n"
-                        ++ show falses ++"\n"
-                        ++ "\nSimplifiedProgram :\n"
-                        ++ show_lp simplified_prg
-                        ++ "\nChoice Candidates:\n" ++ show choice_candidates ++ "\n"
-                        ++ "\nChoice:\n"  ++ show choice ++ "\n"
-                        ++ "\nChoosenRules:\n" ++ show_lp (queries++ics)
-                        ++ "\nChoosenGRules simplified:\n" ++ show_lp gr_queries
-                        
-                        ++ "\nRestProgram :\n"
-                        ++ (show_lp rest_prg)
-                        ++ "\nevaluated atoms:\n" ++ show eval_atoms
-                        ++ "\nProposed AnswerSet extensions:\n" ++ show_as tas
---                         ++ "\nProposed AntiAnswerSet extensions:\n" ++ show_as nfalses
-                        ++ "\nFinal AnswerSet:\n" ++ show_as ncons
-                        ++ "\nexample simplified prg\n"++ show_lp example
---                         ++ "\ninner as\n"++ show_as (concatMap inner list)
-                        ++ "\n")
 
 intersectAll:: [[Atom]] -> [Atom]
 intersectAll [] = []
@@ -251,7 +203,8 @@ nt:: [Atom] -> [Atom] -> [Atom] -> [Atom]
 nt old a t = old ++ (a \\ t)
 
 
-assi = anssets
+
+
 
 
 ground_facts     = "f(a).\n"
@@ -347,4 +300,12 @@ mpr7 = "a :- not b.\n"
     ++ "e :- b, not a.\n"
     ++ "e :- c, d.\n"
 Right mp7 = readProgram mpr7
-    
+
+mpr8 = "f(c).\n"
+    ++ "q :- f(X), not p, not r.\n"
+    ++ "p :-f(X), not q, not r\n."
+    ++ "r :-f(X), not p, not q.\n"
+    ++ ":- r.\n"
+    ++ "p :- f(X), not q, not r.\n"
+    ++ "f:-q.\n"
+Right mp8 = readProgram mpr8

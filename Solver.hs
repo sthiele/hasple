@@ -131,9 +131,10 @@ match (x:xs) (y:ys) =
           Just [] ->  (match xs ys)     
           Just [(var,const)] -> join (var,const) (match xs ys)
      else Nothing
+match _ _ = Nothing
      
 matchAtom:: Atom -> Atom -> Maybe [(Term,Term)]
-matchAtom (Atom p1 a1) (Atom p2 a2) = 
+matchAtom (Atom p1 a1) (Atom p2 a2) =
   if p1==p2
   then match a1 a2
   else Nothing
@@ -462,7 +463,9 @@ get_query_rules rules a =
       next = (concatMap pbody grules) ++ (concatMap nbody grules)
       nn = delete a next
   in
-    nub (grules ++ (concatMap (get_query_rulesx rules [a]) nn))
+--   trace ("next query_atoms " ++ (show nn) ++ "\n"
+--   ) $
+  nub (grules ++ (concatMap (get_query_rulesx rules [a]) nn))
 
 get_query_rulesx:: [Rule] -> [Atom] -> Atom -> [Rule]
 get_query_rulesx rules found a =
@@ -470,19 +473,23 @@ get_query_rulesx rules found a =
       next = (concatMap pbody grules) ++ (concatMap nbody grules)
       nn = next \\ (a:found)
   in
-    grules ++ (concatMap (get_query_rulesx rules (a:found)) nn)
+{-  trace ("next query_atoms " ++ (show nn) ++ "\n"
+  ) $ -} 
+  grules ++ (concatMap (get_query_rulesx rules (a:found)) nn)
 
 
 
 get_query_rules2:: [Rule] -> Atom -> [Rule]
 get_query_rules2 [] _ = []
-get_query_rules2 (r:rs) a = 
+get_query_rules2 (r:rs) a =
+--   trace ("testrule" ++ (show r) ++ " for " ++ (show a) ++"\n"
+--   ) $  
   case matchAtom (kopf r) a of
        Just binding ->  let gr = groundRule2 r binding
                             grs = get_query_rules2 rs a
                         in
                         nub (gr: grs)
-       Nothing -> get_query_rules2 rs a
+       Nothing ->       get_query_rules2 rs a
 
 
 -- ------------------------------------------------------------
