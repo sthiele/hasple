@@ -317,15 +317,14 @@ mpr3 = "f(a).\n"
       ++ "p(X) :-f(X), not q(X). \n"
 Right mp3 = readProgram mpr3
 
-mpr4 = "f(a).\n"
+mpr4 =
+  "f(a).\n"
       ++ "f(b).\n"
-      ++ "f(c).\n"
-      ++ "f(d).\n"
-      ++ "f(e).\n"
       ++ "q(X):- f(X), not p(X), not r(X).\n"
       ++ "p(X) :-f(X), not q(X), not r(X).\n"
       ++ "r(X) :-f(X), not p(X), not q(X).\n"
       ++ ":- r(X).\n"
+
 Right mp4 = readProgram mpr4
 
 mpr5 = ":- r(X).\n"
@@ -343,9 +342,9 @@ mpr7 = "a :- not b.\n"
     ++ "b :- not a.\n"
     ++ "c :- a.\n"
     ++ "c :- b, d.\n"
---     ++ "d :- b, c.\n"
+    ++ "d :- b, c.\n"
     ++ "d :- e.\n"
---     ++ "e :- b, not a.\n"
+    ++ "e :- b, not a.\n"
     ++ "e :- c, d.\n"
 Right mp7 = readProgram mpr7
     
