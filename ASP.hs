@@ -16,10 +16,12 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module ASP (
-    Term(..), Atom(..), __conflict, Rule(..),
+   Term(..), Atom(..), __conflict, Rule(..),
+   heads_p, atoms_p,      
   ) where
-                  
- 
+    
+import Data.List (nub)                  
+import Data.Maybe 
 -- --------------------------------------------------------------
 
 data Term = Constant Integer
@@ -67,7 +69,7 @@ data Rule = Rule { kopf :: Atom
 shownbody :: [Atom] -> String
 shownbody [] = ""
 shownbody (x:[]) = "not " ++ (show x)
-shownbody (x:xs) =  "not " ++ (show x) ++ ", "++ (shownbody xs)
+shownbody (x:xs) = "not " ++ (show x) ++ ", "++ (shownbody xs)
 
 instance Show Rule where
   show (Rule h [] []) =  (show h) ++"."
@@ -81,4 +83,15 @@ instance Eq Rule where
 instance Ord Rule where
   compare (Rule h pb nb) (Rule h2 pb2 nb2) = compare h h2
 
-          
+
+heads_p :: [Rule] -> [Atom]
+-- returns the head of all rules without the contradiction symbol "" (all consistent consequences)
+heads_p rules =
+  filter (\i -> i/=__conflict )
+  (nub (map kopf rules))
+
+atoms_p :: [Rule] -> [Atom]
+-- returns the atoms of all rules without the contradiction symbol 
+atoms_p rules =
+  filter (\i -> i/=__conflict )
+  (nub (map kopf rules)++ (concatMap pbody rules) ++ (concatMap pbody rules))  

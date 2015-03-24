@@ -17,295 +17,26 @@
 
 module Solver (
    anssets,
-   reduct, cn,
-   groundProgram, groundProgramx,
-   consequences, simplifyProgramm,
-     simplifyProgramm2,
-       heads_p, atoms_p,
-   get_query_rules, getpredval, getpredvalx, groundRule, get_ics,
-   MapOfSets, insert_mos,
-   pos_dep_graph,
-   scc,
-   tarjan,
-   collect_nonfalse_cyclic_atoms, extend,emptyspc, loop_s, loop_u,
-   cyclic, external_bodies,
-   Lit(..),
-   ng_prop, local_propagation, unitpropagate, unitresult, PropRes(..),
-   nogoods_of_lp,
-   bodies_p,get_ng1,get_ng2,get_ng3, get_ng4,
+   reduct,
+   facts,
    cdnl_enum,
   ) where
     
 import Debug.Trace
 import ASP
 import Data.List (sort, nub, intersect, (\\), delete )
-import Data.Maybe -- for mapMaybe
+import Data.Maybe 
 -- import Data.List.Extra (nubOrd)
 -- use sort to order list nub (nubOrd) to remove duplicates from list -- maybe use Sets instead?
-import qualified Data.Set as Set
 import qualified Data.Map as Map
 
 
--- type MapOfSets =  Map.Map (String, Int) (Set.Set Atom)
-type MapOfSets =  Map.Map (String, Int) (Set.Set [Term])     
-
--- insert_mos:: MapOfSets -> Atom -> MapOfSets
-insert_mos:: MapOfSets -> (String, Int) -> [Term] -> MapOfSets      
--- insert_mos mos key val = 
---     case Map.lookup key mos of 
---       Nothing -> if (allconst val)
---                     then Map.insert key (Set.insert val Set.empty) mos
---                     else mos
---       Just x  -> if (allconst val)
---                     then Map.insert key (Set.insert val x) mos
---                     else mos
-                    
-insert_mos mos key val = 
-    case Map.lookup key mos of 
-      Nothing -> Map.insert key (Set.insert val Set.empty) mos                 
-      Just x  -> Map.insert key (Set.insert val x) mos
-                 
-                    
-                    
-
--- allconst:: [Term] -> Bool
--- allconst [] = True
--- allconst ((Identifier x):xs) = True && allconst xs
--- allconst ((Constant x):xs) = True && allconst xs
--- allconst _ = False
-
-
-      
---TODO rename to get mos      
-getpredval:: [Atom] -> MapOfSets
-getpredval [] = Map.empty
-getpredval ((Atom pred args):xs) = insert_mos (getpredval xs) (pred, (length args)) args
-
-
-getpredvalx:: MapOfSets -> [Atom] -> MapOfSets
-getpredvalx mos [] = mos
-getpredvalx mos ((Atom pred args):xs) =
-  let mos2 = insert_mos mos (pred, (length args)) args
-  in
-    getpredvalx mos2 xs
-
-
--- can two terms be unified if yes return variable bindings
-matchTerm:: Term -> Term -> Maybe [(Term,Term)]
-matchTerm (Identifier x) (Constant y) = Nothing
-matchTerm (Constant x) (Identifier y) = Nothing
-matchTerm (Constant x) (Constant y) =
-  if x==y
-     then Just []
-     else Nothing
-matchTerm (Identifier x) (Identifier y) =
-  if x==y
-     then Just []
-     else Nothing
-
-matchTerm (Variable x) (Identifier y) = Just [ ((Variable x),(Identifier y))]
-matchTerm (Variable x) (Constant y) = Just [ ((Variable x),(Constant y))]
-matchTerm (Addition x y) (Constant z) = Just []
-matchTerm (Addition x y) (Identifier z) = Nothing
-matchTerm (Subtraction x y) (Constant z) = Just []
-matchTerm (Subtraction x y) (Identifier z) = Nothing
-matchTerm (Multiplication x y) (Constant z) = Just []
-matchTerm (Multiplication x y) (Identifier z) = Nothing
-matchTerm (Negation x) (Constant z) = Just []
-matchTerm (Negation x) (Identifier z) = Nothing
-matchTerm (Variable x) (Variable y) = Just [((Variable x),(Variable y))]
-matchTerm x y = Just [(x,(Identifier ("Whaaat????"++ show y)))]
-
-
-
-                      
-
--- can two argumentlist be unified if yes return variable bindings
-match:: [Term] -> [Term] -> Maybe [(Term,Term)]
-match [] [] = Just []
-match (x:xs) (y:ys) = 
-  if (length xs) == (length ys) 
-     then 
-     case (matchTerm x y) of
-          Nothing -> Nothing
-          Just [] ->  (match xs ys)     
-          Just [(var,const)] -> join (var,const) (match xs ys)
-     else Nothing
-match _ _ = Nothing
-     
-matchAtom:: Atom -> Atom -> Maybe [(Term,Term)]
-matchAtom (Atom p1 a1) (Atom p2 a2) =
-  if p1==p2
-  then match a1 a2
-  else Nothing
-                                         
-  
-     
-join:: (Term,Term) -> Maybe [(Term,Term)] -> Maybe [(Term,Term)]
-join x Nothing = Nothing
-join x (Just []) = Just [x]
-join (v, c) (Just list) = 
-      case lookup v list of
-           Nothing -> (Just ((v,c):list))
-           Just (Variable v2) -> Just list
-           Just x -> if x==c 
-                        then Just list
-                        else Nothing
-
-
-
--- return the possible variable bindings associated a non ground atom
-getbindings:: Atom -> MapOfSets -> [[(Term,Term)]]
-getbindings  (Atom pred args) m = 
-  let x = Map.lookup (pred, (length args)) m in
-      case x of
-           Nothing -> [[]]
-           Just z ->  (getbindings2 args (Set.toList z))
-
--- getbindings2:: [Term] -> [Atom] ->  [[(Term,Term)]]
-getbindings2:: [Term] -> [[Term]] ->  [[(Term,Term)]]
-getbindings2 x [] = []
-getbindings2 x (y:ys) = 
-  case (match x y) of
-       Nothing -> (getbindings2 x ys)
-       Just z -> z:(getbindings2 x ys)
-       
-       
-getbindingsAtoms:: [Atom] -> MapOfSets -> [[(Term,Term)]]
-getbindingsAtoms [] m = [[]]
-getbindingsAtoms (x:xs) m = join2 (getbindings x m) (getbindingsAtoms xs m)
-
-join2:: [[(Term,Term)]] -> [[(Term,Term)]] -> [[(Term,Term)]]
--- join2 xs ys = [ z | x <- xs, y <- ys, (merge x y)==(Just z)]
-join2 [] ys = []
-join2 xs [] = []
-join2 xs ys =
-  do 
-    x <- xs
-    y <- ys
-    case (merge x y) of
-         Just z -> return z
-         Nothing -> [] 
-         
-                                   
-merge:: [(Term,Term)] -> [(Term,Term)] -> Maybe [(Term,Term)]
-merge [] ys = Just ys
-merge (x:xs) ys = 
-  case (merge2 x ys) of
-       Nothing -> Nothing
-       Just z -> merge xs z
-       
- 
-merge2:: (Term,Term) -> [(Term,Term)] -> Maybe [(Term,Term)]
-merge2 (k,v) ys = 
-  case lookup k ys of
-       Nothing -> Just ((k,v):ys)
-       Just z -> if v==z
-                    then (Just ys)
-                    else Nothing
-
-   
 -- --------------------------------------------------------------
 
-subsTerm:: [(Term,Term)] -> Term -> Term
--- subsTerm:: Map.Map Term Term -> Term -> Term
-subsTerm m (Constant x) = (Constant x)
-subsTerm m (Identifier x) = (Identifier x)
-subsTerm m (Variable x) =
-              case lookup (Variable x) m of
-                Just y -> y
-                Nothing -> (Variable x)
-                
-subsTerm m (Addition x y) =
-              let xsubs = subsTerm m x
-                  ysubs = subsTerm m y
-              in (Addition xsubs ysubs)
-
-subsTerm m (Subtraction x y) =
-              let xsubs = subsTerm m x
-                  ysubs = subsTerm m y
-              in (Subtraction xsubs ysubs)
-              
-subsTerm m (Multiplication x y) =
-              let xsubs = subsTerm m x
-                  ysubs = subsTerm m y
-              in (Multiplication xsubs ysubs)
-              
-subsTerm m (Negation x) =
-              let xsubs = subsTerm m x
-              in (Negation xsubs)
-              
-              
-
-subsAtom:: [(Term,Term)] -> Atom -> Atom
--- subsAtom:: Map.Map Term Term -> Atom -> Atom
-subsAtom m (Atom pred []) = (Atom pred [])
-subsAtom m (Atom pred x)  = (Atom pred (map (subsTerm m) x))
-
-groundRule2:: Rule -> [(Term,Term)] -> Rule
-groundRule2 (Rule h pb nb) m= (Rule (subsAtom m h) (map (subsAtom m) pb) (map (subsAtom m) nb))
-
--- ground_rules2:: [[(Term,Term)]] ->  Rule -> [Rule]
--- ground_rules2 xs r = map (ground_rule r) xs
-
--- alternative
-groundRule:: MapOfSets ->  Rule -> [Rule]
-groundRule m (Rule h pb nb) =
-  if (is_groundRule (Rule h pb nb))
-  then [(Rule h pb nb)]
-  else
-    let c =  getbindingsAtoms pb m
-    in  nub (map (groundRule2 (Rule h pb nb)) c)
-
-
-groundProgram:: [Rule] -> [Rule]
-groundProgram p =
-  let m = getpredval (heads_p  p)
-      pg1 = nub (concatMap  (groundRule m)  p)
-  in
-    if pg1==p
-       then pg1
-       else groundProgram pg1
-      
-groundProgramx:: [Rule] -> MapOfSets -> [Rule]
-groundProgramx p mos =
-  let m = getpredvalx mos (heads_p  p)
-      pg1 = nub (concatMap  (groundRule m)  p)
-  in
-    if pg1==p
-       then pg1
-       else groundProgram pg1
-
-      
-
--- --------------------------------------------------------------
-
-
-heads_p :: [Rule] -> [Atom]
--- returns the head of all rules without the contradiction symbol "" (all consistent consequences)
-heads_p rules =
-  filter (\i -> i/=__conflict )
-  (nub (map kopf rules))
-
-atoms_p :: [Rule] -> [Atom]
-atoms_p rules =
-  filter (\i -> i/=__conflict )
-  (nub (map kopf rules)++ (concatMap pbody rules) ++ (concatMap pbody rules))
 
 subsets :: [a] -> [[a]]
 subsets []  = [[]]
 subsets (x:xs) = subsets xs ++ map (x:) (subsets xs)
-
-
--- \\ in reducebasicprogram
--- reducepbody :: [Atom] -> [Atom] -> [Atom]
--- -- reduces a positive body
--- reducepbody x y = [a | a <- x, not( a `elem` y)]
-
--- intersect in reducebasicprogram
--- reducenbody :: [Atom] -> [Atom] -> [Atom]
--- -- reduces the negative body
--- reducenbody x y = [a | a <- x, a `elem` y]
 
 
 facts :: [Rule] -> [Atom]
@@ -333,170 +64,13 @@ reduct p x = [ (Rule (kopf r) (pbody r) []) |  r <- p,  (intersect (nbody r) x)=
 anssets p = filter (\i -> (sort (cn (reduct p i)))==(sort i)) (subsets (heads_p p))
 
 
+-- --------------------------------------------------------------------------------
 
-
-
-
-
--- returns the integrity constraints of a program  
-get_ics:: [Rule] -> [Rule]
-get_ics [] = []
-get_ics ((Rule h pb nb):rs) =
-  if (h == __conflict)
-  then ((Rule h pb nb): get_ics rs)
-  else get_ics rs
-
--- return true if a rule does not contain variables
-is_groundRule:: Rule -> Bool
-is_groundRule (Rule h pb nb) = is_groundAtom h && is_groundAtoms pb && is_groundAtoms nb
-
--- returns true if the list of Atoms does not contain variables
-is_groundAtoms:: [Atom] -> Bool
-is_groundAtoms [] = True
-is_groundAtoms (x:xs) = is_groundAtom x && is_groundAtoms xs
-
--- returns true if the atom does not contain variables
-is_groundAtom:: Atom -> Bool
-is_groundAtom (Atom pred args) = is_groundTerms args
-
--- returns true if the list of Terms only consists of constants
-is_groundTerms:: [Term] -> Bool
-is_groundTerms [] = True
-is_groundTerms ((Constant x):xs) = is_groundTerms xs
-is_groundTerms ((Identifier x):xs) = is_groundTerms xs
-is_groundTerms _ = False
-
--- does remove facts
-simplifyProgramm:: [Rule] -> ([Atom],[Atom]) -> [Rule]
-simplifyProgramm [] (t,f) = []
-simplifyProgramm x (t,f) = (mapMaybe (simplifyRule (t,f)) x)
-
--- does not remove facts
-simplifyProgramm2:: [Rule] -> ([Atom],[Atom]) -> [Rule]
-simplifyProgramm2 [] (t,f) = []
-simplifyProgramm2 x (t,f) = (mapMaybe (simplifyRule2 (t,f)) x)
-
-
-simplifyRule:: ([Atom],[Atom]) -> Rule -> Maybe Rule
-simplifyRule (t,f) (Rule h pb nb) =
-  if ( (elem h t) || not (null (intersect nb t)) || not (null (intersect pb f)))
-  then Nothing
-  else
-  let newpbody = (nub pb) \\ t
-      newnbody = (nub nb) \\ f
-  in
-  Just (Rule h newpbody newnbody)
-  
--- does not remove facts
-simplifyRule2:: ([Atom],[Atom]) -> Rule -> Maybe Rule
-simplifyRule2 (t,f) (Rule h pb nb) =
-  if ( not (null (intersect nb t)) || not (null (intersect pb f)))
-  then Nothing
-  else
-  let newpbody = (nub pb) \\ t
-      newnbody = (nub nb) \\ f
-  in
-  Just (Rule h newpbody newnbody)  
-         
--- return consequences of a programm
--- consequences :: [Rule] -> [Atom] -> [Atom] -> ([Atom],[Atom])
--- consequences p t f=
---   let
---       simplified_prg = simplifyProgramm2 p (t,f)
---       trues = facts simplified_prg
---       falses  = nfacts simplified_prg
---   in
---   if (null (trues \\ t) && null (falses \\ f))
---   then (t,f)
---   else
---     let t2 = t ++ trues
---         f2 = f ++ falses
---     in
---       consequences simplified_prg t2 f2
-
-consequences :: [Rule] -> [Atom] -> [Atom] -> ([Atom],[Atom])
-consequences p t f=
-  let reduced = reduct p t
-      simplified_prg = simplifyProgramm2 p (t,f)
-      trues = facts simplified_prg
-      falses  = nfacts simplified_prg
-  in
-  if (null (trues \\ t) && null (falses \\ f))
-  then (t,f)
-  else
-    let t2 = t ++ trues
-        f2 = f ++ falses
-    in
-      consequences simplified_prg t2 f2
-      
--- return atoms of a programm that dont have a matching head
-nfacts :: [Rule] -> [Atom]
-nfacts prg =
-   let a = nub (atoms_p prg)
-       he = heads_p prg
-       nfact_candidates = (a \\ he)
-   in
-   [ a | a <-nfact_candidates, not (hasmatch a he) ]
-
-hasmatch:: Atom -> [Atom] -> Bool
--- returns True if a matching atom exists in the list
-hasmatch a [] = False  
-hasmatch a (b:bs) =
-  case matchAtom a b of
-    Just x  -> True
-    Nothing -> hasmatch a bs
-    
-testy:: [Atom] -> Atom -> [Atom]
-testy [] a = []
-testy (x:xs) a =
-  case matchAtom a x of
-     Just x -> [a]
-     Nothing -> testy xs a
-     
-
-
-     
-get_query_rules:: [Rule] -> Atom -> [Rule]
-get_query_rules [] _ = []
-get_query_rules rules a =
-  let grules = get_query_rules2 rules a
-      next = (concatMap pbody grules) ++ (concatMap nbody grules)
-      nn = delete a next
-  in
---   trace ("next query_atoms " ++ (show nn) ++ "\n"
---   ) $
-  nub (grules ++ (concatMap (get_query_rulesx rules [a]) nn))
-
-get_query_rulesx:: [Rule] -> [Atom] -> Atom -> [Rule]
-get_query_rulesx rules found a =
-  let grules = get_query_rules2 rules a
-      next = (concatMap pbody grules) ++ (concatMap nbody grules)
-      nn = next \\ (a:found)
-  in
-{-  trace ("next query_atoms " ++ (show nn) ++ "\n"
-  ) $ -} 
-  grules ++ (concatMap (get_query_rulesx rules (a:found)) nn)
-
-
-
-get_query_rules2:: [Rule] -> Atom -> [Rule]
-get_query_rules2 [] _ = []
-get_query_rules2 (r:rs) a =
---   trace ("testrule" ++ (show r) ++ " for " ++ (show a) ++"\n"
---   ) $  
-  case matchAtom (kopf r) a of
-       Just binding ->  let gr = groundRule2 r binding
-                            grs = get_query_rules2 rs a
-                        in
-                        nub (gr: grs)
-       Nothing ->       get_query_rules2 rs a
-
-
--- ------------------------------------------------------------
-       
 data Lit = ALit Atom
          | BLit [Atom] [Atom]
          deriving (Show,Eq,Ord)
+
+__bottom = (ALit __conflict)
            
 atoms2lits:: [Atom] -> [Lit]
 atoms2lits as = [(ALit a) | a <- as ]
@@ -545,33 +119,24 @@ falseatoms assig =
   concatMap falselit2falseatoms falselits
 
 
--- at:: ([Lit],[Lit]) -> [Atom]
--- -- return the atoms that are true in the assignement
--- at (ast,asf) = concatMap truelit2trueatoms ast
--- 
--- af:: ([Lit],[Lit]) -> [Atom]
--- -- return the atoms that are false in the assignement
--- af (ast,asf) = concatMap falselit2falseatoms asf
-
-
 truelit2trueatoms (ALit a) = [a]
 truelit2trueatoms (BLit pb nb) = pb
 
 falselit2falseatoms (ALit a) = [a]
 falselit2falseatoms (BLit pb nb) = []
 
-
--- no_good generation ------------------------------
+-- ---------------------------------------------------------------------------------
+-- no_good generation 
 
 nogoods_of_lp:: [Rule] -> [Clause]
 nogoods_of_lp p =
   let a = (atoms_p p)++[__conflict]
       b = bodies_p p
-      ng1 = map get_ng1 b -- body is true if all lits of it are true -- not ( body=false and all lits=true)
-      ng2 = concatMap get_ng2 b -- body is true if all lits of it are true -- not ( body=true and one lit=false)
+      ng1 = map get_ng1 b           -- body is true if all lits of it are true -- not ( body=false and all lits=true)
+      ng2 = concatMap get_ng2 b     -- body is true if all lits of it are true -- not ( body=true and one lit=false)
       ng3 = concatMap (get_ng3 p) a -- a head is true if one body is true -- not ( head=false and one body=true)
-      ng4 = map (get_ng4 p) a -- a head is true if one body is true -- not ( head=true and all bodies=false=
-      ngx = [(T (ALit __conflict))] -- no conflict atom
+      ng4 = map (get_ng4 p) a       -- a head is true if one body is true -- not ( head=true and all bodies=false=
+      ngx = [(T __bottom)]          -- no conflict literal
   in
   ng1++ng2++ng3++ng4++[ngx]
 
@@ -599,6 +164,7 @@ get_ng4:: [Rule] -> Atom -> Clause
 get_ng4 p a = [ (T (ALit a))] ++ (map F (bodies2lits (bodies p a)))
 
 
+
 external_bodies:: [Rule] -> [Atom] -> [([Atom],[Atom])]
 -- returns the external bodies
 external_bodies p u =
@@ -616,6 +182,7 @@ loop_nogoods p u = [ (loop_nogood atom (external_bodies p u)) | atom<-u  ]
 
 
 -- ---------------------------------------------------------------------------------
+-- unfounded set checker
 
 type PosDepGraph = (Map.Map Atom [Atom])
 
@@ -652,13 +219,12 @@ tarjan depg visited visited2 a =
                   (concatMap (tarjan depg (a:visited) visited2) next)
 
 
--- ---------------------------------------------------------------------------------                  
 
 type SourcePointerConf =   (Map.Map Atom Lit)
 emptyspc:: SourcePointerConf
 emptyspc = Map.empty
 
-__bottom = (ALit __conflict)
+
 
 add_source::  SourcePointerConf -> Atom -> Lit -> SourcePointerConf
 -- add a new sourcep for an atom
@@ -676,26 +242,12 @@ sourcep a spc =
   (BLit pb nb) ->  pb
   __bottom -> []
   
-                  
--- ---------------------------------------------------------------------------------
-
 
 cyclic:: Atom -> [Rule] -> Bool
 -- test if an atom has a cyclic definition might be easier, if scc\=[]
 cyclic a p =
-  let scc_a = scc a (pos_dep_graph p)
-  in
---   check_scc scc_a p
-  if scc_a == []
-     then False
-     else True
-
-  
--- check_scc:: [Atom] -> [Rule] -> Bool
--- -- returns True if there is a rule with head in scc and body+ with not empty
--- check_scc sc [] = False
--- check_scc sc (r:rs) =
---  ( (elem (kopf r) sc) && ((intersect (pbody r) sc) /= [])) || (check_scc sc rs)
+  let scc_a = scc a (pos_dep_graph p) in
+  not (scc_a == [])
 
 
 unfounded_set:: [Rule] -> SourcePointerConf -> Assignment -> [Atom]
@@ -775,15 +327,12 @@ shrink_u prg spc (q:qs) l =
     ((add_source spcn q l), (q:remove))
   else (shrink_u prg spc qs l)
 
+
+  
 -- ------------------------------------------------------------------------------------
+-- cdnl_enum
 
--- type DLT = (Map.Map SignedLit Int) -- DecisionLevelTracker
--- emptyDLT:: (Map.Map SignedLit Int)
--- emptyDLT =  Map.empty
-
-type DLT = [(Int,SignedLit)] -- DecisionLevelTracker
-emptyDLT = []
-
+type DLT = [(Int,SignedLit)]                                                     -- DecisionLevelTracker
 
 get_dlevel:: [(Int,SignedLit)] -> SignedLit -> Int
 get_dlevel ((i,sl1):xs) sl2
@@ -795,161 +344,77 @@ get_dliteral ((i1,sl):xs) i2
   | i1 == i2 = sl
   | otherwise = get_dliteral xs i2
   
-rem_dliteral:: [(Int,SignedLit)] -> Int -> (SignedLit,[(Int,SignedLit)])
-rem_dliteral ((i1,sl):xs) i2
-  | i1 == i2 = (sl,xs)
-  | otherwise = rem_dliteral xs i2
-
-
   
 cdnl_enum:: [Rule] -> Int -> [[Atom]]
 cdnl_enum prg s =
   let
-    dl= 0 -- decision level
-    bl= 0 -- backtracking level
-    dlt = emptyDLT -- decision level tracker
-    dliteral = [] -- decision literal tracker
+    dl= 0                                                                         -- initialize decision level
+    bl= 0                                                                         -- initialize backtracking level
+    dlt = []                                                                      -- initialize decision level tracker
+    dliteral = []                                                                 -- initialize decision literal tracker
     ngs_p = nub (nogoods_of_lp prg)
     ngs = []
     assig = []
     (assig2,ngs2,sat, dlt2) = ng_prop prg dl dlt ngs_p ngs assig []
   in
---   trace ("cdnl_loop\n"
---     ++ "in  assig: " ++ "[]"++"\n"
---     ++ "new assig: " ++ (show assig2) ++"\n"
--- --     ++ (show ngs2) ++"\n"
--- --     ++ "dliterals: " ++ (show dliteral) ++"\n"
--- --     ++ "literals: " ++ (show dlt2) ++"\n"
---   ) $
   if sat
-  then -- no conflict /
+  then                                                                            -- no conflict
     let
         all_lits = nub ((bodies2lits(bodies_p prg)) ++ (atoms2lits (atoms_p prg)))
         selectable = (all_lits \\ (assignment2lits (assig2)))
     in
---     trace ("selectable:\n"
---       ++ "all_lits: " ++ (show all_lits) ++"\n"
---       ++ "assigne lits: " ++(show (assignment2lits (assig2))) ++"\n"
---     ) $
     if (selectable==[])
-    then -- if all atoms answer set
-       let s2= s-1 in
-       if (s2==0 || dl==0) 
-       then -- last answer set
-         [nub (trueatoms assig2)]
-       else -- backtrack and remaining answer sets
-         let sigma_d = (get_dliteral dliteral (dl))
-             dl2 = dl-1
-             bl2 = dl2
-             dliteral2 = dlbacktrack dliteral dl
-             assig3 = nbacktrack assig2 dlt2 dl
-             dlt3 = dlbacktrack dlt2 dl
-             assig4 = ((invert sigma_d):assig3)
-             dlt4 = ((dl2,(invert sigma_d)): dlt3)
-             remaining_as = cdnl_enum_loop prg s2 dl2 bl2 dlt4 dliteral2 ngs_p ngs2 assig4
-         in
---          trace ("as found:" ++ (show (nub (trueatoms assig2))) ++"\n"
--- --             ++ "search next as" ++"\n"
--- --             ++ "back to level: " ++ (show dl2) ++ "\n"
--- --             ++ "old assig: " ++ (show assig2) ++"\n"
---             ++ "switch dl: " ++ (show (invert sigma_d)) ++"\n"
--- --             ++ "backtrack assig" ++ (show assig3) ++"\n"
--- --             ++ "old dliterals " ++ (show dliteral) ++"\n"
--- --             ++ "new dliterals " ++ (show dliteral2) ++"\n"
--- --             ++ "old literals " ++ (show dlt2) ++"\n"
--- --             ++ "new literals " ++ (show dlt4) ++"\n"
---          ) $
-         ((nub (trueatoms assig2)):remaining_as)
-    else -- select new lit
+    then                                                                          -- if all atoms answer set then its the only answer set
+      [nub (trueatoms assig2)]
+    else                                                                          -- select new lit
       let sigma_d = head selectable
-          dltn = (((dl+1),(T sigma_d)):dlt2) -- extend assignment
+          dltn = (((dl+1),(T sigma_d)):dlt2)                                      -- extend assignment
           dliteral2 = (((dl+1),(T sigma_d)):dliteral)
       in
---       trace ("\nselect new dlit: " ++ (show (T sigma_d)) ++"\n"
--- --         ++ "old dliterals: " ++ (show dliteral) ++"\n"
--- --         ++ "new dliterals: " ++ (show dliteral2) ++"\n"
--- --         ++ "old literals " ++ (show dlt2) ++"\n"
--- --         ++ "new literals " ++ (show dltn) ++"\n"
---       ) $
       cdnl_enum_loop prg s (dl+1) bl dltn dliteral2 ngs_p ngs2 ((T sigma_d):assig2)
-  else  -- if conflict / -- dl==0 no answer
---     trace ("\n conflict: level 0" ++ "\n" ) $
-    []
+  else []                                                                         -- conflict no answer set
+
     
 cdnl_enum_loop:: [Rule] -> Int -> Int -> Int -> DLT -> [(Int,SignedLit)] -> [Clause] -> [Clause] -> Assignment -> [[Atom]]
 cdnl_enum_loop prg s dl bl dlt dliteral ngs_p ngs assig  =
   let
     (assig2,ngs2,sat,dlt2) = ng_prop prg dl dlt ngs_p ngs assig []
   in
---   trace ("cdnl_loop\n"
---     ++ "in  assig: " ++ (show assig) ++"\n"
---     ++ "new assig: " ++ (show assig2) ++"\n"
--- --     ++ (show ngs2) ++"\n"
--- --     ++ "dliterals: " ++ (show dliteral) ++"\n"
--- --     ++ "literals: " ++ (show dlt2) ++"\n"
---   ) $
   if sat
-  then -- no conflict /
+  then                                                                            -- no conflict 
     let
         all_lits = nub ((bodies2lits(bodies_p prg)) ++ (atoms2lits (atoms_p prg)))
         selectable = (all_lits \\ (assignment2lits (assig2)))
     in
---     trace ("selectable:\n"
---       ++ "all_lits: " ++ (show all_lits) ++"\n"
---       ++ "assigne lits: " ++(show (assignment2lits (assig2))) ++"\n"
---       ++ "selectable: " ++ (show selectable) ++"\n"
---     ) $
     if (selectable==[])
-    then -- if all atoms answer set
+    then                                                                          -- if all atoms then answer set found
        let s2= s-1 in
        if (s2==0 || dl==0)
-       then -- last answer set
---          trace ("as found\n" ++ (show (nub (trueatoms assig2)))) $
+       then                                                                       -- last answer set
          [nub (trueatoms assig2)]
-       else -- backtrack and remaining answer sets
+       else                                                                       -- backtrack for remaining answer sets
          let
              sigma_d = (get_dliteral dliteral (dl))
              dl2 = dl-1
              bl2 = dl2
              dliteral2 = dlbacktrack dliteral dl
-             assig3 = nbacktrack assig2 dlt2 dl
+             assig3 = backtrack assig2 dlt2 dl
              dlt3 = dlbacktrack dlt2 dl
-             assig4 = ((invert sigma_d):assig3)
+             assig4 = ((invert sigma_d):assig3)                                   -- invert last decision literal
              dlt4 = ((dl2,(invert sigma_d)): dlt3)
              remaining_as = cdnl_enum_loop prg s2 dl2 bl2 dlt4 dliteral2 ngs_p ngs2 assig4
          in
---          trace ("as found:" ++ (show (nub (trueatoms assig2))) ++"\n"
--- --             ++ "search next as" ++"\n"
---             ++ "back to level: " ++ (show dl2) ++ "\n"
---             ++ "old assig: " ++ (show assig2) ++"\n"
---             ++ "switch dl: " ++ (show (invert sigma_d)) ++"\n"
--- --             ++ "backtrack assig" ++ (show assig3) ++"\n"
---             ++ "old dliterals " ++ (show dliteral) ++"\n"
--- --             ++ "new dliterals " ++ (show dliteral2) ++"\n"
---             ++ "old literals " ++ (show dlt2) ++"\n"
--- --             ++ "new literals " ++ (show dlt4) ++"\n"
---          ) $
          ((nub (trueatoms assig2)):remaining_as)
-    else -- select new lit
+    else                                                                          -- select new lit
       let sigma_d = head selectable
-          dltn = (((dl+1),(T sigma_d)):dlt2) -- extend assignment
+          dltn = (((dl+1),(T sigma_d)):dlt2)                                      -- extend assignment
           dliteral2 = (((dl+1),(T sigma_d)):dliteral)
       in
---       trace ("\nselect new dlit: " ++ (show (T sigma_d)) ++"\n"
--- --         ++ "old dliterals: " ++ (show dliteral) ++"\n"
--- --         ++ "new dliterals: " ++ (show dliteral2) ++"\n"
--- --         ++ "old literals " ++ (show dlt2) ++"\n"
--- --         ++ "new literals " ++ (show dltn) ++"\n"
---       ) $
       cdnl_enum_loop prg s (dl+1) bl dltn dliteral2 ngs_p ngs2 ((T sigma_d):assig2)
-  else  -- if conflict /
---     trace ("\n conflict:" ++ "\n"
---      ++ "assig:" ++ (show assig2) ++ "\n"
---      ++ "cf: " ++ (show ngs2) ++ "\n"
---       ) $
+  else                                                                            -- conflict
     if dl==0
-    then [] -- no answer
-    else --conflict analysis
+    then []                                                                       -- no more answer sets
+    else                                                                          -- conflict analysis and backtrack
       if (bl < dl)
       then
         let [cf] = ngs2
@@ -957,47 +422,28 @@ cdnl_enum_loop prg s dl bl dlt dliteral ngs_p ngs assig  =
             ngs3 = (nogood:ngs)
             assig3 = backtrack assig2 dlt2 dl3
         in
---         trace ("\n conflictana:" ++ "\n"
--- --           ++ "nogood:" ++ (show nogood) ++ "\n"
--- --           ++ "old dliterals" ++ (show dliteral) ++"\n"
--- --           ++ "backtrack dl: " ++ (show dl3) ++ "\n"
--- --           ++ "backtrack assig: " ++ (show assig3) ++ "\n"
---         ) $
         cdnl_enum_loop prg s dl3 bl dlt2 dliteral ngs_p ngs3 assig3
       else
          let sigma_d = (get_dliteral dliteral (dl))
              dl2 = dl-1
              bl2 = dl2
-             assig3 = ((invert sigma_d):(nbacktrack assig2 dlt2 dl2))
+             assig3 = ((invert sigma_d):(backtrack assig2 dlt2 dl2))
              dlt3 = ((dl2,(invert sigma_d)):dlt2)
              remaining_as = cdnl_enum_loop prg s dl2 bl2 dlt3 dliteral ngs_p ngs2 assig3
          in
---          trace ("\n conflict:" ++ "\n"  ) $
          remaining_as
 
 
-
-zbacktrack:: Assignment -> DLT -> Int -> (Assignment,DLT)
-zbacktrack assig dlt dl = ((nbacktrack assig dlt dl),(dlbacktrack dlt (dl-1)))
-
 dlbacktrack:: DLT -> Int -> DLT
+-- backtracks the decision levels
 dlbacktrack dlt dl = [ (l,sl) | (l,sl) <- dlt, l < dl ]
 
 
-nbacktrack:: Assignment -> DLT -> Int -> Assignment
-nbacktrack assig dlt dl =
---   trace (" backtrack to level: " ++ (show dl) ++ "\n"
---         ++ "dlt: " ++ (show dlt) ++"\n"
---         ++ " oldassig " ++ (show assig) ++ "\n"
---       ) $
+backtrack:: Assignment -> DLT -> Int -> Assignment
+-- backtracks an assignment
+backtrack assig dlt dl =
   [ sl | sl <- assig, (get_dlevel dlt sl) < dl ]
          
-backtrack:: Assignment -> DLT -> Int -> Assignment
-backtrack [] dlt dl = [] --error?
-backtrack (a:as) dlt dl=
-  if ((get_dlevel dlt a) < dl)
-  then (a:as)
-  else (backtrack as dlt dl)
 
 conflict_analysis:: DLT -> [Clause] -> Clause -> Assignment -> (Clause, Int)
 conflict_analysis  dlt nogoods nogood assig =
@@ -1048,11 +494,11 @@ ng_prop prg dl dlt ngs_p ngs assig u =
                                 u2 = u \\ (falseatoms assig2)
                             in
                             if (u2 == [])
-                            then -- unfounded set check
+                            then                                          -- unfounded set check
                               let u3 = (unfounded_set prg spc assig2) in
                               if (u3==[])
                               then (assig2,ngs, True,dlt2)
-                              else -- learn loop nogood
+                              else                                        -- learn loop nogood
                                 let p = (head u3)
                                 in
                                 if (elem p (trueatoms assig2))
@@ -1065,7 +511,7 @@ ng_prop prg dl dlt ngs_p ngs assig u =
                                   case elem (F (ALit p)) assig2 of
                                     True  -> ng_prop prg dl dlt2 ngs_p ngs assig2 u3
                                     False -> ng_prop prg dl dltn ngs_p ngs assig3 u3
-                            else -- learn loop nogood from u2
+                            else                                          -- learn loop nogood from u2
                               let p = (head u2)
                                   ngs2 = (loop_nogoods prg u2)++ngs
                               in
@@ -1074,14 +520,14 @@ ng_prop prg dl dlt ngs_p ngs assig u =
                               else
                                 let
                                   assig3 = ((F (ALit p)):assig2)
-                                  dltn = ((dl,(F (ALit p))):dlt2)  -- extend assignment
+                                  dltn = ((dl,(F (ALit p))):dlt2)        -- extend assignment
                                 in
                                 if (elem (F (ALit p)) assig2) 
                                 then
                                   ng_prop prg dl dlt2 ngs_p ngs2 assig2 u2
                                 else
                                   ng_prop prg dl dltn ngs_p ngs2 assig3 u2
-       Conflict cf -> (assig, [cf], False, dlt2) -- TODO learn add conflic clause
+       Conflict cf -> (assig, [cf], False, dlt2)                         -- return conflic clause
   
 
   
@@ -1091,10 +537,10 @@ local_propagation p dl dlt nogoods assig =
   let (up,dlt2) = unitpropagate dl dlt assig nogoods
   in
   case up of
-    ASSIGNMENT newassig -> if newassig == assig
-                             then (ASSIGNMENT assig,dlt2)
+    ASSIGNMENT newassig -> if newassig == assig                         
+                             then (ASSIGNMENT assig,dlt2)               -- return new assignment
                              else local_propagation  p dl dlt2 nogoods newassig
-    Conflict cf    -> (Conflict cf,dlt2) -- return conflict clause
+    Conflict cf    -> (Conflict cf,dlt2)                                -- return conflict clause
 
 
   
@@ -1107,11 +553,11 @@ unitpropagate dl dlt assig (ng:ngs) =
      ASSIGNMENT [sl] -> let dlt2 = ((dl,sl):dlt) in
                         if ( elem sl assig)
                         then
-                          unitpropagate dl dlt assig ngs
-                        else unitpropagate dl dlt2 (sl:assig) ngs
+                          unitpropagate dl dlt assig ngs              
+                        else unitpropagate dl dlt2 (sl:assig) ngs     -- extend assignment
                              
      ASSIGNMENT []      -> unitpropagate dl dlt assig ngs
-     Conflict cf        -> (Conflict cf,dlt)
+     Conflict cf        -> (Conflict cf,dlt)                          -- return conflict clause
        
   
 unitresult:: Assignment -> Clause -> PropRes
@@ -1121,7 +567,7 @@ unitresult assig nogood =
     []      -> Conflict assig
     [(T l)] -> ASSIGNMENT [(F l)]
     [(F l)] -> ASSIGNMENT [(T l)]
-    _       -> ASSIGNMENT [] -- nothing can be derived
+    _       -> ASSIGNMENT []                                          -- nothing can be derived
       
 data PropRes =  ASSIGNMENT Assignment
          | Conflict Clause
@@ -1129,26 +575,3 @@ data PropRes =  ASSIGNMENT Assignment
     
 
 
-ac = (Atom "a" [(Identifier "c")])
-av = (Atom "a" [(Variable "X")])
-
-bv = (Atom "b" [(Variable "X")])
-bc = (Atom "b" [(Constant 1 )])
-
-
-rv = (Atom "r" [(Variable "X")])
-rc = (Atom "r" [(Identifier "x")])
-
-mp = [
-        (Rule ac [] []),
-        (Rule bv [av] [])
-      ]
-
-x1 = (Atom "a" [(Variable "X"),(Variable "X")])
-t1 = [(Variable "X"),(Variable "X")]
-x2 = (Atom "a" [(Variable "Y"),(Variable "Z")])
-t2 = [(Variable "Y"),(Variable "Z")]
-x3 = (Atom "a" [(Constant 1),(Constant 1)])
-t3 = [(Identifier "a"),(Identifier "a")]
-x4 = (Atom "a" [(Identifier "a"),(Identifier "b")])
-t4 = [(Identifier "a"),(Identifier "b")]
