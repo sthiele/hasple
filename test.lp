@@ -1,10 +1,13 @@
+f(a).
+f(b).
 f(c).
-q:- f(X), not p, not r.
-p :-f(X), not q, not r.
-r :-f(X), not p, not q.
-:- r.
+f(d).
+f(e).
+f(f).
+f(g).
+f(h).
 
-
-%redundancy
-p :-f(X), not q, not r.
-f:-q.
+q(X):- f(X), not p(X), not r(X).
+p(X) :-f(X), not q(X), not r(X).
+r(X) :-f(X), not p(X), not q(X).
+%:- r(X).

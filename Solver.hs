@@ -390,7 +390,7 @@ cdnl_enum_loop prg s dl bl dlt dliteral ngs_p ngs assig  =
     if (selectable==[])
     then                                                                          -- if all atoms then answer set found
        let s2= s-1 in
-       if (s2==0 || dl==0)
+       if (dl==0 || s2==0)
        then                                                                       -- last answer set
          [nub (trueatoms assig2)]
        else                                                                       -- backtrack for remaining answer sets
@@ -460,18 +460,17 @@ conflict_analysis  dlt nogoods nogood assig =
     in
     (conflict_analysis  dlt nogoods nogood2 assig)
 
-  else
-  (nogood, k)
+  else (nogood, k)
 
 
 get_sigma:: Clause -> Assignment -> (Assignment, SignedLit)
 get_sigma nogood [] = let s = (show nogood) in
                           (error ("Unknown error in get_sigma "++s))
-get_sigma nogood (a:as) =
-  let test = (nogood \\ as) in
-  if (test==[a])
-  then (as, a)
-  else get_sigma nogood as
+get_sigma nogood (l:ls) =
+  let test = (nogood \\ ls) in
+  if (test==[l])
+  then (ls, l)
+  else get_sigma nogood ls
 
 
 get_epsilon:: [Clause] -> SignedLit -> Assignment -> Clause
