@@ -33,9 +33,10 @@ module Solver (
    ng_prop, local_propagation, unitpropagate, unitresult, PropRes(..),
    nogoods_of_lp,
    bodies_p,get_ng1,get_ng2,get_ng3, get_ng4,
-   cdnl,
+   cdnl_enum,
   ) where
-
+    
+import Debug.Trace
 import ASP
 import Data.List (sort, nub, intersect, (\\), delete )
 import Data.Maybe -- for mapMaybe
@@ -130,9 +131,10 @@ match (x:xs) (y:ys) =
           Just [] ->  (match xs ys)     
           Just [(var,const)] -> join (var,const) (match xs ys)
      else Nothing
+match _ _ = Nothing
      
 matchAtom:: Atom -> Atom -> Maybe [(Term,Term)]
-matchAtom (Atom p1 a1) (Atom p2 a2) = 
+matchAtom (Atom p1 a1) (Atom p2 a2) =
   if p1==p2
   then match a1 a2
   else Nothing
@@ -461,7 +463,9 @@ get_query_rules rules a =
       next = (concatMap pbody grules) ++ (concatMap nbody grules)
       nn = delete a next
   in
-    nub (grules ++ (concatMap (get_query_rulesx rules [a]) nn))
+--   trace ("next query_atoms " ++ (show nn) ++ "\n"
+--   ) $
+  nub (grules ++ (concatMap (get_query_rulesx rules [a]) nn))
 
 get_query_rulesx:: [Rule] -> [Atom] -> Atom -> [Rule]
 get_query_rulesx rules found a =
@@ -469,19 +473,23 @@ get_query_rulesx rules found a =
       next = (concatMap pbody grules) ++ (concatMap nbody grules)
       nn = next \\ (a:found)
   in
-    grules ++ (concatMap (get_query_rulesx rules (a:found)) nn)
+{-  trace ("next query_atoms " ++ (show nn) ++ "\n"
+  ) $ -} 
+  grules ++ (concatMap (get_query_rulesx rules (a:found)) nn)
 
 
 
 get_query_rules2:: [Rule] -> Atom -> [Rule]
 get_query_rules2 [] _ = []
-get_query_rules2 (r:rs) a = 
+get_query_rules2 (r:rs) a =
+--   trace ("testrule" ++ (show r) ++ " for " ++ (show a) ++"\n"
+--   ) $  
   case matchAtom (kopf r) a of
        Just binding ->  let gr = groundRule2 r binding
                             grs = get_query_rules2 rs a
                         in
                         nub (gr: grs)
-       Nothing -> get_query_rules2 rs a
+       Nothing ->       get_query_rules2 rs a
 
 
 -- ------------------------------------------------------------
@@ -557,14 +565,15 @@ falselit2falseatoms (BLit pb nb) = []
 
 nogoods_of_lp:: [Rule] -> [Clause]
 nogoods_of_lp p =
-  let a = atoms_p p
+  let a = (atoms_p p)++[__conflict]
       b = bodies_p p
-      ng1 = map get_ng1 b
-      ng2 = concatMap get_ng2 b
-      ng3 = concatMap (get_ng3 p) a
-      ng4 = map (get_ng4 p) a
+      ng1 = map get_ng1 b -- body is true if all lits of it are true -- not ( body=false and all lits=true)
+      ng2 = concatMap get_ng2 b -- body is true if all lits of it are true -- not ( body=true and one lit=false)
+      ng3 = concatMap (get_ng3 p) a -- a head is true if one body is true -- not ( head=false and one body=true)
+      ng4 = map (get_ng4 p) a -- a head is true if one body is true -- not ( head=true and all bodies=false=
+      ngx = [(T (ALit __conflict))] -- no conflict atom
   in
-  ng1++ng2++ng3++ng4
+  ng1++ng2++ng3++ng4++[ngx]
 
 
 get_ng1:: ([Atom],[Atom]) -> Clause
@@ -768,108 +777,241 @@ shrink_u prg spc (q:qs) l =
 
 -- ------------------------------------------------------------------------------------
 
-type DLT = (Map.Map SignedLit Int) -- DecisionLevelTracker
-emptyDLT:: (Map.Map SignedLit Int)
-emptyDLT =  Map.empty
+-- type DLT = (Map.Map SignedLit Int) -- DecisionLevelTracker
+-- emptyDLT:: (Map.Map SignedLit Int)
+-- emptyDLT =  Map.empty
+
+type DLT = [(Int,SignedLit)] -- DecisionLevelTracker
+emptyDLT = []
 
 
-get_dl:: DLT -> SignedLit -> Int
-get_dl dlt l =
-  case (Map.lookup l dlt) of
-       Just x -> x
-       Nothing -> 0
+get_dlevel:: [(Int,SignedLit)] -> SignedLit -> Int
+get_dlevel ((i,sl1):xs) sl2
+  | sl1 == sl2 = i
+  | otherwise = get_dlevel xs sl2
+
+get_dliteral:: [(Int,SignedLit)] -> Int -> SignedLit
+get_dliteral ((i1,sl):xs) i2
+  | i1 == i2 = sl
+  | otherwise = get_dliteral xs i2
   
-           
-cdnl:: [Rule] -> [[Atom]]
-cdnl prg =
+rem_dliteral:: [(Int,SignedLit)] -> Int -> (SignedLit,[(Int,SignedLit)])
+rem_dliteral ((i1,sl):xs) i2
+  | i1 == i2 = (sl,xs)
+  | otherwise = rem_dliteral xs i2
+
+
+  
+cdnl_enum:: [Rule] -> Int -> [[Atom]]
+cdnl_enum prg s =
   let
-    dl= 0
-    dlt = emptyDLT
+    dl= 0 -- decision level
+    bl= 0 -- backtracking level
+    dlt = emptyDLT -- decision level tracker
+    dliteral = [] -- decision literal tracker
     ngs_p = nub (nogoods_of_lp prg)
     ngs = []
     assig = []
-    (assig2,ngs2,sat, dlt2) = ng_prop 0 prg dl dlt ngs_p ngs assig []
+    (assig2,ngs2,sat, dlt2) = ng_prop prg dl dlt ngs_p ngs assig []
   in
+--   trace ("cdnl_loop\n"
+--     ++ "in  assig: " ++ "[]"++"\n"
+--     ++ "new assig: " ++ (show assig2) ++"\n"
+-- --     ++ (show ngs2) ++"\n"
+-- --     ++ "dliterals: " ++ (show dliteral) ++"\n"
+-- --     ++ "literals: " ++ (show dlt2) ++"\n"
+--   ) $
   if sat
-  then-- if no conflict /
-    let all_lits = nub ((bodies2lits(bodies_p prg))++ (atoms2lits (atoms_p prg)))
+  then -- no conflict /
+    let
+        all_lits = nub ((bodies2lits(bodies_p prg)) ++ (atoms2lits (atoms_p prg)))
         selectable = (all_lits \\ (assignment2lits (assig2)))
     in
+--     trace ("selectable:\n"
+--       ++ "all_lits: " ++ (show all_lits) ++"\n"
+--       ++ "assigne lits: " ++(show (assignment2lits (assig2))) ++"\n"
+--     ) $
     if (selectable==[])
     then -- if all atoms answer set
-       [nub (trueatoms assig2)]
+       let s2= s-1 in
+       if (s2==0 || dl==0) 
+       then -- last answer set
+         [nub (trueatoms assig2)]
+       else -- backtrack and remaining answer sets
+         let sigma_d = (get_dliteral dliteral (dl))
+             dl2 = dl-1
+             bl2 = dl2
+             dliteral2 = dlbacktrack dliteral dl
+             assig3 = nbacktrack assig2 dlt2 dl
+             dlt3 = dlbacktrack dlt2 dl
+             assig4 = ((invert sigma_d):assig3)
+             dlt4 = ((dl2,(invert sigma_d)): dlt3)
+             remaining_as = cdnl_enum_loop prg s2 dl2 bl2 dlt4 dliteral2 ngs_p ngs2 assig4
+         in
+--          trace ("as found:" ++ (show (nub (trueatoms assig2))) ++"\n"
+-- --             ++ "search next as" ++"\n"
+-- --             ++ "back to level: " ++ (show dl2) ++ "\n"
+-- --             ++ "old assig: " ++ (show assig2) ++"\n"
+--             ++ "switch dl: " ++ (show (invert sigma_d)) ++"\n"
+-- --             ++ "backtrack assig" ++ (show assig3) ++"\n"
+-- --             ++ "old dliterals " ++ (show dliteral) ++"\n"
+-- --             ++ "new dliterals " ++ (show dliteral2) ++"\n"
+-- --             ++ "old literals " ++ (show dlt2) ++"\n"
+-- --             ++ "new literals " ++ (show dlt4) ++"\n"
+--          ) $
+         ((nub (trueatoms assig2)):remaining_as)
     else -- select new lit
-      let s = head selectable
-          dltn = Map.insert (T s) (dl+1) dlt2 -- extend assignment
+      let sigma_d = head selectable
+          dltn = (((dl+1),(T sigma_d)):dlt2) -- extend assignment
+          dliteral2 = (((dl+1),(T sigma_d)):dliteral)
       in
-      case (Map.lookup (T s) dlt2) of
-           Just x  ->  cdnl_loop prg (dl+1) dlt2 ngs_p ngs2 assig2
-           Nothing ->  cdnl_loop prg (dl+1) dltn ngs_p ngs2 ((T s):assig2)
+--       trace ("\nselect new dlit: " ++ (show (T sigma_d)) ++"\n"
+-- --         ++ "old dliterals: " ++ (show dliteral) ++"\n"
+-- --         ++ "new dliterals: " ++ (show dliteral2) ++"\n"
+-- --         ++ "old literals " ++ (show dlt2) ++"\n"
+-- --         ++ "new literals " ++ (show dltn) ++"\n"
+--       ) $
+      cdnl_enum_loop prg s (dl+1) bl dltn dliteral2 ngs_p ngs2 ((T sigma_d):assig2)
   else  -- if conflict / -- dl==0 no answer
+--     trace ("\n conflict: level 0" ++ "\n" ) $
     []
-
-cdnl_loop prg dl dlt ngs_p ngs assig  =
+    
+cdnl_enum_loop:: [Rule] -> Int -> Int -> Int -> DLT -> [(Int,SignedLit)] -> [Clause] -> [Clause] -> Assignment -> [[Atom]]
+cdnl_enum_loop prg s dl bl dlt dliteral ngs_p ngs assig  =
   let
-    (assig2,ngs2,sat,dlt2) = ng_prop 1 prg dl dlt ngs_p ngs assig []
+    (assig2,ngs2,sat,dlt2) = ng_prop prg dl dlt ngs_p ngs assig []
   in
---   (error ("cdnl\n"++(show assig)++"\n"++(show assig2)))
+--   trace ("cdnl_loop\n"
+--     ++ "in  assig: " ++ (show assig) ++"\n"
+--     ++ "new assig: " ++ (show assig2) ++"\n"
+-- --     ++ (show ngs2) ++"\n"
+-- --     ++ "dliterals: " ++ (show dliteral) ++"\n"
+-- --     ++ "literals: " ++ (show dlt2) ++"\n"
+--   ) $
   if sat
-  then-- if no conflict /
-    let all_lits = nub ((bodies2lits(bodies_p prg))++ (atoms2lits (atoms_p prg)))
+  then -- no conflict /
+    let
+        all_lits = nub ((bodies2lits(bodies_p prg)) ++ (atoms2lits (atoms_p prg)))
         selectable = (all_lits \\ (assignment2lits (assig2)))
     in
+--     trace ("selectable:\n"
+--       ++ "all_lits: " ++ (show all_lits) ++"\n"
+--       ++ "assigne lits: " ++(show (assignment2lits (assig2))) ++"\n"
+--       ++ "selectable: " ++ (show selectable) ++"\n"
+--     ) $
     if (selectable==[])
     then -- if all atoms answer set
-      [nub (trueatoms assig2)]
+       let s2= s-1 in
+       if (s2==0 || dl==0)
+       then -- last answer set
+--          trace ("as found\n" ++ (show (nub (trueatoms assig2)))) $
+         [nub (trueatoms assig2)]
+       else -- backtrack and remaining answer sets
+         let
+             sigma_d = (get_dliteral dliteral (dl))
+             dl2 = dl-1
+             bl2 = dl2
+             dliteral2 = dlbacktrack dliteral dl
+             assig3 = nbacktrack assig2 dlt2 dl
+             dlt3 = dlbacktrack dlt2 dl
+             assig4 = ((invert sigma_d):assig3)
+             dlt4 = ((dl2,(invert sigma_d)): dlt3)
+             remaining_as = cdnl_enum_loop prg s2 dl2 bl2 dlt4 dliteral2 ngs_p ngs2 assig4
+         in
+--          trace ("as found:" ++ (show (nub (trueatoms assig2))) ++"\n"
+-- --             ++ "search next as" ++"\n"
+--             ++ "back to level: " ++ (show dl2) ++ "\n"
+--             ++ "old assig: " ++ (show assig2) ++"\n"
+--             ++ "switch dl: " ++ (show (invert sigma_d)) ++"\n"
+-- --             ++ "backtrack assig" ++ (show assig3) ++"\n"
+--             ++ "old dliterals " ++ (show dliteral) ++"\n"
+-- --             ++ "new dliterals " ++ (show dliteral2) ++"\n"
+--             ++ "old literals " ++ (show dlt2) ++"\n"
+-- --             ++ "new literals " ++ (show dlt4) ++"\n"
+--          ) $
+         ((nub (trueatoms assig2)):remaining_as)
     else -- select new lit
-      let s = head selectable
-          dltn = Map.insert (T s) (dl+1) dlt2 -- extend assignment
+      let sigma_d = head selectable
+          dltn = (((dl+1),(T sigma_d)):dlt2) -- extend assignment
+          dliteral2 = (((dl+1),(T sigma_d)):dliteral)
       in
-      case (Map.lookup (T s) dlt2) of
-           Just x  ->  cdnl_loop prg (dl+1) dlt2 ngs_p ngs2 assig2
-           Nothing ->  cdnl_loop prg (dl+1) dltn ngs_p ngs2 ((T s):assig2)
+--       trace ("\nselect new dlit: " ++ (show (T sigma_d)) ++"\n"
+-- --         ++ "old dliterals: " ++ (show dliteral) ++"\n"
+-- --         ++ "new dliterals: " ++ (show dliteral2) ++"\n"
+-- --         ++ "old literals " ++ (show dlt2) ++"\n"
+-- --         ++ "new literals " ++ (show dltn) ++"\n"
+--       ) $
+      cdnl_enum_loop prg s (dl+1) bl dltn dliteral2 ngs_p ngs2 ((T sigma_d):assig2)
   else  -- if conflict /
+--     trace ("\n conflict:" ++ "\n"
+--      ++ "assig:" ++ (show assig2) ++ "\n"
+--      ++ "cf: " ++ (show ngs2) ++ "\n"
+--       ) $
     if dl==0
     then [] -- no answer
     else --conflict analysis
---       (error ("cdnl\n"++(show assig)++"\n"++(show assig2)++(show ngs2)))
-      let [cf] = ngs2
-          (nogood, dl3) = conflict_analysis 0 dlt2 (ngs_p++ngs) cf assig2
-          ngs3 = (nogood:ngs)
-          assig3 = backtrack assig2 dlt2 dl3
-      in
---       (error ("after bt \n"++ (show assig2) ++"\n"++ (show assig3)
---       ++"\n"++ (show dlt2)
---       ))
-      cdnl_loop prg dl3 dlt2 ngs_p ngs3 assig3
+      if (bl < dl)
+      then
+        let [cf] = ngs2
+            (nogood, dl3) = conflict_analysis  dlt2 (ngs_p++ngs) cf assig2
+            ngs3 = (nogood:ngs)
+            assig3 = backtrack assig2 dlt2 dl3
+        in
+--         trace ("\n conflictana:" ++ "\n"
+-- --           ++ "nogood:" ++ (show nogood) ++ "\n"
+-- --           ++ "old dliterals" ++ (show dliteral) ++"\n"
+-- --           ++ "backtrack dl: " ++ (show dl3) ++ "\n"
+-- --           ++ "backtrack assig: " ++ (show assig3) ++ "\n"
+--         ) $
+        cdnl_enum_loop prg s dl3 bl dlt2 dliteral ngs_p ngs3 assig3
+      else
+         let sigma_d = (get_dliteral dliteral (dl))
+             dl2 = dl-1
+             bl2 = dl2
+             assig3 = ((invert sigma_d):(nbacktrack assig2 dlt2 dl2))
+             dlt3 = ((dl2,(invert sigma_d)):dlt2)
+             remaining_as = cdnl_enum_loop prg s dl2 bl2 dlt3 dliteral ngs_p ngs2 assig3
+         in
+--          trace ("\n conflict:" ++ "\n"  ) $
+         remaining_as
 
 
+
+zbacktrack:: Assignment -> DLT -> Int -> (Assignment,DLT)
+zbacktrack assig dlt dl = ((nbacktrack assig dlt dl),(dlbacktrack dlt (dl-1)))
+
+dlbacktrack:: DLT -> Int -> DLT
+dlbacktrack dlt dl = [ (l,sl) | (l,sl) <- dlt, l < dl ]
+
+
+nbacktrack:: Assignment -> DLT -> Int -> Assignment
+nbacktrack assig dlt dl =
+--   trace (" backtrack to level: " ++ (show dl) ++ "\n"
+--         ++ "dlt: " ++ (show dlt) ++"\n"
+--         ++ " oldassig " ++ (show assig) ++ "\n"
+--       ) $
+  [ sl | sl <- assig, (get_dlevel dlt sl) < dl ]
+         
 backtrack:: Assignment -> DLT -> Int -> Assignment
 backtrack [] dlt dl = [] --error?
 backtrack (a:as) dlt dl=
-  if ((get_dl dlt a) < dl)
+  if ((get_dlevel dlt a) < dl)
   then (a:as)
   else (backtrack as dlt dl)
 
-conflict_analysis:: Int -> DLT -> [Clause] -> Clause -> Assignment -> (Clause, Int)
-conflict_analysis c dlt nogoods nogood assig =
+conflict_analysis:: DLT -> [Clause] -> Clause -> Assignment -> (Clause, Int)
+conflict_analysis  dlt nogoods nogood assig =
   let (prefix, sigma) = (get_sigma nogood assig)
       ng_sans_sigma = (nub (nogood \\ [sigma]))
-      dls = (map (get_dl dlt) ng_sans_sigma)++[0]
+      dls = (map (get_dlevel dlt) ng_sans_sigma)++[0]
       k = maximum dls
   in
---   if (c==0) -- && (sigma /= (T (ALit (Atom "a" []))) ))
---   then
---   (error ("conflictana "++(show c)++"\n"++(show assig)++"\n"++(show nogood)++"\n"++(show prefix)++"\n"++(show sigma)
---    ++"\n"++(show dlt) ++"\n"++(show k)
---   ))
---   else
-  if (k == (get_dl dlt sigma))
+  if (k == (get_dlevel dlt sigma))
   then
     let eps = get_epsilon nogoods sigma prefix
         nogood2 = nub (ng_sans_sigma ++ (eps \\ [(invert sigma)]))
     in
-    (conflict_analysis 1 dlt nogoods nogood2 assig)
+    (conflict_analysis  dlt nogoods nogood2 assig)
 
   else
   (nogood, k)
@@ -895,15 +1037,12 @@ get_epsilon (ng:ngs) sigma prefix =
   
   
 
-ng_prop:: Int -> [Rule] -> Int -> DLT -> [Clause] -> [Clause] -> Assignment -> [Atom] -> (Assignment,[Clause],Bool,DLT)
-ng_prop cdnlc prg dl dlt ngs_p ngs assig u =
+ng_prop::  [Rule] -> Int -> DLT -> [Clause] -> [Clause] -> Assignment -> [Atom] -> (Assignment,[Clause],Bool,DLT)
+ng_prop prg dl dlt ngs_p ngs assig u =
   let
     spc = emptyspc
-    (maybeassig,dlt2) = (local_propagation cdnlc 0 prg dl dlt (ngs_p++ngs) assig)
+    (maybeassig,dlt2) = (local_propagation prg dl dlt (ngs_p++ngs) assig)
   in
---   if (cdnlc==1)
---   then (error ("ng_prop\n"++(show assig)++"\n"++(show maybeassig)))
---   else
   case maybeassig of -- TODO if prg is tight skip unfounded set check
        ASSIGNMENT assig2 -> let
                                 u2 = u \\ (falseatoms assig2)
@@ -921,11 +1060,11 @@ ng_prop cdnlc prg dl dlt ngs_p ngs assig u =
                                 else
                                   let
                                     assig3 = ((F (ALit p)):assig2)
-                                    dltn = Map.insert (F (ALit p)) dl dlt2
+                                    dltn = ((dl,(F (ALit p))):dlt2)
                                   in
-                                  case (Map.lookup (F (ALit p)) dlt2) of
-                                    Just x  -> ng_prop cdnlc prg dl dlt2 ngs_p ngs assig2 u3
-                                    Nothing -> ng_prop cdnlc prg dl dltn ngs_p ngs assig3 u3
+                                  case elem (F (ALit p)) assig2 of
+                                    True  -> ng_prop prg dl dlt2 ngs_p ngs assig2 u3
+                                    False -> ng_prop prg dl dltn ngs_p ngs assig3 u3
                             else -- learn loop nogood from u2
                               let p = (head u2)
                                   ngs2 = (loop_nogoods prg u2)++ngs
@@ -935,46 +1074,44 @@ ng_prop cdnlc prg dl dlt ngs_p ngs assig u =
                               else
                                 let
                                   assig3 = ((F (ALit p)):assig2)
-                                  dltn = Map.insert (F (ALit p)) dl dlt2  -- extend assignment
+                                  dltn = ((dl,(F (ALit p))):dlt2)  -- extend assignment
                                 in
-                                case (Map.lookup (F (ALit p)) dlt2) of
-                                  Just x  -> ng_prop cdnlc prg dl dlt2 ngs_p ngs2 assig2 u2
-                                  Nothing -> ng_prop cdnlc prg dl dltn ngs_p ngs2 assig3 u2
+                                if (elem (F (ALit p)) assig2) 
+                                then
+                                  ng_prop prg dl dlt2 ngs_p ngs2 assig2 u2
+                                else
+                                  ng_prop prg dl dltn ngs_p ngs2 assig3 u2
        Conflict cf -> (assig, [cf], False, dlt2) -- TODO learn add conflic clause
   
 
   
-local_propagation:: Int-> Int -> [Rule] -> Int -> DLT -> [Clause] -> Assignment -> (PropRes,DLT)
+local_propagation::  [Rule] -> Int -> DLT -> [Clause] -> Assignment -> (PropRes,DLT)
 -- takes a program a set of nogoods and an assignment and returns a new assignment
-local_propagation cdnlc lpc p dl dlt nogoods assig =
-  let (up,dlt2) = unitpropagate cdnlc lpc 0 dl dlt assig nogoods
+local_propagation p dl dlt nogoods assig =
+  let (up,dlt2) = unitpropagate dl dlt assig nogoods
   in
---   if ( cdnlc==1)
---   then (error ("lp\n"++(show assig)++"\n"++(show up)))
---   else
   case up of
     ASSIGNMENT newassig -> if newassig == assig
                              then (ASSIGNMENT assig,dlt2)
-                             else local_propagation cdnlc (lpc+1) p dl dlt2 nogoods newassig
+                             else local_propagation  p dl dlt2 nogoods newassig
     Conflict cf    -> (Conflict cf,dlt2) -- return conflict clause
 
 
   
 
-unitpropagate:: Int -> Int -> Int -> Int -> DLT -> Assignment -> [Clause] -> (PropRes,DLT)
-unitpropagate cdnlc lpc i dl dlt assig [] = (ASSIGNMENT assig, dlt)
-unitpropagate cdnlc lpc i dl dlt assig (ng:ngs) =
+unitpropagate:: Int -> DLT -> Assignment -> [Clause] -> (PropRes,DLT)
+unitpropagate dl dlt assig [] = (ASSIGNMENT assig, dlt)
+unitpropagate dl dlt assig (ng:ngs) =
   let x = unitresult assig ng in
-
-
   case x of
-       ASSIGNMENT [sl] -> let dlt2 = Map.insert sl dl dlt in
-                          case ( Map.lookup sl dlt) of
-                            Just x  -> unitpropagate cdnlc lpc (i+1) dl dlt assig ngs
-                            Nothing -> unitpropagate cdnlc lpc (i+1) dl dlt2 (sl:assig) ngs
-                               
-       ASSIGNMENT []      -> unitpropagate cdnlc lpc (i+1) dl dlt assig ngs
-       Conflict cf        -> (Conflict cf,dlt)
+     ASSIGNMENT [sl] -> let dlt2 = ((dl,sl):dlt) in
+                        if ( elem sl assig)
+                        then
+                          unitpropagate dl dlt assig ngs
+                        else unitpropagate dl dlt2 (sl:assig) ngs
+                             
+     ASSIGNMENT []      -> unitpropagate dl dlt assig ngs
+     Conflict cf        -> (Conflict cf,dlt)
        
   
 unitresult:: Assignment -> Clause -> PropRes
@@ -984,8 +1121,8 @@ unitresult assig nogood =
     []      -> Conflict assig
     [(T l)] -> ASSIGNMENT [(F l)]
     [(F l)] -> ASSIGNMENT [(T l)]
-    _ -> ASSIGNMENT [] -- nothing can be derived
-
+    _       -> ASSIGNMENT [] -- nothing can be derived
+      
 data PropRes =  ASSIGNMENT Assignment
          | Conflict Clause
          deriving (Show,Eq)
