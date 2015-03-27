@@ -104,7 +104,7 @@ invert (F l) = (T l)
 type Assignment = ([Lit],[Lit])
 
 joinAss:: Assignment -> Assignment -> Assignment
-joinAss (t1,f1) (t2,f2) = ( (t1++t2),(f1++f2))
+joinAss (t1,f1) (t2,f2) = ( nub (t1++t2),nub (f1++f2))
 
 extendAss:: Assignment -> SignedLit -> Assignment
 extendAss (ts,fs) (T l) = ((l:ts),fs)
@@ -121,9 +121,13 @@ signedLits:: Assignment -> [SignedLit]
 signedLits (t,f) = [ (T l) | l<-t ] ++ [ (F l) | l<-f ]
 
 elemAss:: SignedLit -> Assignment -> Bool
+-- returns true if the assignment contains the SignedLit
 elemAss (T l) (t,_) = elem l t
 elemAss (F l) (_,f) = elem l f
 
+subsetAss:: Assignment -> Assignment -> Bool
+-- returns true if the first assignment is a subset of the second
+subsetAss (t1,f1) (t2,f2) = (t1\\t2)==[] && (f1\\f2)==[]
 
 type Clause = Assignment
 
@@ -273,6 +277,10 @@ unfounded_set prg spc assig =
   let s = collect_nonfalse_cyclic_atoms assig prg
       s2 = extend prg assig spc s                                               -- bis line 5
   in
+--   trace ("unfounded_set:\n"
+--    ++ "nonfalse cyclic atoms: " ++ (show s) ++"\n"
+--    ++ "extended: " ++ (show s2) ++"\n"
+--   ) $
   loop_s 0 prg spc assig s2
 
   
@@ -368,62 +376,62 @@ cdnl_enum prg s = cdnl_enum_loop prg 0 0 0 [] [] (nub (nogoods_of_lp prg)) [] ([
 cdnl_enum_loop:: [Rule] -> Int -> Int -> Int -> DLT -> [(Int,SignedLit)] -> [Clause] -> [Clause] -> Assignment -> [[Atom]]
 cdnl_enum_loop prg s dl bl dlt dliteral ngs_p ngs assig  =
   let
-    (assig2,ngs2,sat,dlt2) = ng_prop prg dl dlt ngs_p ngs assig []
+    (maybeassig,ngs2,sat,dlt2) = ng_prop prg dl dlt ngs_p ngs assig []
   in
-  if sat
-  then                                                                          -- no conflict
-    let
-        all_lits = nub ((bodies2lits(bodies_p prg)) ++ (atoms2lits (atoms_p prg)))
-        selectable = (all_lits \\ (assignment2lits (assig2)))      
-    in
-    if (selectable==[])
-    then                                                                        -- if all atoms then answer set found
-       let s2= s-1 in
-       if (dl==0 || s2==0)
-       then                                                                     -- last answer set
-         [nub (trueatoms assig2)]
-       else                                                                     -- backtrack for remaining answer sets
-         let
-             sigma_d = (get_dliteral dliteral (dl))
-             dl2 = dl-1
-             bl2 = dl2
-             dliteral2 = dlbacktrack dliteral dl
-             assig3 = backtrack assig2 dlt2 dl
-             dlt3 = dlbacktrack dlt2 dl
-             assig4 = extendAss assig3 (invert sigma_d)                         -- invert last decision literal
-             dlt4 = ((dl2,(invert sigma_d)): dlt3)
-             remaining_as = cdnl_enum_loop prg s2 dl2 bl2 dlt4 dliteral2 ngs_p ngs2 assig4
-         in
-         ((nub (trueatoms assig2)):remaining_as)
-    else                                                                        -- select new lit
-      let sigma_d = head selectable
-          dltn = (((dl+1),(T sigma_d)):dlt2)                                    -- extend assignment
-          dliteral2 = (((dl+1),(T sigma_d)):dliteral)
---           assig3 = ((T sigma_d):assig2)
-          assig3 = extendAss assig2 (T sigma_d)
-      in
-      cdnl_enum_loop prg s (dl+1) bl dltn dliteral2 ngs_p ngs2 assig3
-  else                                                                          -- conflict
-    if dl==0
-    then []                                                                     -- no more answer sets
-    else                                                                        -- conflict analysis and backtrack
-      if (bl < dl)
-      then
-        let [cf] = ngs2
-            (nogood, dl3) = conflict_analysis  dlt2 (ngs_p++ngs) cf assig2
-            ngs3 = (nogood:ngs)
-            assig3 = backtrack assig2 dlt2 dl3
-        in
-        cdnl_enum_loop prg s dl3 bl dlt2 dliteral ngs_p ngs3 assig3
-      else
-         let sigma_d = (get_dliteral dliteral (dl))
-             dl2 = dl-1
-             bl2 = dl2
-             assig3 = extendAss (backtrack assig2 dlt2 dl2) (invert sigma_d)
-             dlt3 = ((dl2,(invert sigma_d)):dlt2)
-             remaining_as = cdnl_enum_loop prg s dl2 bl2 dlt3 dliteral ngs_p ngs2 assig3
-         in
-         remaining_as
+  case maybeassig of
+       ASSIGNMENT assig2 -> -- no conflict
+                            let
+                                all_lits = nub ((bodies2lits(bodies_p prg)) ++ (atoms2lits (atoms_p prg)))
+                                selectable = (all_lits \\ (assignment2lits (assig2)))
+                            in
+                            if (selectable==[])
+                            then                                                                        -- if all atoms then answer set found
+                              let s2= s-1 in
+                              if (dl==0 || s2==0)
+                              then                                                                     -- last answer set
+                                [nub (trueatoms assig2)]
+                              else                                                                     -- backtrack for remaining answer sets
+                                let
+                                    sigma_d = (get_dliteral dliteral (dl))
+                                    dl2 = dl-1
+                                    bl2 = dl2
+                                    dliteral2 = dlbacktrack dliteral dl
+                                    assig3 = backtrack assig2 dlt2 dl
+                                    dlt3 = dlbacktrack dlt2 dl
+                                    assig4 = extendAss assig3 (invert sigma_d)                         -- invert last decision literal
+                                    dlt4 = ((dl2,(invert sigma_d)): dlt3)
+                                    remaining_as = cdnl_enum_loop prg s2 dl2 bl2 dlt4 dliteral2 ngs_p ngs2 assig4
+                                in
+                                ((nub (trueatoms assig2)):remaining_as)
+                            else                                                                        -- select new lit
+                              let sigma_d = head selectable
+                                  dltn = (((dl+1),(T sigma_d)):dlt2)                                    -- extend assignment
+                                  dliteral2 = (((dl+1),(T sigma_d)):dliteral)
+                                  assig3 = extendAss assig2 (T sigma_d)
+                              in
+                              cdnl_enum_loop prg s (dl+1) bl dltn dliteral2 ngs_p ngs2 assig3
+
+       Conflict ccl cass ->   -- conflict
+                            if dl==0
+                            then []                                                                     -- no more answer sets
+                            else                                                                        -- conflict analysis and backtrack
+                              if (bl < dl)
+                              then
+
+                                let (nogood, sigma_uip, dl3) = conflict_analysis  dlt2 (ngs_p++ngs2) ccl cass
+                                    ngs3 = (nogood:ngs2)
+                                    assig3 = extendAss (backtrack cass dlt2 dl3) sigma_uip
+                                in
+                                cdnl_enum_loop prg s dl3 bl dlt2 dliteral ngs_p ngs3 assig3
+                              else
+                                let sigma_d = (get_dliteral dliteral (dl))
+                                    dl2 = dl-1
+                                    bl2 = dl2
+                                    assig3 = extendAss (backtrack cass dlt2 dl2) (invert sigma_d)
+                                    dlt3 = ((dl2,(invert sigma_d)):dlt2)
+                                    remaining_as = cdnl_enum_loop prg s dl2 bl2 dlt3 dliteral ngs_p ngs2 assig3
+                                in
+                                remaining_as
 
 
 dlbacktrack:: DLT -> Int -> DLT
@@ -437,41 +445,50 @@ backtrack (t,f) dlt dl =
   ([ l | l <- t, (get_dlevel dlt (T l)) < dl ], [ l | l <- f, (get_dlevel dlt (F l)) < dl ] )
   
          
-
-conflict_analysis:: DLT -> [Clause] -> Clause -> Assignment -> (Clause, Int)
+         
+conflict_analysis:: DLT -> [Clause] -> Clause -> Assignment -> (Clause, SignedLit, Int)
 conflict_analysis  dlt nogoods nogood assig =
-  let (prefix, sigma) = (get_sigma nogood assig)
-      ng_sans_sigma = withoutSL nogood sigma
-      dls = (map (get_dlevel dlt) (signedLits ng_sans_sigma))++[0]
-      k = maximum dls
+
+  let c = get_last_assigned_lit dlt assig
+      nextassig = withoutSL assig c
   in
-  if (k == (get_dlevel dlt sigma))
+  if elemAss c nogood
   then
-    let eps = get_epsilon nogoods sigma prefix
-        nogood2 = joinAss ng_sans_sigma (withoutSL eps (invert sigma))
-        
+    let reduced_nogood = withoutSL nogood c
+        sigma = c
+        dl_sigma = get_dlevel dlt sigma
+        (t,f)=nogood
+        rho = ([ (T l) | l<-t, (get_dlevel dlt (T l))==dl_sigma ] ++ [ (F l) | l<-f, (get_dlevel dlt (F l))==dl_sigma ])
     in
-    (conflict_analysis  dlt nogoods nogood2 assig)
+    if (length rho)==1
+    then
+      let (t,f) = reduced_nogood
+          k = maximum( (map (get_dlevel dlt) (map T t)) ++ (map (get_dlevel dlt) (map F f))++ [0])
+      in  
+      (nogood, sigma, k)
+    else
+      let
+        eps = get_epsilon nogoods sigma nextassig
+        reduced_eps = withoutSL eps (invert sigma)
+        newnogood = joinAss reduced_nogood reduced_eps
+      in
+      conflict_analysis dlt nogoods newnogood nextassig
 
-  else (nogood, k)
-
-
-get_sigma:: Clause -> Assignment -> (Assignment, SignedLit)
-get_sigma nogood ([],[]) = let s = (show nogood) in
-                          (error ("Unknown error in get_sigma "++s))
-
-get_sigma nogood ((t:ts),f) =
-  let test = without nogood (ts,f) in
-  if (test==([t],[]))
-  then ((ts,f), (T t))
-  else get_sigma nogood (ts,f)
-
-get_sigma nogood ([],(f:fs)) =
-  let test = without nogood ([],fs) in
-  if (test==([],[f]))
-  then (([],fs), (F f))
-  else get_sigma nogood ([],fs)
+  else conflict_analysis dlt nogoods nogood nextassig
   
+
+get_last_assigned_lit:: DLT -> Assignment -> SignedLit
+get_last_assigned_lit dlt (t,[]) = T (head t)
+get_last_assigned_lit dlt ([],f) = F (head f)
+get_last_assigned_lit dlt (t,f) =
+  let dl_t = get_dlevel dlt (T (head t))
+      dl_f = get_dlevel dlt (F (head f))
+  in
+  if dl_t > dl_f
+  then (T (head t))
+  else (F (head f))
+
+ 
 
 get_epsilon:: [Clause] -> SignedLit -> Assignment -> Clause
 get_epsilon [] l prefix = ([],[]) --error ?
@@ -479,7 +496,8 @@ get_epsilon [] l prefix = ([],[]) --error ?
 get_epsilon (ng:ngs) (T sigma) prefix =
   let temp = without ng prefix in
   if ( temp == ([],[sigma]) )
-  then ng
+  then
+  ng
   else (get_epsilon ngs (T sigma) prefix)
 
 get_epsilon (ng:ngs) (F sigma) prefix =
@@ -490,7 +508,7 @@ get_epsilon (ng:ngs) (F sigma) prefix =
 
   
 
-ng_prop::  [Rule] -> Int -> DLT -> [Clause] -> [Clause] -> Assignment -> [Atom] -> (Assignment,[Clause],Bool,DLT)
+ng_prop::  [Rule] -> Int -> DLT -> [Clause] -> [Clause] -> Assignment -> [Atom] -> (PropRes,[Clause],Bool,DLT)
 ng_prop prg dl dlt ngs_p ngs assig u =
   let
     spc = emptyspc
@@ -504,12 +522,12 @@ ng_prop prg dl dlt ngs_p ngs assig u =
                             then                                                -- unfounded set check
                               let u3 = (unfounded_set prg spc assig2) in
                               if (u3==[])
-                              then (assig2,ngs, True,dlt2)
+                              then (ASSIGNMENT assig2, ngs, True, dlt2)
                               else                                              -- learn loop nogood
                                 let p = (head u3)
                                 in
                                 if (elem p (trueatoms assig2))
-                                then (assig2,((loop_nogoods prg u3)++ngs),True,dlt2)
+                                then (ASSIGNMENT assig2,((loop_nogoods prg u3)++ngs),True,dlt2)
                                 else
                                   let
                                     assig3 = extendAss assig2 (F (ALit p))      -- extend assignment
@@ -523,7 +541,7 @@ ng_prop prg dl dlt ngs_p ngs assig u =
                                   ngs2 = (loop_nogoods prg u2)++ngs
                               in
                               if (elem p (trueatoms assig2))
-                              then (assig2,ngs2,True,dlt2)
+                              then (ASSIGNMENT assig2, ngs2, True, dlt2)
                               else
                                 let
                                   assig3 = extendAss assig2 (F (ALit p))        -- extend assignment
@@ -535,11 +553,11 @@ ng_prop prg dl dlt ngs_p ngs assig u =
                                 else
                                   ng_prop prg dl dltn ngs_p ngs2 assig3 u2
                                   
-       Conflict cf       -> (assig, [cf], False, dlt2)                          -- return conflic clause
+       Conflict ccl cass    -> (Conflict ccl cass, ngs, False, dlt2)                          -- return conflic clause
 
   
 data PropRes =  ASSIGNMENT Assignment  -- result of propagation can either be a conflict or a new assignment
-         | Conflict Clause
+         | Conflict Clause Assignment
          deriving (Show,Eq)
   
 local_propagation::  [Rule] -> Int -> DLT -> [Clause] -> Assignment -> (PropRes,DLT)
@@ -551,7 +569,7 @@ local_propagation p dl dlt nogoods assig =
     ASSIGNMENT newassig -> if newassig == assig                         
                              then (ASSIGNMENT assig,dlt2)                      -- return new assignment
                              else local_propagation  p dl dlt2 nogoods newassig
-    Conflict cf         -> (Conflict cf,dlt2)                                  -- return conflict clause
+    Conflict ccl cass   -> (Conflict ccl cass,dlt2)                                  -- return conflict clause
 
 
   
@@ -578,13 +596,13 @@ unitpropagate dl dlt assig (ng:ngs) =
                               unitpropagate dl dlt2 assig2 ngs                                     
 
     ASSIGNMENT ([],[])  ->  unitpropagate dl dlt assig ngs
-    Conflict cf         ->  (Conflict cf,dlt)                                  -- return conflict clause
+    Conflict ccl cass   ->  (Conflict ccl cass,dlt)                                  -- return conflict clause
 
     
 unitresult:: Assignment -> Clause -> PropRes     
 unitresult assig nogood =
   case (without nogood assig) of
-    ([],[])  -> Conflict assig
+    ([],[])  -> Conflict nogood assig
     ([l],[]) -> ASSIGNMENT ([],[l])
     ([],[l]) -> ASSIGNMENT ([l],[])
     _        -> ASSIGNMENT ([],[])                                             -- nothing can be derived

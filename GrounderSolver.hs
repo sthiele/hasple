@@ -176,44 +176,6 @@ get_query_rules2 (r:rs) a =
 -- gr_solve, returns the answer sets of a program
 gr_solve:: [Rule] -> [[Atom]]
 gr_solve prg =  gr_solve_l (prg,[],[])
--- gr_solve prg =
---   let
---     (cons_t,falses_t) = consequences prg [] []
---     cons = nub cons_t
---     falses = nub falses_t
---     mos = insert_atoms emptyAtomMap cons
---     ics = get_ics prg
---     gr_ics = simplifyProgramm (nub (concatMap (groundRule mos) ics)) (cons,falses)
---     wfm = assi gr_ics
---     simplified_prg = simplifyProgramm prg (cons,falses)
---     choice_candidates = heads_p simplified_prg -- make sure ground atoms are first
---    in
---    if ( wfm == [])
---    then []
---    else
---      if (choice_candidates==[])
---      then
---        [cons]
---      else
---        let
---          choice = head choice_candidates
---          queries = get_query_rules simplified_prg choice
---          gr_queries = (simplifyProgramm (groundProgramx (queries++ics) mos) (cons,falses))
---          eval_atoms = nub (atoms_p gr_queries)
--- 
---          tas =  (assi (gr_queries))
---          nfalses = map (nt falses eval_atoms) tas
---          ncons = map (cons ++) tas --as candidates
---          rest_prg = simplified_prg \\ queries
--- 
---          mixed = zip ncons nfalses
---          nsimplified_prg =  map (simplifyProgramm rest_prg) mixed
---          list = zip3 nsimplified_prg ncons nfalses
---        in
---        concatMap gr_solve_l list
-
-
-
 
 -- returns the answer sets of a program that are consistent with the answer candidate
 gr_solve_l:: ([Rule],[Atom],[Atom]) -> [[Atom]]
@@ -253,7 +215,6 @@ gr_solve_l (prg, cons, falses) =
 intersectAll:: [[Atom]] -> [Atom]
 intersectAll [] = []
 intersectAll [x] = x
--- intersectAll [x,x2] = intersect x x2
 intersectAll (x:xs) = intersect x (intersectAll xs)
 
 
