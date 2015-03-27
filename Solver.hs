@@ -205,59 +205,64 @@ loop_nogoods p u = [ (loop_nogood atom (external_bodies p u)) | atom<-u  ]
 -- ---------------------------------------------------------------------------------
 -- unfounded set checker
 
-type PosDepGraph = (Map.Map Atom [Atom])
+type PDG = (Map.Map Atom [Atom])                                               -- PositiveDependencyGraph
 
-pos_dep_graph:: [Rule] -> PosDepGraph
--- returns the positive dependency graph of a program
-pos_dep_graph [] = Map.empty
-pos_dep_graph (r:rs) =
+pos_dep_graph:: [Rule] -> PDG
+pos_dep_graph prg = pos_dep_graph2 prg Map.empty
+
+pos_dep_graph2 [] accu = accu
+
+pos_dep_graph2 (r:rs) accu =
   let h = kopf r
-      pb = pbody r 
-      rg = pos_dep_graph rs
+      pb = pbody r
   in
-  case Map.lookup h rg of
-      Nothing -> Map.insert h pb rg
-      Just x  -> Map.insert h (pb++x) rg
+  case Map.lookup h accu of
+      Nothing -> let naccu = Map.insert h pb accu in
+                 pos_dep_graph2 rs naccu
+      Just x  -> let naccu = Map.insert h (pb++x) accu in
+                 pos_dep_graph2 rs naccu
 
-      
-
-scc:: Atom -> PosDepGraph -> [Atom]
+scc:: Atom -> PDG -> [Atom]
 -- returns the strongly connected component of an atom
-scc a depg = nub (tarjan depg [] [] a)
+scc a depg = tarjan depg [] [] a
 
-tarjan:: PosDepGraph -> [Atom] -> [Atom] -> Atom -> [Atom]
-tarjan depg visited visited2 a =
+tarjan:: PDG -> [Atom] -> [Atom] -> Atom -> [Atom]
+tarjan depg visited visited2 a  =
    if (elem a visited)
-   then 
+   then
      case Map.lookup a depg of
-       Nothing -> []
+       Nothing -> (a:visited2)
        Just x  -> let next = x \\ visited2 in
-                  (a:(concatMap (tarjan depg visited (a:visited2)) next))
+                  if next==[]
+                  then (a:visited2)
+                  else concatMap (tarjan depg visited (a:visited2)) next
    else
      case Map.lookup a depg of
-       Nothing -> []
+       Nothing -> visited2
        Just x  -> let next = x \\ visited2 in
-                  (concatMap (tarjan depg (a:visited) visited2) next)
+                  if next==[]
+                  then visited2
+                  else concatMap (tarjan depg (a:visited) visited2) next
 
 
 
-type SourcePointerConf =   (Map.Map Atom Lit)
-emptyspc:: SourcePointerConf
+type SPC =   (Map.Map Atom Lit)                                                -- SPC
+emptyspc:: SPC
 emptyspc = Map.empty
 
 
 
-add_source::  SourcePointerConf -> Atom -> Lit -> SourcePointerConf
+add_source::  SPC -> Atom -> Lit -> SPC
 -- add a new sourcep for an atom
 add_source spc a l =  Map.insert a l spc
 
-source:: Atom -> SourcePointerConf -> Lit
+source:: Atom -> SPC -> Lit
 source a spc =
    case Map.lookup a spc of
        Nothing -> __bottom
        Just x  ->  x
 
-sourcep:: Atom -> SourcePointerConf -> [Atom]
+sourcep:: Atom -> SPC -> [Atom]
 sourcep a spc =
   case (source a spc) of
   (BLit pb nb) ->  pb
@@ -271,7 +276,7 @@ cyclic a p =
   not (scc_a == [])
 
 
-unfounded_set:: [Rule] -> SourcePointerConf -> Assignment -> [Atom]
+unfounded_set:: [Rule] -> SPC -> Assignment -> [Atom]
 -- returns an unfounded set for the program given a partial assignment
 unfounded_set prg spc assig =
   let s = collect_nonfalse_cyclic_atoms assig prg
@@ -291,7 +296,7 @@ collect_nonfalse_cyclic_atoms assig p =
   [ a | a <- atoms, (cyclic a p)]
 
 
-extend:: [Rule] -> Assignment -> SourcePointerConf -> [Atom]  -> [Atom]
+extend:: [Rule] -> Assignment -> SPC -> [Atom]  -> [Atom]
 extend p assig spc s =
   let
     helper1 =  (falseatoms assig)++s
@@ -304,7 +309,7 @@ extend p assig spc s =
     else extend p assig spc (s++t)
 
   
-loop_s:: Int -> [Rule] -> SourcePointerConf -> Assignment ->[Atom] -> [Atom]
+loop_s:: Int -> [Rule] -> SPC -> Assignment ->[Atom] -> [Atom]
 loop_s num prg spc assig [] = []                                                -- no unfounded_set
 loop_s num prg spc assig s =
   let u = head s
@@ -317,7 +322,7 @@ loop_s num prg spc assig s =
     loop_s 1 prg spc2 assig s2
   
 
-loop_u:: Int-> Int -> [Rule] -> SourcePointerConf -> Assignment -> [Atom] -> [Atom] -> Atom -> (SourcePointerConf, [Atom], [Atom], Bool)
+loop_u:: Int-> Int -> [Rule] -> SPC -> Assignment -> [Atom] -> [Atom] -> Atom -> (SPC, [Atom], [Atom], Bool)
 loop_u num nums prg spc assig s [] p  = (spc, s, [], False)
 loop_u num nums prg spc assig s u p  =
   let eb = bodies2lits (external_bodies prg u)
@@ -342,7 +347,7 @@ loop_u num nums prg spc assig s u p  =
       (loop_u 1 nums prg spc assig s u2 p)
       
     
-shrink_u:: [Rule] -> SourcePointerConf -> [Atom] ->  Lit -> (SourcePointerConf, [Atom])
+shrink_u:: [Rule] -> SPC -> [Atom] ->  Lit -> (SPC, [Atom])
 -- returns an updated spc and a list of atoms to be removed from U and S
 shrink_u prg spc [] l = (spc,[])
 shrink_u prg spc (q:qs) l =

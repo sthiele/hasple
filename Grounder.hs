@@ -159,8 +159,8 @@ merge2 (k,v) ys =
   case lookup k ys of
        Nothing -> Just ((k,v):ys)
        Just z -> if v==z
-                    then (Just ys)
-                    else Nothing
+                 then (Just ys)
+                 else Nothing
 
 
 -- --------------------------------------------------------------
@@ -220,9 +220,9 @@ groundProgram p =
   let am = insert_atoms emptyAtomMap (heads_p  p)
       pg1 = nub (concatMap  (groundRule am)  p)
   in
-    if pg1==p
-       then pg1
-       else groundProgram pg1
+  if pg1==p
+  then pg1
+  else groundProgram pg1
 
 
 

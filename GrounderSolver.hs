@@ -141,21 +141,18 @@ groundProgramx p am =
 
 
 get_query_rules:: [Rule] -> Atom -> [Rule]
-get_query_rules [] _ = []
-get_query_rules rules a =
-  let grules = get_query_rules2 rules a
-      next = (concatMap pbody grules) ++ (concatMap nbody grules)
-      nn = delete a next
-  in
-  nub (grules ++ (concatMap (get_query_rulesx rules [a]) nn))
+get_query_rules rules a = get_query_rulesx rules [] [] a
 
-get_query_rulesx:: [Rule] -> [Atom] -> Atom -> [Rule]
-get_query_rulesx rules found a =
+get_query_rulesx:: [Rule] -> [Rule] -> [Atom] -> Atom -> [Rule]
+get_query_rulesx rules acc found a =
   let grules = get_query_rules2 rules a
-      next = (concatMap pbody grules) ++ (concatMap nbody grules)
+      nacc = grules++acc
+      next = nub (concatMap pbody grules) ++ (concatMap nbody grules)
       nn = next \\ (a:found)
   in
-  grules ++ (concatMap (get_query_rulesx rules (a:found)) nn)
+  if nn==[]
+  then nub nacc
+  else concatMap (get_query_rulesx rules nacc (a:found)) nn
 
 
 
@@ -169,6 +166,13 @@ get_query_rules2 (r:rs) a =
                         nub (gr: grs)
        Nothing ->       get_query_rules2 rs a
 
+-- get_query_rules2 [] _ = []
+-- get_query_rules2 prg a =
+--   let mymatchAtom x y = matchAtom y x
+--       kopfe = map kopf prg
+--       matches =  map mymatchAtom a kopfe
+--
+--   [ groundRule2 r binding | r <- prg, let (Just binding)=(matchAtom (kopf r) a) ]
 
 -- ------------------------------------------------------------
 
