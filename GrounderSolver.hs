@@ -28,10 +28,11 @@ import ASP
 import Data.List (sort, nub, intersect, (\\), delete )
 import Data.Maybe
 
-
+assi:: [Rule] -> [[Atom]]
 -- assi x = anssets x
 assi x = cdnl_enum x 0
 
+show_lp:: [Rule] -> [Char]
 show_lp [] = ""
 show_lp (x:xs) = (show x) ++ "\n" ++ (show_lp xs)
 
@@ -90,7 +91,7 @@ simplifyRule2 (t,f) (Rule h pb nb) =
   in
   Just (Rule h newpbody newnbody)
 
-consequences :: [Rule] -> [Atom] -> [Atom] -> ([Atom],[Atom])
+consequences:: [Rule] -> [Atom] -> [Atom] -> ([Atom],[Atom])
 -- return consequences of a programm
 consequences p t f=
   let reduced = reduct p t
@@ -106,7 +107,7 @@ consequences p t f=
     in
     consequences simplified_prg t2 f2
 
-nfacts :: [Rule] -> [Atom]
+nfacts:: [Rule] -> [Atom]
 -- return atoms of a programm that dont have a matching head
 nfacts prg =
    let a = nub (atoms_p prg)
@@ -229,7 +230,7 @@ nt old a t = old ++ (a \\ t)
 -- Tests
 -- -------------------------------------
 
-test_old :: [Char] -> IO ()
+test_old:: [Char] -> IO ()
 test_old x =
     do
          case readProgram x of
@@ -240,7 +241,7 @@ test_old x =
                         show_as  (assi (groundProgram val))
                         )
 
-test_new :: [Char] -> IO ()
+test_new:: [Char] -> IO ()
 test_new x=
   do
     case readProgram x of

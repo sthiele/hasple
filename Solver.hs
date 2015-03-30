@@ -34,21 +34,21 @@ import qualified Data.Map as Map
 -- --------------------------------------------------------------
 
 
-subsets :: [a] -> [[a]]
+subsets:: [a] -> [[a]]
 subsets []  = [[]]
 subsets (x:xs) = subsets xs ++ map (x:) (subsets xs)
 
 
-facts :: [Rule] -> [Atom]
+facts:: [Rule] -> [Atom]
 -- return the facts of a programm
 facts p = [ (kopf r) |  r <- p,  (null (pbody r)), (null (nbody r)) ]
 
 
-reducebasicprogram :: [Rule] -> [Atom] -> [Rule]
+reducebasicprogram:: [Rule] -> [Atom] -> [Rule]
 reducebasicprogram p x = [ (Rule (kopf r) ((pbody r)\\ x) []) | r <- p, (pbody r)/=[] ]
 
 
-cn :: [Rule] -> [Atom]
+cn:: [Rule] -> [Atom]
 -- return the consequences of a  basic logic programm
 cn [] = []
 cn p = if (reducebasicprogram p (facts p)) == p
@@ -56,11 +56,12 @@ cn p = if (reducebasicprogram p (facts p)) == p
    else nub ((facts p) ++ (cn (reducebasicprogram p (facts p))))
 
    
-reduct :: [Rule] -> [Atom] -> [Rule]
+reduct:: [Rule] -> [Atom] -> [Rule]
 -- return the reduct of a logic program with x
 reduct p x = [ (Rule (kopf r) (pbody r) []) |  r <- p,  (intersect (nbody r) x)==[] ]
 
 
+anssets:: [Rule] -> [[Atom]]
 anssets p = filter (\i -> (sort (cn (reduct p i)))==(sort i)) (subsets (heads_p p))
 
 
@@ -70,6 +71,7 @@ data Lit = ALit Atom
          | BLit [Atom] [Atom]
          deriving (Show,Eq,Ord)
 
+__bottom:: Lit         
 __bottom = (ALit __conflict)
            
 atoms2lits:: [Atom] -> [Lit]
@@ -612,5 +614,3 @@ unitresult assig nogood =
     ([],[l]) -> ASSIGNMENT ([l],[])
     _        -> ASSIGNMENT ([],[])                                             -- nothing can be derived
     
-
-
