@@ -201,18 +201,29 @@ subsAtom:: [(Term,Term)] -> Atom -> Atom
 subsAtom m (Atom pred []) = (Atom pred [])
 subsAtom m (Atom pred x)  = (Atom pred (map (subsTerm m) x))
 
+subsLit:: [(Term,Term)] -> Literal -> Literal
+subsLit m (PAtom a) = (PAtom (subsAtom m a) )
+subsLit m (NAtom a) = (NAtom (subsAtom m a))
+
 groundRule2:: Rule -> [(Term,Term)] -> Rule
-groundRule2 (Rule h pb nb) m= (Rule (subsAtom m h) (map (subsAtom m) pb) (map (subsAtom m) nb))
+-- groundRule2 (Rule h pb nb) m= (Rule (subsAtom m h) (map (subsAtom m) pb) (map (subsAtom m) nb))
+groundRule2 (Rule h b) m= (Rule (subsAtom m h) (map (subsLit m) b) )
 
 
 -- alternative
 groundRule:: AtomMap ->  Rule -> [Rule]
-groundRule am (Rule h pb nb) =
-  if (is_groundRule (Rule h pb nb))
-  then [(Rule h pb nb)]
+-- groundRule am (Rule h pb nb) =
+--   if (is_groundRule (Rule h pb nb))
+--   then [(Rule h pb nb)]
+--   else
+--     let c =  getbindingsAtoms pb am in
+--     nub (map (groundRule2 (Rule h pb nb)) c)
+groundRule am r =
+  if (is_groundRule r)
+  then [r]
   else
-    let c =  getbindingsAtoms pb am in
-    nub (map (groundRule2 (Rule h pb nb)) c)
+    let c =  getbindingsAtoms (pbody r) am in
+    nub (map (groundRule2 r) c)
 
 
 groundProgram:: [Rule] -> [Rule]
@@ -228,12 +239,24 @@ groundProgram p =
 
 is_groundRule:: Rule -> Bool
 -- return true if a rule does not contain variables
-is_groundRule (Rule h pb nb) = is_groundAtom h && is_groundAtoms pb && is_groundAtoms nb
+-- is_groundRule (Rule h pb nb) = is_groundAtom h && is_groundAtoms pb && is_groundAtoms nb
+is_groundRule (Rule h b) = is_groundAtom h && is_groundLits b
 
-is_groundAtoms:: [Atom] -> Bool
--- returns true if the list of Atoms does not contain variables
-is_groundAtoms [] = True
-is_groundAtoms (x:xs) = is_groundAtom x && is_groundAtoms xs
+is_groundLits:: [Literal] -> Bool
+is_groundLits [] = True
+is_groundLits (x:xs) = is_groundLit x && is_groundLits xs
+
+-- is_groundAtoms:: [Atom] -> Bool
+-- -- returns true if the list of Atoms does not contain variables
+-- is_groundAtoms [] = True
+-- is_groundAtoms (x:xs) = is_groundAtom x && is_groundAtoms xs
+
+
+is_groundLit:: Literal -> Bool
+-- returns true if the atom does not contain variables
+is_groundLit (PAtom a) = is_groundAtom a
+is_groundLit (NAtom a) = is_groundAtom a
+
 
 is_groundAtom:: Atom -> Bool
 -- returns true if the atom does not contain variables

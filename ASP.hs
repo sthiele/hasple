@@ -16,8 +16,8 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module ASP (
-   Term(..), Atom(..), __conflict, Rule(..),
-   heads_p, atoms_p,      
+   Term(..), Atom(..), __conflict, Literal(..),Rule(..), basicRule, normalRule,
+   pbody, nbody, heads_p, atoms_p,      
   ) where
     
 import Data.List (nub)                  
@@ -46,6 +46,7 @@ data Atom = Atom { predicate :: String
                  , arguments :: [Term]
                  }deriving (Eq, Ord)
 
+
 showlist :: (Show a) => [a] -> String
 showlist [] = ""
 showlist (x:[]) = (show x)
@@ -58,30 +59,57 @@ instance Show Atom where
 
 __conflict = (Atom "conflict" [])
 
+data Literal = PAtom Atom | NAtom Atom deriving (Eq, Ord) -- asp literal
+instance Show Literal where
+    show (PAtom a) =  show a
+    show (NAtom a) =  "not " ++ (show a)
 
 -- --------------------------------------------------------------
 
+-- data Rule = Rule { kopf :: Atom
+--                  , pbody :: [Atom]
+--                  , nbody :: [Atom]
+--                  }
 data Rule = Rule { kopf :: Atom
-                 , pbody :: [Atom]
-                 , nbody :: [Atom]
+                 , body :: [Literal]
                  }
+basicRule::Atom -> [Atom] -> Rule
+basicRule h a = Rule h (fmap PAtom a)
 
-shownbody :: [Atom] -> String
-shownbody [] = ""
-shownbody (x:[]) = "not " ++ (show x)
-shownbody (x:xs) = "not " ++ (show x) ++ ", "++ (shownbody xs)
+normalRule::Atom -> [Atom] -> [Atom] -> Rule
+normalRule h pa na = Rule h ((fmap PAtom pa)++(fmap NAtom na))
 
+                 
+-- shownbody :: [Atom] -> String
+-- shownbody [] = ""
+-- shownbody (x:[]) = "not " ++ (show x)
+-- shownbody (x:xs) = "not " ++ (show x) ++ ", "++ (shownbody xs)
+
+-- instance Show Rule where
+--   show (Rule h [] []) =  (show h) ++"."
+--   show (Rule h pb []) =  (show h) ++ " :- "++showlist pb++"."
+--   show (Rule h [] nb) =  (show h) ++ " :- "++shownbody nb++"."
+--   show (Rule h pb nb) =  (show h) ++ " :- "++(showlist pb)++", "++(shownbody nb)++"."
 instance Show Rule where
-  show (Rule h [] []) =  (show h) ++"."
-  show (Rule h pb []) =  (show h) ++ " :- "++showlist pb++"."
-  show (Rule h [] nb) =  (show h) ++ " :- "++shownbody nb++"."
-  show (Rule h pb nb) =  (show h) ++ " :- "++(showlist pb)++", "++(shownbody nb)++"."
-
+  show (Rule h []) =  (show h) ++"."
+  show (Rule h body) =  (show h) ++ " :- "++showlist body++"."
+  
+-- instance Eq Rule where
+--   (Rule h1 pb1 nb1) == (Rule h2 pb2 nb2) = h1==h2 && pb1==pb2 && nb1==nb2
 instance Eq Rule where
-  (Rule h1 pb1 nb1) == (Rule h2 pb2 nb2) = h1==h2 && pb1==pb2 && nb1==nb2
+  (Rule h1 b1) == (Rule h2 b2) = h1==h2 && b1==b2
+  
 
+-- instance Ord Rule where
+--   compare (Rule h pb nb) (Rule h2 pb2 nb2) = compare h h2
 instance Ord Rule where
-  compare (Rule h pb nb) (Rule h2 pb2 nb2) = compare h h2
+  compare (Rule h b1) (Rule h2 b2) = compare h h2
+
+
+pbody:: Rule -> [Atom]
+pbody (Rule _ body) = [ a | (PAtom a) <- body]
+nbody:: Rule -> [Atom]
+nbody (Rule _ body) = [ a | (NAtom a) <- body]
 
 
 heads_p :: [Rule] -> [Atom]

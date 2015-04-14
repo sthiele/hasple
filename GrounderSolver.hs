@@ -52,9 +52,9 @@ show_as3 (x:xs) =  (show x) ++ " " ++ (show_as3 xs)
 -- returns the integrity constraints of a program
 get_ics:: [Rule] -> [Rule]
 get_ics [] = []
-get_ics ((Rule h pb nb):rs) =
+get_ics ((Rule h b):rs) =
   if (h == __conflict)
-  then ((Rule h pb nb): get_ics rs)
+  then ((Rule h b): get_ics rs)
   else get_ics rs
 
 
@@ -71,25 +71,31 @@ simplifyProgramm2 x (t,f) = (mapMaybe (simplifyRule2 (t,f)) x)
 
 
 simplifyRule:: ([Atom],[Atom]) -> Rule -> Maybe Rule
-simplifyRule (t,f) (Rule h pb nb) =
+simplifyRule (t,f) (Rule h b) =
+  let nb = nbody (Rule h b)
+      pb = pbody (Rule h b)
+  in
   if ( (elem h t) || not (null (intersect nb t)) || not (null (intersect pb f)))
   then Nothing
   else
   let newpbody = (nub pb) \\ t
       newnbody = (nub nb) \\ f
   in
-  Just (Rule h newpbody newnbody)
+  Just (normalRule h newpbody newnbody)
 
 -- does not remove facts
 simplifyRule2:: ([Atom],[Atom]) -> Rule -> Maybe Rule
-simplifyRule2 (t,f) (Rule h pb nb) =
+simplifyRule2 (t,f) (Rule h b) =
+  let nb = nbody (Rule h b)
+      pb = pbody (Rule h b)
+  in  
   if ( not (null (intersect nb t)) || not (null (intersect pb f)))
   then Nothing
   else
   let newpbody = (nub pb) \\ t
       newnbody = (nub nb) \\ f
   in
-  Just (Rule h newpbody newnbody)
+  Just (normalRule h newpbody newnbody)
 
 consequences:: [Rule] -> [Atom] -> [Atom] -> ([Atom],[Atom])
 -- return consequences of a programm

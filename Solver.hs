@@ -45,7 +45,7 @@ facts p = [ (kopf r) |  r <- p,  (null (pbody r)), (null (nbody r)) ]
 
 
 reducebasicprogram:: [Rule] -> [Atom] -> [Rule]
-reducebasicprogram p x = [ (Rule (kopf r) ((pbody r)\\ x) []) | r <- p, (pbody r)/=[] ]
+reducebasicprogram p x = [ (basicRule (kopf r) ((pbody r)\\ x) ) | r <- p, (pbody r)/=[] ]
 
 
 cn:: [Rule] -> [Atom]
@@ -58,7 +58,7 @@ cn p = if (reducebasicprogram p (facts p)) == p
    
 reduct:: [Rule] -> [Atom] -> [Rule]
 -- return the reduct of a logic program with x
-reduct p x = [ (Rule (kopf r) (pbody r) []) |  r <- p,  (intersect (nbody r) x)==[] ]
+reduct p x = [ (basicRule (kopf r) (pbody r)) |  r <- p,  (intersect (nbody r) x)==[] ]
 
 
 anssets:: [Rule] -> [[Atom]]
@@ -67,17 +67,17 @@ anssets p = filter (\i -> (sort (cn (reduct p i)))==(sort i)) (subsets (heads_p 
 
 -- --------------------------------------------------------------------------------
 
-data Lit = ALit Atom
+data SVar = ALit Atom
          | BLit [Atom] [Atom]
          deriving (Show,Eq,Ord)
 
-__bottom:: Lit         
+__bottom:: SVar         
 __bottom = (ALit __conflict)
            
-atoms2lits:: [Atom] -> [Lit]
+atoms2lits:: [Atom] -> [SVar]
 atoms2lits as = [(ALit a) | a <- as ]
 
-bodies2lits:: [([Atom],[Atom])] -> [Lit]
+bodies2lits:: [([Atom],[Atom])] -> [SVar]
 bodies2lits bs = [(BLit pb nb) | (pb,nb) <- bs ]
 
 
@@ -91,39 +91,40 @@ bodies:: [Rule] -> Atom -> [([Atom],[Atom])]
 bodies p a  = [((pbody r),(nbody r)) | r<-p , (kopf r)==a ]
 
 
-data SignedLit = T Lit
-         | F Lit
+data AssignedVar = T SVar
+         | F SVar
          deriving (Show,Eq,Ord)
 
-unsign:: SignedLit -> Lit
+unsign:: AssignedVar -> SVar
 unsign (T l) = l
 unsign (F l) = l
 
-invert:: SignedLit -> SignedLit
+invert:: AssignedVar -> AssignedVar
 invert (T l) = (F l)
 invert (F l) = (T l)
 
-type Assignment = ([Lit],[Lit])
+
+type Assignment = ([SVar],[SVar])
 
 joinAss:: Assignment -> Assignment -> Assignment
 joinAss (t1,f1) (t2,f2) = ( nub (t1++t2),nub (f1++f2))
 
-extendAss:: Assignment -> SignedLit -> Assignment
+extendAss:: Assignment -> AssignedVar -> Assignment
 extendAss (ts,fs) (T l) = ((l:ts),fs)
 extendAss (ts,fs) (F l) = (ts,(l:fs))
 
 without:: Assignment -> Assignment -> Assignment
 without (t1,f1) (t2,f2) = ( (t1\\t2),(f1\\f2))
 
-withoutSL:: Assignment -> SignedLit -> Assignment
+withoutSL:: Assignment -> AssignedVar -> Assignment
 withoutSL (t,f) (T l) = ((delete l t),f)
 withoutSL (t,f) (F l) = (t,(delete l f))
 
-signedLits:: Assignment -> [SignedLit]
+signedLits:: Assignment -> [AssignedVar]
 signedLits (t,f) = [ (T l) | l<-t ] ++ [ (F l) | l<-f ]
 
-elemAss:: SignedLit -> Assignment -> Bool
--- returns true if the assignment contains the SignedLit
+elemAss:: AssignedVar -> Assignment -> Bool
+-- returns true if the assignment contains the AssignedVar
 elemAss (T l) (t,_) = elem l t
 elemAss (F l) (_,f) = elem l f
 
@@ -133,13 +134,13 @@ subsetAss (t1,f1) (t2,f2) = (t1\\t2)==[] && (f1\\f2)==[]
 
 type Clause = Assignment
 
-assignment2lits:: Assignment -> [Lit]
+assignment2lits:: Assignment -> [SVar]
 assignment2lits (t,f) = (t++f)
 
-truelits:: Assignment -> [Lit]
+truelits:: Assignment -> [SVar]
 truelits (t,_) = t
 
-falselits:: Assignment -> [Lit]
+falselits:: Assignment -> [SVar]
 falselits (_,f) = f
 
 trueatoms:: Assignment -> [Atom]
@@ -148,7 +149,7 @@ trueatoms (t,_) = concatMap lit2atoms t
 falseatoms:: Assignment -> [Atom]
 falseatoms (_,f) = concatMap lit2atoms f
 
-lit2atoms:: Lit -> [Atom]
+lit2atoms:: SVar -> [Atom]
 lit2atoms (ALit a) = [a]
 lit2atoms (BLit pb nb) = pb
 
@@ -248,17 +249,17 @@ tarjan depg visited visited2 a  =
 
 
 
-type SPC =   (Map.Map Atom Lit)                                                -- SPC
+type SPC =   (Map.Map Atom SVar)                                                -- SPC
 emptyspc:: SPC
 emptyspc = Map.empty
 
 
 
-add_source::  SPC -> Atom -> Lit -> SPC
+add_source::  SPC -> Atom -> SVar -> SPC
 -- add a new sourcep for an atom
 add_source spc a l =  Map.insert a l spc
 
-source:: Atom -> SPC -> Lit
+source:: Atom -> SPC -> SVar
 source a spc =
    case Map.lookup a spc of
        Nothing -> __bottom
@@ -349,7 +350,7 @@ loop_u num nums prg spc assig s u p  =
       (loop_u 1 nums prg spc assig s u2 p)
       
     
-shrink_u:: [Rule] -> SPC -> [Atom] ->  Lit -> (SPC, [Atom])
+shrink_u:: [Rule] -> SPC -> [Atom] ->  SVar -> (SPC, [Atom])
 -- returns an updated spc and a list of atoms to be removed from U and S
 shrink_u prg spc [] l = (spc,[])
 shrink_u prg spc (q:qs) l =
@@ -364,14 +365,14 @@ shrink_u prg spc (q:qs) l =
 -- ------------------------------------------------------------------------------------
 -- cdnl_enum
 
-type DLT = [(Int,SignedLit)]                                                    -- DecisionLevelTracker
+type DLT = [(Int,AssignedVar)]                                                    -- DecisionLevelTracker
 
-get_dlevel:: [(Int,SignedLit)] -> SignedLit -> Int
+get_dlevel:: [(Int,AssignedVar)] -> AssignedVar -> Int
 get_dlevel ((i,sl1):xs) sl2
   | sl1 == sl2 = i
   | otherwise = get_dlevel xs sl2
 
-get_dliteral:: [(Int,SignedLit)] -> Int -> SignedLit
+get_dliteral:: [(Int,AssignedVar)] -> Int -> AssignedVar
 get_dliteral ((i1,sl):xs) i2
   | i1 == i2 = sl
   | otherwise = get_dliteral xs i2
@@ -380,7 +381,7 @@ get_dliteral ((i1,sl):xs) i2
 cdnl_enum:: [Rule] -> Int -> [[Atom]]
 cdnl_enum prg s = cdnl_enum_loop prg 0 0 0 [] [] (nub (nogoods_of_lp prg)) [] ([],[])
     
-cdnl_enum_loop:: [Rule] -> Int -> Int -> Int -> DLT -> [(Int,SignedLit)] -> [Clause] -> [Clause] -> Assignment -> [[Atom]]
+cdnl_enum_loop:: [Rule] -> Int -> Int -> Int -> DLT -> [(Int,AssignedVar)] -> [Clause] -> [Clause] -> Assignment -> [[Atom]]
 cdnl_enum_loop prg s dl bl dlt dliteral ngs_p ngs assig  =
   let
     (maybeassig,ngs2,sat,dlt2) = ng_prop prg dl dlt ngs_p ngs assig []
@@ -453,7 +454,7 @@ backtrack (t,f) dlt dl =
   
          
          
-conflict_analysis:: DLT -> [Clause] -> Clause -> Assignment -> (Clause, SignedLit, Int)
+conflict_analysis:: DLT -> [Clause] -> Clause -> Assignment -> (Clause, AssignedVar, Int)
 conflict_analysis  dlt nogoods nogood assig =
 
   let c = get_last_assigned_lit dlt assig
@@ -484,7 +485,7 @@ conflict_analysis  dlt nogoods nogood assig =
   else conflict_analysis dlt nogoods nogood nextassig
   
 
-get_last_assigned_lit:: DLT -> Assignment -> SignedLit
+get_last_assigned_lit:: DLT -> Assignment -> AssignedVar
 get_last_assigned_lit dlt (t,[]) = T (head t)
 get_last_assigned_lit dlt ([],f) = F (head f)
 get_last_assigned_lit dlt (t,f) =
@@ -497,7 +498,7 @@ get_last_assigned_lit dlt (t,f) =
 
  
 
-get_epsilon:: [Clause] -> SignedLit -> Assignment -> Clause
+get_epsilon:: [Clause] -> AssignedVar -> Assignment -> Clause
 get_epsilon [] l prefix = ([],[]) --error ?
 
 get_epsilon (ng:ngs) (T sigma) prefix =
