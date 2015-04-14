@@ -17,13 +17,12 @@
 
 module GrounderSolver (
   show_as,
---   show_as3,
   gr_solve,
 )where
 
 import Grounder
 import Solver
-import LPParser -- for tests
+import LPParser -- for parsing in tests
 import ASP
 import Data.List (sort, nub, intersect, (\\), delete )
 import Data.Maybe
@@ -173,13 +172,6 @@ get_query_rules2 (r:rs) a =
                         nub (gr: grs)
        Nothing ->       get_query_rules2 rs a
 
--- get_query_rules2 [] _ = []
--- get_query_rules2 prg a =
---   let mymatchAtom x y = matchAtom y x
---       kopfe = map kopf prg
---       matches =  map mymatchAtom a kopfe
---
---   [ groundRule2 r binding | r <- prg, let (Just binding)=(matchAtom (kopf r) a) ]
 
 -- ------------------------------------------------------------
 

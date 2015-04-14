@@ -24,19 +24,6 @@ import Text.ParserCombinators.Parsec
 import qualified Text.Parsec.Token as Token
 import Text.ParserCombinators.Parsec.Language (emptyDef)
 
-
--- data Literal = Literal { ispos :: Bool
---                        , atom :: Atom
---                        }
--- 
--- 
--- 
--- instance Show Literal where
---   show (Literal True atom) =  show atom
---   show (Literal False atom) =  "NoT " ++ (show atom)
-
-
-
 -- the lexer bzw tokenizer
 
 myLangDef = emptyDef{
@@ -68,8 +55,6 @@ whiteSpace  = Token.whiteSpace lexer
 
 -- the parser
 
--- parseAtom :: Parser Atom
--- parseAtom =  identifier
 
 alphaNumUnderScore :: Parser Char
 alphaNumUnderScore = alphaNum <|> char '_'
@@ -115,27 +100,18 @@ readLit input = case parse parseLit "lit" input of
     Right val -> "Found value " ++ show val
 
 
--- parseLit :: Parser Literal
--- parseLit =  parsenAtom
---          <|> parsepAtom
+
 parseLit :: Parser Literal
 parseLit =  parsenAtom
          <|> parsepAtom         
 
--- parsepAtom :: Parser Literal
--- parsepAtom = do
---                atom <- parseAtom
---                return (Literal True atom)
+
 parsepAtom :: Parser Literal
 parsepAtom = do
                atom <- parseAtom
                return (PAtom atom)
                
--- parsenAtom :: Parser Literal
--- parsenAtom = do
---                 negationp
---                 atom <- parseAtom
---                 return (Literal False atom )
+
 parsenAtom :: Parser Literal
 parsenAtom = do
                 negationp
@@ -147,15 +123,6 @@ parsenAtom = do
 readrule input =  parse parseRule "rul" input
 
 parseRule :: Parser Rule
--- parseRule = do
---               ifparser
---               lits <- parseBody2
---               return (Rule __conflict (posbody lits) (negbody lits))
---             <|>
---             do
---                 head <- parseAtom
---                 lits <- parseBody
---                 return (Rule head (posbody lits) (negbody lits))
 parseRule = do
               ifparser
               lits <- parseBody2
@@ -185,23 +152,11 @@ parseBody2 = do
               dotparser
               return ret              
 
--- parseLitList  :: Parser [Literal]
 parseLitList  :: Parser [Literal]
 parseLitList  = do
                   stmts <- sepEndBy1 parseLit (commaparser)
                   return $! stmts
 
--- posbody :: [Literal] -> [Atom]
--- posbody [] = []
--- posbody (l:t) = if ispos l
---                    then ((atom l):(posbody t))
---                    else (posbody t)
--- 
--- negbody :: [Literal] -> [Atom]
--- negbody [] = []
--- negbody (l:t) = if ispos l
---                    then (negbody t)
---                    else ((atom l):(negbody t))
                    
                    
 -----------                   

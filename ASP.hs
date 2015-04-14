@@ -66,10 +66,6 @@ instance Show Literal where
 
 -- --------------------------------------------------------------
 
--- data Rule = Rule { kopf :: Atom
---                  , pbody :: [Atom]
---                  , nbody :: [Atom]
---                  }
 data Rule = Rule { kopf :: Atom
                  , body :: [Literal]
                  }
@@ -79,29 +75,14 @@ basicRule h a = Rule h (fmap PAtom a)
 normalRule::Atom -> [Atom] -> [Atom] -> Rule
 normalRule h pa na = Rule h ((fmap PAtom pa)++(fmap NAtom na))
 
-                 
--- shownbody :: [Atom] -> String
--- shownbody [] = ""
--- shownbody (x:[]) = "not " ++ (show x)
--- shownbody (x:xs) = "not " ++ (show x) ++ ", "++ (shownbody xs)
-
--- instance Show Rule where
---   show (Rule h [] []) =  (show h) ++"."
---   show (Rule h pb []) =  (show h) ++ " :- "++showlist pb++"."
---   show (Rule h [] nb) =  (show h) ++ " :- "++shownbody nb++"."
---   show (Rule h pb nb) =  (show h) ++ " :- "++(showlist pb)++", "++(shownbody nb)++"."
 instance Show Rule where
   show (Rule h []) =  (show h) ++"."
   show (Rule h body) =  (show h) ++ " :- "++showlist body++"."
   
--- instance Eq Rule where
---   (Rule h1 pb1 nb1) == (Rule h2 pb2 nb2) = h1==h2 && pb1==pb2 && nb1==nb2
 instance Eq Rule where
   (Rule h1 b1) == (Rule h2 b2) = h1==h2 && b1==b2
   
 
--- instance Ord Rule where
---   compare (Rule h pb nb) (Rule h2 pb2 nb2) = compare h h2
 instance Ord Rule where
   compare (Rule h b1) (Rule h2 b2) = compare h h2
 
