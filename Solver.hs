@@ -67,29 +67,37 @@ anssets p = filter (\i -> (sort (cn (reduct p i)))==(sort i)) (subsets (heads_p 
 
 -- --------------------------------------------------------------------------------
 
+-- data SVar = ALit Atom
+--          | BLit [Atom] [Atom]
+--          deriving (Show,Eq,Ord)
 data SVar = ALit Atom
-         | BLit [Atom] [Atom]
-         deriving (Show,Eq,Ord)
+         | BLit [Literal]
+         deriving (Show,Eq,Ord)         
 
 __bottom:: SVar         
 __bottom = (ALit __conflict)
            
-atoms2lits:: [Atom] -> [SVar]
-atoms2lits as = [(ALit a) | a <- as ]
+atoms2vars:: [Atom] -> [SVar]
+atoms2vars as = [(ALit a) | a <- as ]
 
-bodies2lits:: [([Atom],[Atom])] -> [SVar]
-bodies2lits bs = [(BLit pb nb) | (pb,nb) <- bs ]
+bodies2vars:: [[Literal]] -> [SVar]
+bodies2vars bs = [(BLit b) | b <- bs ]
 
 
-bodies_p:: [Rule] -> [([Atom],[Atom])]
+-- bodies_p:: [Rule] -> [([Atom],[Atom])]
+-- -- returns all bodies of a program
+-- bodies_p p = [((pbody r),(nbody r)) | r <-p ]
+bodies_p:: [Rule] -> [[Literal]]
 -- returns all bodies of a program
-bodies_p p = [((pbody r),(nbody r)) | r <-p ]
+bodies_p p = [(body r) | r <-p ]
 
 
-bodies:: [Rule] -> Atom -> [([Atom],[Atom])]
+-- bodies:: [Rule] -> Atom -> [([Atom],[Atom])]
+-- -- returns all bodies of rules with the atom as head
+-- bodies p a  = [((pbody r),(nbody r)) | r<-p , (kopf r)==a ]
+bodies:: [Rule] -> Atom -> [[Literal]]
 -- returns all bodies of rules with the atom as head
-bodies p a  = [((pbody r),(nbody r)) | r<-p , (kopf r)==a ]
-
+bodies p a  = [(body r) | r<-p , (kopf r)==a ]
 
 data AssignedVar = T SVar
          | F SVar
@@ -144,14 +152,14 @@ falselits:: Assignment -> [SVar]
 falselits (_,f) = f
 
 trueatoms:: Assignment -> [Atom]
-trueatoms (t,_) = concatMap lit2atoms t
+trueatoms (t,_) = concatMap atomsfromvar t
 
 falseatoms:: Assignment -> [Atom]
-falseatoms (_,f) = concatMap lit2atoms f
+falseatoms (_,f) = concatMap atomsfromvar f
 
-lit2atoms:: SVar -> [Atom]
-lit2atoms (ALit a) = [a]
-lit2atoms (BLit pb nb) = pb
+atomsfromvar:: SVar -> [Atom]
+atomsfromvar (ALit a) = [a]
+atomsfromvar (BLit b) = [ a | PAtom a <- b]
 
 -- ---------------------------------------------------------------------------------
 -- no_good generation
@@ -170,35 +178,57 @@ nogoods_of_lp p =
   ng1++ng2++ng3++ng4++ngx
 
 
-get_ng1:: ([Atom],[Atom]) -> Clause
-get_ng1 (pb,nb) =
-  ((atoms2lits pb), ((BLit pb nb):(atoms2lits nb)))
+-- get_ng1:: ([Atom],[Atom]) -> Clause
+-- get_ng1 (pb,nb) =
+--   ((atoms2vars pb), ((BLit pb nb):(atoms2vars nb)))
+get_ng1:: [Literal] -> Clause
+get_ng1 b =
+  let pb = [ a | PAtom a <- b ]
+      nb = [ a | NAtom a <- b ]
+  in
+  ((atoms2vars pb), ((BLit b):(atoms2vars nb)))
 
 
-get_ng2:: ([Atom],[Atom]) -> [Clause]
-get_ng2 (pb,nb) =
+-- get_ng2:: ([Atom],[Atom]) -> [Clause]
+-- get_ng2 (pb,nb) =
+--   let
+--     clauses1 = [ ([(BLit pb nb)],[(ALit atom)]) | atom <- pb ]
+--     clauses2 = [ ([(BLit pb nb),(ALit atom)],[]) | atom <- nb ]
+--   in
+--   clauses1 ++ clauses2
+get_ng2:: [Literal] -> [Clause]
+get_ng2 b =
   let
-    clauses1 = [ ([(BLit pb nb)],[(ALit atom)]) | atom <- pb ]
-    clauses2 = [ ([(BLit pb nb),(ALit atom)],[]) | atom <- nb ]
+    pb = [ a | PAtom a <- b ]
+    nb = [ a | NAtom a <- b ]
+    clauses1 = [ ([(BLit b)], [(ALit atom)]) | atom <- pb ]
+    clauses2 = [ ([(BLit b),(ALit atom)],[]) | atom <- nb ]
   in
   clauses1 ++ clauses2
 
 get_ng3:: [Rule] -> Atom -> [Clause]
-get_ng3 p a = [ ([(BLit pb nb)], [(ALit a)]) | (pb,nb) <- (bodies p a) ]
+-- get_ng3 p a = [ ([(BLit pb nb)], [(ALit a)]) | (pb,nb) <- (bodies p a) ]
+get_ng3 p a = [ ([(BLit b)], [(ALit a)]) | b <- (bodies p a) ]
 
 get_ng4:: [Rule] -> Atom -> Clause
-get_ng4 p a = ([(ALit a)], (bodies2lits (bodies p a)))
+get_ng4 p a = ([(ALit a)], (bodies2vars (bodies p a)))
 
 
-external_bodies:: [Rule] -> [Atom] -> [([Atom],[Atom])]
+-- external_bodies:: [Rule] -> [Atom] -> [([Atom],[Atom])]
+-- -- returns the external bodies
+-- external_bodies p u =
+--   [ ((pbody r),(nbody r)) |  r <- p, elem (kopf r) u, (intersect (pbody r) u)==[] ]
+external_bodies:: [Rule] -> [Atom] -> [[Literal]]
 -- returns the external bodies
 external_bodies p u =
-  [ ((pbody r),(nbody r)) |  r <- p, elem (kopf r) u, (intersect (pbody r) u)==[] ]
+  [ (body r) |  r <- p, elem (kopf r) u, (intersect (pbody r) u)==[] ]
 
-
-loop_nogood:: Atom -> [([Atom],[Atom])] -> Clause
+-- loop_nogood:: Atom -> [([Atom],[Atom])] -> Clause
+-- -- returns the loop nogood for an atom in an unfounded set(characterized by the external bodies)
+-- loop_nogood a bodies = ([(ALit a)], (bodies2vars bodies))
+loop_nogood:: Atom -> [[Literal]] -> Clause
 -- returns the loop nogood for an atom in an unfounded set(characterized by the external bodies)
-loop_nogood a bodies = ([(ALit a)], (bodies2lits bodies))
+loop_nogood a bodies = ([(ALit a)], (bodies2vars bodies))
 
 loop_nogoods:: [Rule] -> [Atom] -> [Clause]
 -- return the loop nogoods of the program for a given unfounded set
@@ -266,11 +296,14 @@ source a spc =
        Just x  ->  x
 
 sourcep:: Atom -> SPC -> [Atom]
+-- sourcep a spc =
+--   case (source a spc) of
+--   (BLit pb nb) ->  pb
+--   __bottom -> []
 sourcep a spc =
   case (source a spc) of
-  (BLit pb nb) ->  pb
-  __bottom -> []
-  
+  (BLit b) ->  [ a | PAtom a <- b ]
+  __bottom -> []  
 
 cyclic:: Atom -> [Rule] -> Bool
 -- test if an atom has a cyclic definition might be easier, if scc\=[]
@@ -316,7 +349,7 @@ loop_s:: Int -> [Rule] -> SPC -> Assignment ->[Atom] -> [Atom]
 loop_s num prg spc assig [] = []                                                -- no unfounded_set
 loop_s num prg spc assig s =
   let u = head s
-      eb = bodies2lits (external_bodies prg [u])
+      eb = bodies2vars (external_bodies prg [u])
       (spc2,s2,u2,found) = loop_u 0 num prg spc assig s [u] u
   in
   if found
@@ -328,19 +361,21 @@ loop_s num prg spc assig s =
 loop_u:: Int-> Int -> [Rule] -> SPC -> Assignment -> [Atom] -> [Atom] -> Atom -> (SPC, [Atom], [Atom], Bool)
 loop_u num nums prg spc assig s [] p  = (spc, s, [], False)
 loop_u num nums prg spc assig s u p  =
-  let eb = bodies2lits (external_bodies prg u)
+  let eb = bodies2vars (external_bodies prg u)
       af =  falselits assig 
   in
   if ((intersect eb af )==eb)
   then (spc, s, u, True)                                                        -- unfounded set found
   else
     let
-      (BLit pb nb) = (head (eb \\ af))
+      
+      (BLit b) = (head (eb \\ af))
+      pb = atomsfromvar (BLit b)
       scc_p = (scc p (pos_dep_graph prg))
     in
     if ((intersect pb (intersect scc_p s))==[])
     then
-      let (spc2, remove) = (shrink_u prg spc u (BLit pb nb))
+      let (spc2, remove) = (shrink_u prg spc u (BLit b))
           u2 = (u \\ remove)
           s2 = (s \\ remove)
       in
@@ -354,7 +389,7 @@ shrink_u:: [Rule] -> SPC -> [Atom] ->  SVar -> (SPC, [Atom])
 -- returns an updated spc and a list of atoms to be removed from U and S
 shrink_u prg spc [] l = (spc,[])
 shrink_u prg spc (q:qs) l =
-  if (elem l (bodies2lits (bodies prg q)))
+  if (elem l (bodies2vars (bodies prg q)))
   then
     let (spcn,remove) = (shrink_u prg spc qs l)  in
     ((add_source spcn q l), (q:remove))
@@ -389,7 +424,7 @@ cdnl_enum_loop prg s dl bl dlt dliteral ngs_p ngs assig  =
   case maybeassig of
        ASSIGNMENT assig2 -> -- no conflict
                             let
-                                all_lits = nub ((bodies2lits(bodies_p prg)) ++ (atoms2lits (atoms_p prg)))
+                                all_lits = nub ((bodies2vars(bodies_p prg)) ++ (atoms2vars (atoms_p prg)))
                                 selectable = (all_lits \\ (assignment2lits (assig2)))
                             in
                             if (selectable==[])
