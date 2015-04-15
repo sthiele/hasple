@@ -51,11 +51,12 @@ reducebasicprogram p x = [ (basicRule (kopf r) ((pbody r)\\ x) ) | r <- p, (pbod
 cn:: [Rule] -> [Atom]
 -- return the consequences of a  basic logic programm
 cn [] = []
+
 cn p = if (reducebasicprogram p (facts p)) == p
    then (facts p)
    else nub ((facts p) ++ (cn (reducebasicprogram p (facts p))))
 
-   
+
 reduct:: [Rule] -> [Atom] -> [Rule]
 -- return the reduct of a logic program with x
 reduct p x = [ (basicRule (kopf r) (pbody r)) |  r <- p,  (intersect (nbody r) x)==[] ]
@@ -67,37 +68,36 @@ anssets p = filter (\i -> (sort (cn (reduct p i)))==(sort i)) (subsets (heads_p 
 
 -- --------------------------------------------------------------------------------
 
--- data SVar = ALit Atom
---          | BLit [Atom] [Atom]
---          deriving (Show,Eq,Ord)
-data SVar = ALit Atom
+
+data SVar = ALit Atom                                                          -- Solver-Variable
          | BLit [Literal]
          deriving (Show,Eq,Ord)         
 
-__bottom:: SVar         
+__bottom:: SVar
+-- returns the of Solver-variable representing a conflict
 __bottom = (ALit __conflict)
-           
+
+
 atoms2vars:: [Atom] -> [SVar]
+-- returns a list of Solver-variables
 atoms2vars as = [(ALit a) | a <- as ]
 
+
 bodies2vars:: [[Literal]] -> [SVar]
+-- returns a list of Solver-variables
 bodies2vars bs = [(BLit b) | b <- bs ]
 
 
--- bodies_p:: [Rule] -> [([Atom],[Atom])]
--- -- returns all bodies of a program
--- bodies_p p = [((pbody r),(nbody r)) | r <-p ]
 bodies_p:: [Rule] -> [[Literal]]
 -- returns all bodies of a program
 bodies_p p = [(body r) | r <-p ]
 
 
--- bodies:: [Rule] -> Atom -> [([Atom],[Atom])]
--- -- returns all bodies of rules with the atom as head
--- bodies p a  = [((pbody r),(nbody r)) | r<-p , (kopf r)==a ]
 bodies:: [Rule] -> Atom -> [[Literal]]
 -- returns all bodies of rules with the atom as head
 bodies p a  = [(body r) | r<-p , (kopf r)==a ]
+
+
 
 data AssignedVar = T SVar
          | F SVar
@@ -140,6 +140,8 @@ subsetAss:: Assignment -> Assignment -> Bool
 -- returns true if the first assignment is a subset of the second
 subsetAss (t1,f1) (t2,f2) = (t1\\t2)==[] && (f1\\f2)==[]
 
+
+
 type Clause = Assignment
 
 assignment2lits:: Assignment -> [SVar]
@@ -165,6 +167,7 @@ atomsfromvar (BLit b) = [ a | PAtom a <- b]
 -- no_good generation
 
 
+
 nogoods_of_lp:: [Rule] -> [Clause]
 nogoods_of_lp p =
   let a = (atoms_p p)++[__conflict]
@@ -178,9 +181,6 @@ nogoods_of_lp p =
   ng1++ng2++ng3++ng4++ngx
 
 
--- get_ng1:: ([Atom],[Atom]) -> Clause
--- get_ng1 (pb,nb) =
---   ((atoms2vars pb), ((BLit pb nb):(atoms2vars nb)))
 get_ng1:: [Literal] -> Clause
 get_ng1 b =
   let pb = [ a | PAtom a <- b ]
@@ -189,13 +189,6 @@ get_ng1 b =
   ((atoms2vars pb), ((BLit b):(atoms2vars nb)))
 
 
--- get_ng2:: ([Atom],[Atom]) -> [Clause]
--- get_ng2 (pb,nb) =
---   let
---     clauses1 = [ ([(BLit pb nb)],[(ALit atom)]) | atom <- pb ]
---     clauses2 = [ ([(BLit pb nb),(ALit atom)],[]) | atom <- nb ]
---   in
---   clauses1 ++ clauses2
 get_ng2:: [Literal] -> [Clause]
 get_ng2 b =
   let
@@ -206,29 +199,25 @@ get_ng2 b =
   in
   clauses1 ++ clauses2
 
+
 get_ng3:: [Rule] -> Atom -> [Clause]
--- get_ng3 p a = [ ([(BLit pb nb)], [(ALit a)]) | (pb,nb) <- (bodies p a) ]
 get_ng3 p a = [ ([(BLit b)], [(ALit a)]) | b <- (bodies p a) ]
+
 
 get_ng4:: [Rule] -> Atom -> Clause
 get_ng4 p a = ([(ALit a)], (bodies2vars (bodies p a)))
 
 
--- external_bodies:: [Rule] -> [Atom] -> [([Atom],[Atom])]
--- -- returns the external bodies
--- external_bodies p u =
---   [ ((pbody r),(nbody r)) |  r <- p, elem (kopf r) u, (intersect (pbody r) u)==[] ]
 external_bodies:: [Rule] -> [Atom] -> [[Literal]]
 -- returns the external bodies
 external_bodies p u =
   [ (body r) |  r <- p, elem (kopf r) u, (intersect (pbody r) u)==[] ]
 
--- loop_nogood:: Atom -> [([Atom],[Atom])] -> Clause
--- -- returns the loop nogood for an atom in an unfounded set(characterized by the external bodies)
--- loop_nogood a bodies = ([(ALit a)], (bodies2vars bodies))
+
 loop_nogood:: Atom -> [[Literal]] -> Clause
 -- returns the loop nogood for an atom in an unfounded set(characterized by the external bodies)
 loop_nogood a bodies = ([(ALit a)], (bodies2vars bodies))
+
 
 loop_nogoods:: [Rule] -> [Atom] -> [Clause]
 -- return the loop nogoods of the program for a given unfounded set
@@ -237,6 +226,7 @@ loop_nogoods p u = [ (loop_nogood atom (external_bodies p u)) | atom<-u  ]
 
 -- ---------------------------------------------------------------------------------
 -- unfounded set checker
+
 
 type PDG = (Map.Map Atom [Atom])                                               -- PositiveDependencyGraph
 
@@ -255,9 +245,11 @@ pos_dep_graph2 (r:rs) accu =
       Just x  -> let naccu = Map.insert h (pb++x) accu in
                  pos_dep_graph2 rs naccu
 
+                 
 scc:: Atom -> PDG -> [Atom]
 -- returns the strongly connected component of an atom
 scc a depg = tarjan depg [] [] a
+
 
 tarjan:: PDG -> [Atom] -> [Atom] -> Atom -> [Atom]
 tarjan depg visited visited2 a  =
@@ -279,10 +271,9 @@ tarjan depg visited visited2 a  =
 
 
 
-type SPC =   (Map.Map Atom SVar)                                                -- SPC
+type SPC =   (Map.Map Atom SVar)                                               -- SPC
 emptyspc:: SPC
 emptyspc = Map.empty
-
 
 
 add_source::  SPC -> Atom -> SVar -> SPC
@@ -296,14 +287,11 @@ source a spc =
        Just x  ->  x
 
 sourcep:: Atom -> SPC -> [Atom]
--- sourcep a spc =
---   case (source a spc) of
---   (BLit pb nb) ->  pb
---   __bottom -> []
 sourcep a spc =
   case (source a spc) of
   (BLit b) ->  [ a | PAtom a <- b ]
   __bottom -> []  
+
 
 cyclic:: Atom -> [Rule] -> Bool
 -- test if an atom has a cyclic definition might be easier, if scc\=[]
@@ -316,7 +304,7 @@ unfounded_set:: [Rule] -> SPC -> Assignment -> [Atom]
 -- returns an unfounded set for the program given a partial assignment
 unfounded_set prg spc assig =
   let s = collect_nonfalse_cyclic_atoms assig prg
-      s2 = extend prg assig spc s                                               -- bis line 5
+      s2 = extend prg assig spc s                                              -- bis line 5
   in
 --   trace ("unfounded_set:\n"
 --    ++ "nonfalse cyclic atoms: " ++ (show s) ++"\n"
@@ -324,7 +312,7 @@ unfounded_set prg spc assig =
 --   ) $
   loop_s 0 prg spc assig s2
 
-  
+
 collect_nonfalse_cyclic_atoms:: Assignment -> [Rule] -> [Atom]
 collect_nonfalse_cyclic_atoms assig p =
   let atoms = nub (atoms_p p) \\ (falseatoms assig)
@@ -344,9 +332,9 @@ extend p assig spc s =
     then s++t
     else extend p assig spc (s++t)
 
-  
+
 loop_s:: Int -> [Rule] -> SPC -> Assignment ->[Atom] -> [Atom]
-loop_s num prg spc assig [] = []                                                -- no unfounded_set
+loop_s num prg spc assig [] = []                                               -- no unfounded_set
 loop_s num prg spc assig s =
   let u = head s
       eb = bodies2vars (external_bodies prg [u])
@@ -356,7 +344,7 @@ loop_s num prg spc assig s =
   then u2
   else
     loop_s 1 prg spc2 assig s2
-  
+
 
 loop_u:: Int-> Int -> [Rule] -> SPC -> Assignment -> [Atom] -> [Atom] -> Atom -> (SPC, [Atom], [Atom], Bool)
 loop_u num nums prg spc assig s [] p  = (spc, s, [], False)
@@ -365,7 +353,7 @@ loop_u num nums prg spc assig s u p  =
       af =  falselits assig 
   in
   if ((intersect eb af )==eb)
-  then (spc, s, u, True)                                                        -- unfounded set found
+  then (spc, s, u, True)                                                       -- unfounded set found
   else
     let
       
@@ -383,8 +371,8 @@ loop_u num nums prg spc assig s u p  =
     else
       let u2 = u ++ (intersect pb (intersect scc_p s)) in
       (loop_u 1 nums prg spc assig s u2 p)
-      
-    
+
+
 shrink_u:: [Rule] -> SPC -> [Atom] ->  SVar -> (SPC, [Atom])
 -- returns an updated spc and a list of atoms to be removed from U and S
 shrink_u prg spc [] l = (spc,[])
@@ -394,28 +382,29 @@ shrink_u prg spc (q:qs) l =
     let (spcn,remove) = (shrink_u prg spc qs l)  in
     ((add_source spcn q l), (q:remove))
   else (shrink_u prg spc qs l)
-
-
   
 -- ------------------------------------------------------------------------------------
--- cdnl_enum
+
+-- Conflict Driven Nogood Learning - Enumeration
 
 type DLT = [(Int,AssignedVar)]                                                    -- DecisionLevelTracker
 
-get_dlevel:: [(Int,AssignedVar)] -> AssignedVar -> Int
+get_dlevel:: DLT -> AssignedVar -> Int
 get_dlevel ((i,sl1):xs) sl2
   | sl1 == sl2 = i
   | otherwise = get_dlevel xs sl2
 
-get_dliteral:: [(Int,AssignedVar)] -> Int -> AssignedVar
+get_dliteral:: DLT -> Int -> AssignedVar
 get_dliteral ((i1,sl):xs) i2
   | i1 == i2 = sl
   | otherwise = get_dliteral xs i2
-  
-  
+
+
+
 cdnl_enum:: [Rule] -> Int -> [[Atom]]
 cdnl_enum prg s = cdnl_enum_loop prg 0 0 0 [] [] (nub (nogoods_of_lp prg)) [] ([],[])
-    
+
+
 cdnl_enum_loop:: [Rule] -> Int -> Int -> Int -> DLT -> [(Int,AssignedVar)] -> [Clause] -> [Clause] -> Assignment -> [[Atom]]
 cdnl_enum_loop prg s dl bl dlt dliteral ngs_p ngs assig  =
   let
@@ -477,6 +466,7 @@ cdnl_enum_loop prg s dl bl dlt dliteral ngs_p ngs assig  =
                                 remaining_as
 
 
+
 dlbacktrack:: DLT -> Int -> DLT
 -- backtracks the decision levels
 dlbacktrack dlt dl = [ (l,sl) | (l,sl) <- dlt, l < dl ]
@@ -486,9 +476,9 @@ backtrack:: Assignment -> DLT -> Int -> Assignment
 -- backtracks an assignment
 backtrack (t,f) dlt dl =
   ([ l | l <- t, (get_dlevel dlt (T l)) < dl ], [ l | l <- f, (get_dlevel dlt (F l)) < dl ] )
-  
-         
-         
+
+
+
 conflict_analysis:: DLT -> [Clause] -> Clause -> Assignment -> (Clause, AssignedVar, Int)
 conflict_analysis  dlt nogoods nogood assig =
 
@@ -518,7 +508,8 @@ conflict_analysis  dlt nogoods nogood assig =
       conflict_analysis dlt nogoods newnogood nextassig
 
   else conflict_analysis dlt nogoods nogood nextassig
-  
+
+
 
 get_last_assigned_lit:: DLT -> Assignment -> AssignedVar
 get_last_assigned_lit dlt (t,[]) = T (head t)
@@ -531,7 +522,7 @@ get_last_assigned_lit dlt (t,f) =
   then (T (head t))
   else (F (head f))
 
- 
+
 
 get_epsilon:: [Clause] -> AssignedVar -> Assignment -> Clause
 get_epsilon [] l prefix = ([],[]) --error ?
@@ -549,6 +540,13 @@ get_epsilon (ng:ngs) (F sigma) prefix =
   then ng
   else (get_epsilon ngs (F sigma) prefix)
 
+-- -----------------------------------------------------------------------------------------------
+
+-- Propagation
+  
+data PropRes =  ASSIGNMENT Assignment  -- result of propagation can either be a conflict or a new assignment
+         | Conflict Clause Assignment
+         deriving (Show,Eq)
   
 
 ng_prop::  [Rule] -> Int -> DLT -> [Clause] -> [Clause] -> Assignment -> [Atom] -> (PropRes,[Clause],Bool,DLT)
@@ -557,29 +555,29 @@ ng_prop prg dl dlt ngs_p ngs assig u =
     spc = emptyspc
     (maybeassig,dlt2) = (local_propagation prg dl dlt (ngs_p++ngs) assig)
   in
-  case maybeassig of                                                            -- TODO if prg is tight skip unfounded set check
+  case maybeassig of                                                           -- TODO if prg is tight skip unfounded set check
        ASSIGNMENT assig2 -> let
                                 u2 = u \\ (falseatoms assig2)
                             in
                             if (u2 == [])
-                            then                                                -- unfounded set check
+                            then                                               -- unfounded set check
                               let u3 = (unfounded_set prg spc assig2) in
                               if (u3==[])
                               then (ASSIGNMENT assig2, ngs, True, dlt2)
-                              else                                              -- learn loop nogood
+                              else                                             -- learn loop nogood
                                 let p = (head u3)
                                 in
                                 if (elem p (trueatoms assig2))
                                 then (ASSIGNMENT assig2,((loop_nogoods prg u3)++ngs),True,dlt2)
                                 else
                                   let
-                                    assig3 = extendAss assig2 (F (ALit p))      -- extend assignment
+                                    assig3 = extendAss assig2 (F (ALit p))     -- extend assignment
                                     dltn = ((dl,(F (ALit p))):dlt2)
                                   in
                                   case elemAss (F (ALit p)) assig2 of
                                     True  -> ng_prop prg dl dlt2 ngs_p ngs assig2 u3
                                     False -> ng_prop prg dl dltn ngs_p ngs assig3 u3
-                            else                                                -- learn loop nogood from u2
+                            else                                               -- learn loop nogood from u2
                               let p = (head u2)
                                   ngs2 = (loop_nogoods prg u2)++ngs
                               in
@@ -587,7 +585,7 @@ ng_prop prg dl dlt ngs_p ngs assig u =
                               then (ASSIGNMENT assig2, ngs2, True, dlt2)
                               else
                                 let
-                                  assig3 = extendAss assig2 (F (ALit p))        -- extend assignment
+                                  assig3 = extendAss assig2 (F (ALit p))       -- extend assignment
                                   dltn = ((dl,(F (ALit p))):dlt2)               
                                 in
                                 if (elemAss (F (ALit p)) assig2)
@@ -596,13 +594,9 @@ ng_prop prg dl dlt ngs_p ngs assig u =
                                 else
                                   ng_prop prg dl dltn ngs_p ngs2 assig3 u2
                                   
-       Conflict ccl cass    -> (Conflict ccl cass, ngs, False, dlt2)                          -- return conflic clause
+       Conflict ccl cass    -> (Conflict ccl cass, ngs, False, dlt2)           -- return conflic clause
 
-  
-data PropRes =  ASSIGNMENT Assignment  -- result of propagation can either be a conflict or a new assignment
-         | Conflict Clause Assignment
-         deriving (Show,Eq)
-  
+
 local_propagation::  [Rule] -> Int -> DLT -> [Clause] -> Assignment -> (PropRes,DLT)
 -- takes a program a set of nogoods and an assignment and returns a new assignment
 local_propagation p dl dlt nogoods assig =
@@ -612,10 +606,8 @@ local_propagation p dl dlt nogoods assig =
     ASSIGNMENT newassig -> if newassig == assig                         
                              then (ASSIGNMENT assig,dlt2)                      -- return new assignment
                              else local_propagation  p dl dlt2 nogoods newassig
-    Conflict ccl cass   -> (Conflict ccl cass,dlt2)                                  -- return conflict clause
+    Conflict ccl cass   -> (Conflict ccl cass,dlt2)                            -- return conflict clause
 
-
-  
 
 unitpropagate:: Int -> DLT -> Assignment -> [Clause] -> (PropRes,DLT)
 unitpropagate dl dlt assig [] = (ASSIGNMENT assig, dlt)
@@ -639,9 +631,9 @@ unitpropagate dl dlt assig (ng:ngs) =
                               unitpropagate dl dlt2 assig2 ngs                                     
 
     ASSIGNMENT ([],[])  ->  unitpropagate dl dlt assig ngs
-    Conflict ccl cass   ->  (Conflict ccl cass,dlt)                                  -- return conflict clause
+    Conflict ccl cass   ->  (Conflict ccl cass,dlt)                            -- return conflict clause
 
-    
+
 unitresult:: Assignment -> Clause -> PropRes     
 unitresult assig nogood =
   case (without nogood assig) of

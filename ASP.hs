@@ -70,9 +70,11 @@ data Rule = Rule { kopf :: Atom
                  , body :: [Literal]
                  }
 basicRule::Atom -> [Atom] -> Rule
+-- creates a basic rule 
 basicRule h a = Rule h (fmap PAtom a)
 
 normalRule::Atom -> [Atom] -> [Atom] -> Rule
+-- creates a normal rule
 normalRule h pa na = Rule h ((fmap PAtom pa)++(fmap NAtom na))
 
 instance Show Rule where
@@ -82,14 +84,16 @@ instance Show Rule where
 instance Eq Rule where
   (Rule h1 b1) == (Rule h2 b2) = h1==h2 && b1==b2
   
-
 instance Ord Rule where
   compare (Rule h b1) (Rule h2 b2) = compare h h2
 
 
 pbody:: Rule -> [Atom]
+-- returns the positive body atoms of a rule
 pbody (Rule _ body) = [ a | (PAtom a) <- body]
+
 nbody:: Rule -> [Atom]
+-- returns the negative body atoms of a rule
 nbody (Rule _ body) = [ a | (NAtom a) <- body]
 
 

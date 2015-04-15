@@ -164,14 +164,20 @@ get_query_rulesx rules acc found a =
 
 get_query_rules2:: [Rule] -> Atom -> [Rule]
 get_query_rules2 [] _ = []
+-- get_query_rules2 (r:rs) a =
+--   case matchAtom (kopf r) a of
+--        Just binding ->  let gr = groundRule2 r binding
+--                             grs = get_query_rules2 rs a
+--                         in
+--                         nub (gr: grs)
+--        Nothing ->       get_query_rules2 rs a
 get_query_rules2 (r:rs) a =
   case matchAtom (kopf r) a of
-       Just binding ->  let gr = groundRule2 r binding
+       Just binding ->  let gr = applySubs binding r
                             grs = get_query_rules2 rs a
                         in
                         nub (gr: grs)
        Nothing ->       get_query_rules2 rs a
-
 
 -- ------------------------------------------------------------
 

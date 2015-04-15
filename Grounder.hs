@@ -22,7 +22,7 @@ module Grounder (
    emptyAtomMap,
    insert_atoms,
    groundRule,
-   groundRule2,     
+   applySubs
 ) where
   
 import ASP
@@ -165,60 +165,74 @@ merge2 (k,v) ys =
 
 -- --------------------------------------------------------------
 
-subsTerm:: [(Term,Term)] -> Term -> Term
-subsTerm m (Constant x) = (Constant x)
-subsTerm m (Identifier x) = (Identifier x)
-subsTerm m (Variable x) =
+class Substitutable s where
+  applySubs:: [(Term,Term)] -> s -> s
+  is_ground:: s -> Bool
+
+instance Substitutable Term where
+  applySubs m (Constant x) = (Constant x)
+  applySubs m (Identifier x) = (Identifier x)
+  applySubs m (Variable x) =
               case lookup (Variable x) m of
                 Just y -> y
                 Nothing -> (Variable x)
 
-subsTerm m (Addition x y) =
-  let xsubs = subsTerm m x
-      ysubs = subsTerm m y
-  in
-  (Addition xsubs ysubs)
+  applySubs m (Addition x y) =
+    let xsubs = applySubs m x
+        ysubs = applySubs m y
+    in
+    (Addition xsubs ysubs)
 
-subsTerm m (Subtraction x y) =
-  let xsubs = subsTerm m x
-      ysubs = subsTerm m y
-  in
-  (Subtraction xsubs ysubs)
+  applySubs m (Subtraction x y) =
+    let xsubs = applySubs m x
+        ysubs = applySubs m y
+    in
+    (Subtraction xsubs ysubs)
 
-subsTerm m (Multiplication x y) =
-  let xsubs = subsTerm m x
-      ysubs = subsTerm m y
-  in
-  (Multiplication xsubs ysubs)
+  applySubs m (Multiplication x y) =
+    let xsubs = applySubs m x
+        ysubs = applySubs m y
+    in
+    (Multiplication xsubs ysubs)
 
-subsTerm m (Negation x) =
-  let xsubs = subsTerm m x in
-  (Negation xsubs)
+  applySubs m (Negation x) =
+    let xsubs = applySubs m x in
+    (Negation xsubs)
 
+  is_ground (Constant x) = True
+  is_ground (Identifier x) = True
+  is_ground _ = False
 
+                
+instance Substitutable Atom where
+  applySubs m (Atom pred []) = (Atom pred [])
+  applySubs m (Atom pred x)  = (Atom pred (map (applySubs m) x))
+  
+  is_ground (Atom pred args) = and (map is_ground args)
+  
+instance Substitutable Literal where
+  applySubs m (PAtom a) = (PAtom (applySubs m a) )
+  applySubs m (NAtom a) = (NAtom (applySubs m a))
+  
+  is_ground (PAtom a) = is_ground a
+  is_ground (NAtom a) = is_ground a
 
-subsAtom:: [(Term,Term)] -> Atom -> Atom
-subsAtom m (Atom pred []) = (Atom pred [])
-subsAtom m (Atom pred x)  = (Atom pred (map (subsTerm m) x))
+  
+instance Substitutable Rule where
+  applySubs m (Rule h b) = (Rule (applySubs m h) (map (applySubs m) b) )
+  
+  is_ground (Rule h b) = is_ground h && and (map is_ground b)
 
-subsLit:: [(Term,Term)] -> Literal -> Literal
-subsLit m (PAtom a) = (PAtom (subsAtom m a) )
-subsLit m (NAtom a) = (NAtom (subsAtom m a))
-
-groundRule2:: Rule -> [(Term,Term)] -> Rule
-groundRule2 (Rule h b) m= (Rule (subsAtom m h) (map (subsLit m) b) )
-
-
--- alternative
 groundRule:: AtomMap ->  Rule -> [Rule]
 groundRule am r =
-  if (is_groundRule r)
+  if (is_ground r)
   then [r]
   else
-    let c =  getbindingsAtoms (pbody r) am in
-    nub (map (groundRule2 r) c)
-
-
+    let listofsubs =  getbindingsAtoms (pbody r) am
+        subsapps = map applySubs listofsubs
+    in
+    map ($r) subsapps
+      
 groundProgram:: [Rule] -> [Rule]
 groundProgram p =
   let am = insert_atoms emptyAtomMap (heads_p  p)
@@ -229,29 +243,3 @@ groundProgram p =
   else groundProgram pg1
 
 
-
-is_groundRule:: Rule -> Bool
--- return true if a rule does not contain variables
-is_groundRule (Rule h b) = is_groundAtom h && is_groundLits b
-
-is_groundLits:: [Literal] -> Bool
--- returns true if the literals do not contain variables
-is_groundLits [] = True
-is_groundLits (x:xs) = is_groundLit x && is_groundLits xs
-
-is_groundLit:: Literal -> Bool
--- returns true if the literal does not contain variables
-is_groundLit (PAtom a) = is_groundAtom a
-is_groundLit (NAtom a) = is_groundAtom a
-
-
-is_groundAtom:: Atom -> Bool
--- returns true if the atom does not contain variables
-is_groundAtom (Atom pred args) = is_groundTerms args
-
-is_groundTerms:: [Term] -> Bool
--- returns true if the list of Terms only consists of constants
-is_groundTerms [] = True
-is_groundTerms ((Constant x):xs) = is_groundTerms xs
-is_groundTerms ((Identifier x):xs) = is_groundTerms xs
-is_groundTerms _ = False
