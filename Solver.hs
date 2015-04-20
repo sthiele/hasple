@@ -99,107 +99,12 @@ bodies:: [Rule] -> Atom -> [[Literal]]
 bodies p a  = [(body r) | r<-p , (kopf r)==a ]
 
 
-
-joinClause:: Clause -> Clause -> Clause
-joinClause (t1,f1) (t2,f2) = ( nub (t1++t2),nub (f1++f2))
-
-
-joinAss:: Assignment -> Assignment -> Assignment
--- joinAss (t1,f1) (t2,f2) = ( nub (t1++t2),nub (f1++f2))
-joinAss [] [] = []
-joinAss (a1:as1) (a2:as2) = 
-  if a1==a2
-       then (a1:(joinAss as1 as2))
-       else
-       if a1 == 0
-         then (a2:(joinAss as1 as2))
-	 else (a1:(joinAss as1 as2))
-       
-
--- extendAss:: Assignment -> AssignedVar -> Assignment
--- extendAss (ts,fs) (T l) = ((l:ts),fs)
--- extendAss (ts,fs) (F l) = (ts,(l:fs))
-
--- without:: Assignment -> Assignment -> Assignment
--- without (t1,f1) (t2,f2) = ( (t1\\t2),(f1\\f2))
-without:: Clause -> Assignment -> Clause
-without (t,f) [] = (t,f)
-without cl as = without2 cl as 1
-
-without2:: Clause -> Assignment -> Int -> Clause
-without2 cl [] _ = cl
-without2 cl (0:as) n = without2 cl as (n+1)
-without2 (t,f) (1:as) n = without2 ((delete n t),f) as (n+1)
-without2 (t,f) ((-1):as) n = without2 (t,(delete n f)) as (n+1)
-
-
-assWithoutSL:: Assignment -> AssignedVar -> Assignment
-assWithoutSL a (T l) = (take (l-1) a) ++ [0] ++ (drop l a)
-assWithoutSL a (F l) = (take (l-1) a) ++ [0] ++ (drop l a)    
-
-
-clauseWithoutSL:: Clause -> AssignedVar -> Clause
-clauseWithoutSL (t,f) (T l) = ((delete l t),f)
-clauseWithoutSL (t,f) (F l) = (t,(delete l f))
-
-
-
-signedLits:: Assignment -> [AssignedVar]
--- signedLits (t,f) = [ (T l) | l<-t ] ++ [ (F l) | l<-f ]
-signedLits x = signedLits2 x 1
-signedLits2 [] n = [] 
-signedLits2 (1:r) n = ((T n):(signedLits2 r (n+1))) 
-signedLits2 (0:r) n = (signedLits2 r (n+1)) 
-signedLits2 ((-1):r) n = ((F n):(signedLits2 r (n+1))) 
-
-subsetAss:: Assignment -> Assignment -> Bool
--- returns true if the first assignment is a subset of the second
--- subsetAss (t1,f1) (t2,f2) = (t1\\t2)==[] && (f1\\f2)==[]
-subsetAss [] [] = True
-subsetAss (0:r) (0:s) = subsetAss r s
-subsetAss (1:r) (1:s) = subsetAss r s
-subsetAss ((-1):r) ((-1):s) = subsetAss r s
-subsetAss _ _ = False
-
 get_vars:: [CClause] -> [SPVar]
 get_vars [] = []
 get_vars (c:cs) = nub ((get_varsc c) ++ (get_vars cs))
 
 get_varsc:: CClause -> [SPVar]
 get_varsc (t,f) = nub (t ++ f)
-
-
-type Clause = ([SVar],[SVar])
-
-
-get_unassigned:: Assignment -> [SVar]
-get_unassigned a = get_unassigned2 a 1
-get_unassigned2 [] _ = []
-get_unassigned2 (0:as) n = (n:(get_unassigned2 as (n+1)))
-get_unassigned2 (_:as) n = (get_unassigned2 as (n+1))
-
-
-
-
-
-assignment2lits:: Assignment -> [SVar]
--- assignment2lits (t,f) = 
-assignment2lits x = assignment2lits2 x 1
-assignment2lits2:: Assignment -> Int -> [SVar]
-assignment2lits2 [] n = []
-assignment2lits2 (0:as) n = assignment2lits2 as (n+1)
-assignment2lits2 ((-1):as) n = (n:(assignment2lits2 as (n+1)))
-assignment2lits2 (1:as) n = (n:(assignment2lits2 as (n+1)))
-
-
--- truelits:: Assignment -> [SVar]
--- -- truelits (t,_) = t
--- truelits x = truelits2 x 1
--- truelits2 [] n = []
--- truelits2 (1:as) n = (n:(truelits2 as (n+1)))
--- truelits2 (_:as) n = (truelits2 as (n+1))
-
-
 
 
 falselits:: Assignment -> [SPVar] -> [SPVar]
@@ -209,8 +114,7 @@ falselits2 [] spvars n = []
 falselits2 ((-1):as) spvars n = ((get_lit n spvars):(falselits2 as spvars (n+1)))
 falselits2 (_:as) spvars n = (falselits2 as spvars (n+1))
 
--- trueatoms:: Assignment -> [Atom]
--- trueatoms (t,_) = concatMap atomsfromvar t
+
 trueatoms:: Assignment -> [SPVar] -> [Atom]
 trueatoms x spvar = trueatoms2 x spvar 1
 trueatoms2:: Assignment -> [SPVar] -> Int -> [Atom]
@@ -230,8 +134,7 @@ get_svar2 s (f:ls) n =
   then n
   else get_svar2 s ls (n+1) 
 
--- falseatoms:: Assignment -> [Atom]
--- falseatoms (_,f) = concatMap atomsfromvar f
+
 falseatoms:: Assignment -> [SPVar] -> [Atom]
 falseatoms x spvar = falseatoms2 x spvar 1
 falseatoms2:: Assignment -> [SPVar] -> Int -> [Atom]
@@ -328,13 +231,6 @@ transf4 spv (v:vs) n =
      else transf4 spv vs (n+1)
 
 
-
-elemClause:: AssignedVar -> Clause -> Bool
-elemClause a ([],[]) = False
-elemClause (T l) (t,f) = elem l t
-elemClause (F l) (t,f) = elem l f
-
-     
 -- ---------------------------------------------------------------------------------
 -- unfounded set checker
 
@@ -417,10 +313,6 @@ unfounded_set prg spc assig spvars=
   let s = collect_nonfalse_cyclic_atoms assig spvars prg
       s2 = extend prg assig spvars spc s                                              -- bis line 5
   in
---   trace ("unfounded_set:\n"
---    ++ "nonfalse cyclic atoms: " ++ (show s) ++"\n"
---    ++ "extended: " ++ (show s2) ++"\n"
---   ) $
   loop_s 0 prg spc assig spvars s2
 
 
@@ -520,11 +412,6 @@ cdnl_enum prg s =
       assi = [0 | x <- [1..l]]
       ngs =  transforms cngs vars
   in
---   trace ("init:\n"
---    ++ "prg: " ++ (show prg) ++"\n"
---    ++ "vars: " ++ (show vars) ++"\n"
---    ++ "assi: " ++ (show assi) ++"\n"
---   ) $
   cdnl_enum_loop prg 0 0 0 [] [] ngs [] assi vars
 
 
@@ -535,10 +422,7 @@ cdnl_enum_loop prg s dl bl dlt dliteral ngs_p ngs assig spvars =
   in
   case maybeassig of
        ASSIGNMENT assig2 -> -- no conflict
--- 		            trace ("no_conf\n") $
                             let
---                                 all_lits = nub ((bodies2vars(bodies_p prg)) ++ (atoms2vars (atoms_p prg)))
---                                 selectable = (all_lits \\ (assignment2lits (assig2)))
                                 selectable = get_unassigned assig2
                             in
                             if (selectable==[])
@@ -559,14 +443,6 @@ cdnl_enum_loop prg s dl bl dlt dliteral ngs_p ngs assig spvars =
                                     dlt4 = ((dl2,(invert sigma_d)): dlt3)
                                     remaining_as = cdnl_enum_loop prg s2 dl2 bl2 dlt4 dliteral2 ngs_p ngs2 assig4 spvars
                                 in
--- 				trace ("solution found:\n" 
--- 				++ "dlt "++ (show dlt2) ++"\n"
--- 				++ "bt dl" ++ (show dl) ++ "\n"
--- 				++ "invert "++ (show sigma_d) ++"\n"
--- 				++ "old assi "++ (show assig2) ++"\n"
--- 				++ "backtrac "++ (show assig3) ++"\n"
--- 				++ "new assi "++ (show assig4) ++"\n"
--- 				)$
                                 ((nub (trueatoms assig2 spvars)):remaining_as)
                             else                                                                        -- select new lit
                               let sigma_d = head selectable
@@ -574,14 +450,9 @@ cdnl_enum_loop prg s dl bl dlt dliteral ngs_p ngs assig spvars =
                                   dliteral2 = (((dl+1),(T sigma_d)):dliteral)
                                   assig3 = assign assig2 (T sigma_d)
                               in
--- 			      trace ("select new var\n"
--- 			      ++ "sel="++ (show sigma_d)++"\n"
--- 			      ) $
                               cdnl_enum_loop prg s (dl+1) bl dltn dliteral2 ngs_p ngs2 assig3 spvars
 
        Conflict ccl cass ->   -- conflict
---                             trace ("conflict found \n"
---                             ) $
                             if dl==0
                             then []                                                                     -- no more answer sets
                             else                                                                        -- conflict analysis and backtrack
@@ -611,9 +482,6 @@ dlbacktrack dlt dl = [ (l,sl) | (l,sl) <- dlt, l < dl ]
 
 
 backtrack:: Assignment -> DLT -> Int -> Assignment
--- backtracks an assignment
--- backtrack (t,f) dlt dl =
---   ([ l | l <- t, (get_dlevel dlt (T l)) < dl ], [ l | l <- f, (get_dlevel dlt (F l)) < dl ] )
 backtrack assig dlt dl = backtrack2 assig 1 dlt dl
 backtrack2 [] _ dlt dl = []
 backtrack2 (0:as) n dlt dl = (0:(backtrack2 as (n+1) dlt dl))
@@ -630,8 +498,8 @@ backtrack2 ((-1):as) n dlt dl =
 
 conflict_analysis:: DLT -> [Clause] -> Clause -> Assignment -> (Clause, AssignedVar, Int)
 conflict_analysis  dlt nogoods nogood assig =
-  let c = get_last_assigned_lit dlt assig
-      nextassig = assWithoutSL assig c
+  let c = get_first_assigned_var assig
+      nextassig = unassign assig c
   in
   if elemClause c nogood
   then
@@ -656,28 +524,6 @@ conflict_analysis  dlt nogoods nogood assig =
       conflict_analysis dlt nogoods newnogood nextassig
 
   else conflict_analysis dlt nogoods nogood nextassig
-
-
-
--- get_last_assigned_lit:: DLT -> Assignment -> AssignedVar
--- get_last_assigned_lit dlt (t,[]) = T (head t)
--- get_last_assigned_lit dlt ([],f) = F (head f)
--- get_last_assigned_lit dlt (t,f) =
---   let dl_t = get_dlevel dlt (T (head t))
---       dl_f = get_dlevel dlt (F (head f))
---   in
---   if dl_t > dl_f
---   then (T (head t))
---   else (F (head f))
-
-
--- now more get first assigned variable in list
-get_last_assigned_lit:: DLT -> Assignment -> AssignedVar
-get_last_assigned_lit dlt a = get_last_assigned_lit2 a 1
-get_last_assigned_lit2 [] _ = error "no more assigned variable"
-get_last_assigned_lit2 (0:as) n = get_last_assigned_lit2 as (n+1)
-get_last_assigned_lit2 (1:as) n = (T n)
-get_last_assigned_lit2 ((-1):as) n = (F n)
 
 
 get_epsilon:: [Clause] -> AssignedVar -> Assignment -> Clause
@@ -715,24 +561,15 @@ ng_prop prg dl dlt ngs_p ngs assig spvars u =
        ASSIGNMENT assig2 -> let
                                 u2 = u \\ (falseatoms assig2 spvars)
                             in
---       		            trace ("ng_prop\n"
---       		              ++ "in u " ++ (show u) ++"\n"
---       		              ++ "in falseatoms " ++ (show (falseatoms assig2 spvars)) ++"\n"
--- 			      ++ " new assig " ++ (show assig2) ++"\n" 
--- 			      ++ " u2 " ++ (show u2) ++"\n"
--- 			    ) $   
                             if (u2 == [])
                             then                                               -- unfounded set check
                               let u3 = (unfounded_set prg spc assig2 spvars) in
--- 		              trace (" u3" ++ (show u3) ++"\n" ) $     
                               if (u3==[])
                               then (ASSIGNMENT assig2, ngs, True, dlt2)
                               else                                             -- learn loop nogood
                                 let 
--- 				    p = (head u3)
 				    p = get_svar ((ALit (head u3))) spvars
                                 in
---                                 if (elem p (trueatoms assig2 spvars))
 				if (elemAss (T p) assig2)
                                 then 
                                   let cngs_of_loop = (loop_nogoods prg u3)
@@ -749,12 +586,10 @@ ng_prop prg dl dlt ngs_p ngs assig spvars u =
                                     False -> ng_prop prg dl dltn ngs_p ngs assig3 spvars u3
                             else                                               -- learn loop nogood from u2
                               let
--- 				  p = (head u2)
 				  p = get_svar ((ALit (head u2))) spvars
 				  cngs_of_loop = (loop_nogoods prg u2)
                                   ngs2 = (transforms cngs_of_loop spvars) ++ngs
                               in
---                               if (elem p (trueatoms assig2))
 			      if (elemAss (T p) assig2) 
                               then (ASSIGNMENT assig2, ngs2, True, dlt2)
                               else
