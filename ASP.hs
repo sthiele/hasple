@@ -17,11 +17,10 @@
 
 module ASP (
    Term(..), Atom(..), __conflict, Literal(..),Rule(..), basicRule, normalRule,
-   pbody, nbody, heads_p, atoms_p,      
+   pbody, nbody, heads_p, atoms_p,
   ) where
     
 import Data.List (nub)                  
-import Data.Maybe 
 -- --------------------------------------------------------------
 
 data Term = Constant Integer
@@ -107,4 +106,6 @@ atoms_p :: [Rule] -> [Atom]
 -- returns the atoms of all rules without the contradiction symbol 
 atoms_p rules =
   filter (\i -> i/=__conflict )
-  (nub (map kopf rules)++ (concatMap pbody rules) ++ (concatMap pbody rules))  
+  (nub (map kopf rules)++ (concatMap pbody rules) ++ (concatMap pbody rules))
+
+

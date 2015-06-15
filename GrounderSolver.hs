@@ -39,7 +39,7 @@ show_as:: [[Atom]] -> [Char]
 show_as [] = "No Answersets"
 show_as (x:xs) = (show_as2 (x:xs) 1)
 
-show_as2:: [[Atom]] -> Integer -> [Char]
+show_as2:: [[Atom]] -> Int -> [Char]
 show_as2 [] n = ""
 show_as2 (x:xs) n = "Answer " ++ (show n) ++ ":\n" ++ show_as3 x ++"\n"++ (show_as2 xs (n+1))
 
@@ -314,6 +314,12 @@ Right mp3 = readProgram mpr3
 
 mpr4 = "f(a).\n"
     ++ "f(b).\n"
+    ++ "f(c).\n"
+    ++ "f(d).\n"
+    ++ "f(e).\n"
+    ++ "f(f).\n"
+    ++ "f(g).\n"
+    ++ "f(h).\n"    
     ++ "q(X):- f(X), not p(X), not r(X).\n"
     ++ "p(X) :-f(X), not q(X), not r(X).\n"
     ++ "r(X) :-f(X), not p(X), not q(X).\n"
