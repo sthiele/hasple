@@ -275,11 +275,17 @@ shrink_u prg spc (q:qs) l =
 
 type DLT = [(Int,SignedVar)]                                                    -- DecisionLevelTracker
 
-get_dlevel:: DLT -> SignedVar -> Int
+-- get_dlevel:: DLT -> SignedVar -> Int
+--
+-- get_dlevel ((i,sl1):xs) sl2
+--   | sl1 == sl2 = i
+--   | otherwise = get_dlevel xs sl2
 
-get_dlevel ((i,sl1):xs) sl2
-  | sl1 == sl2 = i
-  | otherwise = get_dlevel xs sl2
+-- get_dlevel:: Assignment -> SignedVar -> Int
+--
+-- get_dlevel ((i,sl1):xs) sl2
+--   | sl1 == sl2 = i
+
 
 get_dliteral:: DLT -> Int -> SignedVar
 
@@ -298,14 +304,14 @@ cdnl_enum prg s =
       assi = initialAssignment l
       ngs =  transforms cngs vars
   in
-  cdnl_enum_loop prg 0 1 0 [] [] ngs [] assi vars
+  cdnl_enum_loop prg 0 1 0 [] ngs [] assi vars
 
 
-cdnl_enum_loop:: [Rule] -> Int -> Int -> Int -> DLT -> [(Int,SignedVar)] -> [Clause] -> [Clause] -> Assignment -> [SPVar] -> [[Atom]]
+cdnl_enum_loop:: [Rule] -> Int -> Int -> Int -> [(Int,SignedVar)] -> [Clause] -> [Clause] -> Assignment -> [SPVar] -> [[Atom]]
 
-cdnl_enum_loop prg s dl bl dlt dliteral ngs_p ngs assig spvars =
+cdnl_enum_loop prg s dl bl dliteral ngs_p ngs assig spvars =
   let
-    (maybeassig,ngs2,dlt2) = ng_prop prg dl dlt ngs_p ngs assig spvars []
+    (maybeassig,ngs2) = ng_prop prg dl ngs_p ngs assig spvars []
   in
   case maybeassig of
        ASSIGNMENT assig2 -> -- no conflict
@@ -324,20 +330,20 @@ cdnl_enum_loop prg s dl bl dlt dliteral ngs_p ngs assig spvars =
                                     dl2 = dl-1
                                     bl2 = dl2
                                     dliteral2 = dlbacktrack dliteral dl
-                                    assig3 = backtrack assig2 dlt2 dl
-                                    dlt3 = dlbacktrack dlt2 dl
+                                    assig3 = backtrack assig2 dl
+--                                     dlt3 = dlbacktrack dlt2 dl
                                     assig4 = assign assig3 (invert sigma_d) dl2                         -- invert last decision literal
-                                    dlt4 = ((dl2,(invert sigma_d)): dlt3)
-                                    remaining_as = cdnl_enum_loop prg s2 dl2 bl2 dlt4 dliteral2 ngs_p ngs2 assig4 spvars
+--                                     dlt4 = ((dl2,(invert sigma_d)): dlt3)
+                                    remaining_as = cdnl_enum_loop prg s2 dl2 bl2 dliteral2 ngs_p ngs2 assig4 spvars
                                 in
                                 ((nub (trueatoms assig2 spvars)):remaining_as)
                             else                                                                        -- select new lit
                               let sigma_d = head selectable
-                                  dltn = (((dl+1),(T sigma_d)):dlt2)                                    -- extend assignment
+--                                   dltn = (((dl+1),(T sigma_d)):dlt2)                                    -- extend assignment
                                   dliteral2 = (((dl+1),(T sigma_d)):dliteral)
                                   assig3 = assign assig2 (T sigma_d) (dl+1)
                               in
-                              cdnl_enum_loop prg s (dl+1) bl dltn dliteral2 ngs_p ngs2 assig3 spvars
+                              cdnl_enum_loop prg s (dl+1) bl dliteral2 ngs_p ngs2 assig3 spvars
 
        Conflict ccl cass ->   -- conflict
                             if dl==1
@@ -345,18 +351,18 @@ cdnl_enum_loop prg s dl bl dlt dliteral ngs_p ngs assig spvars =
                             else                                                                        -- conflict analysis and backtrack
                               if bl < dl
                               then
-                                let (nogood, sigma_uip, dl3) = conflict_analysis  dlt2 (ngs_p++ngs2) ccl cass
+                                let (nogood, sigma_uip, dl3) = conflict_analysis (ngs_p++ngs2) ccl cass
                                     ngs3 = (nogood:ngs2)
-                                    assig3 = assign (backtrack cass dlt2 dl3) sigma_uip 1
+                                    assig3 = assign (backtrack cass dl3) sigma_uip 1
                                 in
-                                cdnl_enum_loop prg s dl3 bl dlt2 dliteral ngs_p ngs3 assig3 spvars
+                                cdnl_enum_loop prg s dl3 bl dliteral ngs_p ngs3 assig3 spvars
                               else
                                 let sigma_d = (get_dliteral dliteral (dl))
                                     dl2 = dl-1
                                     bl2 = dl2
-                                    assig3 = assign (backtrack cass dlt2 dl2) (invert sigma_d) dl2
-                                    dlt3 = ((dl2,(invert sigma_d)):dlt2)
-                                    remaining_as = cdnl_enum_loop prg s dl2 bl2 dlt3 dliteral ngs_p ngs2 assig3 spvars
+                                    assig3 = assign (backtrack cass dl2) (invert sigma_d) dl2
+--                                     dlt3 = ((dl2,(invert sigma_d)):dlt2)
+                                    remaining_as = cdnl_enum_loop prg s dl2 bl2 dliteral ngs_p ngs2 assig3 spvars
                                 in
                                 remaining_as
 
@@ -367,20 +373,20 @@ dlbacktrack:: DLT -> Int -> DLT
 dlbacktrack dlt dl = [ (l,sl) | (l,sl) <- dlt, l < dl ]
 
 
-backtrack:: Assignment -> DLT -> Int -> Assignment
-backtrack a [] dl = a
-
-backtrack a ((l,lit):dlt) dl =
-  if l < dl
-  then a
-  else backtrack (unassign a lit) dlt dl
-
-
+-- backtrack:: Assignment -> DLT -> Int -> Assignment
+-- backtrack a [] dl = a
+--
+-- backtrack a ((l,lit):dlt) dl =
+--   if l < dl
+--   then a
+--   else backtrack (unassign a lit) dlt dl
 
 
 
-conflict_analysis:: DLT -> [Clause] -> Clause -> Assignment -> (Clause, SignedVar, Int)
-conflict_analysis  dlt nogoods nogood assig =
+
+
+conflict_analysis:: [Clause] -> Clause -> Assignment -> (Clause, SignedVar, Int)
+conflict_analysis nogoods nogood assig =
   let c = get_first_assigned_var assig
       nextassig = unassign assig c
   in
@@ -388,14 +394,14 @@ conflict_analysis  dlt nogoods nogood assig =
   then
     let reduced_nogood = clauseWithoutSL nogood c
         sigma = c
-        dl_sigma = get_dlevel dlt sigma
+        dl_sigma = get_dlevel assig sigma
         (t,f)=nogood
-        rho = ([ (T l) | l<-t, (get_dlevel dlt (T l))==dl_sigma ] ++ [ (F l) | l<-f, (get_dlevel dlt (F l))==dl_sigma ])
+        rho = ([ (T l) | l<-t, (get_dlevel assig (T l))==dl_sigma ] ++ [ (F l) | l<-f, (get_dlevel assig (F l))==dl_sigma ])
     in
     if (length rho)==1
     then
       let (t,f) = reduced_nogood
-          k = maximum( (map (get_dlevel dlt) (map T t)) ++ (map (get_dlevel dlt) (map F f))++ [0])
+          k = maximum( (map (get_dlevel assig) (map T t)) ++ (map (get_dlevel assig) (map F f))++ [0])
       in
       (nogood, sigma, k)
     else
@@ -404,9 +410,9 @@ conflict_analysis  dlt nogoods nogood assig =
         reduced_eps = clauseWithoutSL eps (invert sigma)
         newnogood = joinClause reduced_nogood reduced_eps
       in
-      conflict_analysis dlt nogoods newnogood nextassig
+      conflict_analysis nogoods newnogood nextassig
 
-  else conflict_analysis dlt nogoods nogood nextassig
+  else conflict_analysis nogoods nogood nextassig
 
 
 get_epsilon:: [Clause] -> SignedVar -> Assignment -> Clause
@@ -448,22 +454,21 @@ data PropRes =  ASSIGNMENT Assignment  -- result of propagation can either be a 
          deriving (Show,Eq)
 
 
-ng_prop::  [Rule] -> Int -> DLT -> [Clause] -> [Clause] -> Assignment -> [SPVar] -> [Atom] -> (PropRes,[Clause],DLT)
-
-ng_prop prg dl dlt ngs_p ngs assig spvars u =
+ng_prop::  [Rule] -> Int -> [Clause] -> [Clause] -> Assignment -> [SPVar] -> [Atom] -> (PropRes,[Clause])
+ng_prop prg dl ngs_p ngs assig spvars u =
   let
     spc = emptyspc
     nogoods= ngs_p++ngs
-    (maybeassig,dlt2) = (local_propagation prg dl dlt (cycle nogoods) 0 (length nogoods) assig)
+    maybeassig = (local_propagation prg dl (cycle nogoods) 0 (length nogoods) assig)
   in
-  case maybeassig of                                                           -- TODO if prg is tight skip unfounded set check
+  case maybeassig of                                                            -- TODO if prg is tight skip unfounded set check
        ASSIGNMENT assig2 -> let u2 = u \\ (falseatoms assig2 spvars) in
                             if null u2
-                            then                                               -- unfounded set check
+                            then                                                -- unfounded set check
                               let u3 = (unfounded_set prg spc assig2 spvars) in
                               if null u3
-                              then (ASSIGNMENT assig2, ngs, dlt2)
-                              else                                             -- learn loop nogood
+                              then (ASSIGNMENT assig2, ngs)
+                              else                                              -- learn loop nogood
                                 let
 				    p = get_svar ((ALit (head u3))) spvars
                                 in
@@ -472,64 +477,60 @@ ng_prop prg dl dlt ngs_p ngs assig spvars u =
                                   let cngs_of_loop = (loop_nogoods prg u3)
 				      ngs_of_loop = transforms cngs_of_loop spvars
 				  in
-                                  (ASSIGNMENT assig2,(ngs_of_loop++ngs),dlt2)
+                                  (ASSIGNMENT assig2,(ngs_of_loop++ngs))
                                 else
                                   let
-                                    assig3 = assign assig2 (F p)  dl              -- extend assignment
-                                    dltn = ((dl,(F p)):dlt2)
+                                    assig3 = assign assig2 (F p)  dl            -- extend assignment
                                   in
                                   case elemAss (F p) assig2 of
-                                    True  -> ng_prop prg dl dlt2 ngs_p ngs assig2 spvars u3
-                                    False -> ng_prop prg dl dltn ngs_p ngs assig3 spvars u3
-                            else                                               -- learn loop nogood from u2
+                                    True  -> ng_prop prg dl ngs_p ngs assig2 spvars u3
+                                    False -> ng_prop prg dl ngs_p ngs assig3 spvars u3
+                            else                                                -- learn loop nogood from u2
                               let
 				  p = get_svar ((ALit (head u2))) spvars
 				  cngs_of_loop = (loop_nogoods prg u2)
                                   ngs2 = (transforms cngs_of_loop spvars) ++ngs
                               in
 			      if elemAss (T p) assig2
-                              then (ASSIGNMENT assig2, ngs2,  dlt2)
+                              then (ASSIGNMENT assig2, ngs2)
                               else
                                 let
-                                  assig3 = assign assig2 (F p) dl      -- extend assignment
-                                  dltn = ((dl,(F p)):dlt2)
+                                  assig3 = assign assig2 (F p) dl               -- extend assignment
                                 in
                                 if (elemAss (F p) assig2)
                                 then
-                                  ng_prop prg dl dlt2 ngs_p ngs2 assig2 spvars u2
+                                  ng_prop prg dl ngs_p ngs2 assig2 spvars u2
                                 else
-                                  ng_prop prg dl dltn ngs_p ngs2 assig3 spvars u2
+                                  ng_prop prg dl ngs_p ngs2 assig3 spvars u2
 
-       Conflict ccl cass -> (Conflict ccl cass, ngs, dlt2)           -- return conflic clause
+       Conflict ccl cass -> (Conflict ccl cass, ngs)                            -- return conflic clause
 
 
-local_propagation::  [Rule] -> Int -> DLT -> [Clause] -> Int -> Int -> Assignment -> (PropRes,DLT)
+local_propagation::  [Rule] -> Int -> [Clause] -> Int -> Int -> Assignment -> PropRes
 -- takes a program a cyclic list of nogoods and an assignment and returns a propagation result
-local_propagation p dl dlt (ng:nogoods) done todo assig =
-  let (up,dlt2) = unitresult dl dlt assig ng
+local_propagation p dl (ng:nogoods) done todo assig =
+  let up = unitresult dl assig ng
   in
   case up of
     ASSIGNMENT newassig -> if newassig == assig
                            then
                              if (done+1) == todo
-                             then (ASSIGNMENT assig,dlt2)                      -- return new assignment
-                             else local_propagation  p dl dlt2 nogoods (done+1) todo assig
-                           else local_propagation  p dl dlt2 nogoods 0 todo newassig
-    Conflict ccl cass   -> (Conflict ccl cass,dlt)                             -- return conflict clause
+                             then ASSIGNMENT assig                              -- return new assignment
+                             else local_propagation  p dl nogoods (done+1) todo assig
+                           else local_propagation  p dl nogoods 0 todo newassig
+    Conflict ccl cass   -> Conflict ccl cass                                    -- return conflict clause
 
 
-unitresult:: Int -> DLT -> Assignment -> Clause -> (PropRes,DLT)
+unitresult:: Int -> Assignment -> Clause -> PropRes
 
-unitresult dl dlt assig nogood =
+unitresult dl assig nogood =
   case (without nogood assig) of
-    ([],[])  -> (Conflict nogood assig,dlt)
-    ([l],[]) -> let dlt2 = ((dl,(F l)):dlt) in
-		if isassigned l assig
-                then (ASSIGNMENT assig, dlt)
-                else (ASSIGNMENT (assign assig (F l) dl),dlt2)
-    ([],[l]) -> let dlt2 = ((dl,(T l)):dlt) in
-		if isassigned l assig
-                then (ASSIGNMENT assig, dlt)
-                else (ASSIGNMENT (assign assig (T l) dl),dlt2)
-    _        -> (ASSIGNMENT assig,dlt)                                             -- nothing can be derived
+    ([],[])  -> Conflict nogood assig
+    ([l],[]) -> if isassigned l assig
+                then ASSIGNMENT assig
+                else ASSIGNMENT (assign assig (F l) dl)
+    ([],[l]) -> if isassigned l assig
+                then ASSIGNMENT assig
+                else ASSIGNMENT (assign assig (T l) dl)
+    _        -> ASSIGNMENT assig                                                -- nothing can be derived
 

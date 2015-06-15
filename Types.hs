@@ -24,6 +24,8 @@ module Types (
    initialAssignment,
    assign,
    unassign,
+   backtrack,
+   get_dlevel,
    elemAss,
    isassigned,
    get_unassigned,
@@ -76,9 +78,25 @@ assign:: Assignment -> SignedVar -> Int -> Assignment
 assign a (T l) dl = update a (fromList [(l,dl)])
 assign a (F l) dl = update a (fromList [(l,-dl)])
 
+get_dlevel:: Assignment -> SignedVar -> Int
+get_dlevel a (T l) = (a ! l)
+get_dlevel a (F l) = -(a ! l)
+
 unassign:: Assignment -> SignedVar -> Assignment
 unassign a (T l) = update a (fromList [(l,0)])
 unassign a (F l) = update a (fromList [(l,0)])
+
+backtrack:: Assignment -> Int -> Assignment
+backtrack a dl = backtrack2 a dl 0
+
+backtrack2 a dl i =
+  if i < (Vector.length a)
+  then
+    if abs ( a ! i ) < dl
+    then backtrack2 a dl (i+1)
+    else
+      backtrack2 (unassign a (T i)) dl (i+1)
+    else a
 
 elemAss:: SignedVar -> Assignment -> Bool
 elemAss (F l) a = (a ! l) < 0
