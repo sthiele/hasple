@@ -187,20 +187,18 @@ joinClause:: Clause -> Clause -> Clause
 joinClause (t1,f1) (t2,f2) = ( nub (t1 Prelude.++ t2),nub (f1 Prelude.++ f2))
 
 without:: Clause -> Assignment -> Clause
-without cl a = if Vector.null a
-               then cl
-               else without2 cl a 0
+without cl a = without2 cl a 0
 without2:: Clause -> Assignment -> Int -> Clause
 without2 (t,f) a n =
   if (n < Vector.length a)
-                  then
-                    let val = a ! n in
-                    case val of
-                      0 -> without2 (t,f) a (n+1)
-                      _ -> if val > 0
-                           then without2 ((delete n t),f) a (n+1)
-                           else without2 (t,(delete n f)) a (n+1)
-                  else (t,f)
+  then
+    let val = a ! n in
+    case val of
+      0 -> without2 (t,f) a (n+1)
+      _ -> if val > 0
+           then without2 ((delete n t),f) a (n+1)
+           else without2 (t,(delete n f)) a (n+1)
+  else (t,f)
 
 
 clauseWithoutSL:: Clause -> SignedVar -> Clause
