@@ -6,7 +6,7 @@ A simple Answer Set solver in Haskell
 compile
 -------
 
-ghc hasple.hs
+ghc -O2 hasple.hs
 
 
 usage
