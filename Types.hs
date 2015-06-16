@@ -40,7 +40,12 @@ module Types (
    joinClause,
    without,
    clauseWithoutSL,
-   elemClause
+   elemClause,
+   filter_dlevel,
+   get_max_dlevel,
+   only,
+   RES(..),
+   resolve,
   ) where
 import ASP
 import SPVar
@@ -181,33 +186,167 @@ falseatoms2 a spvars n =
 
 
 -- -----------------------------------------
-type Clause = ([SVar],[SVar])
+-- type Clause = ([SVar],[SVar])
+type Clause = Vector Int
+
 
 joinClause:: Clause -> Clause -> Clause
-joinClause (t1,f1) (t2,f2) = ( nub (t1 Prelude.++ t2),nub (f1 Prelude.++ f2))
+-- joinClause (t1,f1) (t2,f2) = ( nub (t1 Prelude.++ t2),nub (f1 Prelude.++ f2))
+joinClause c1 c2 = joinClause2 c1 c2 0
+joinClause2 c1 c2 i =
+    if i < Vector.length c1
+    then
+      let x = c2 ! i in
+      joinClause2 (update c1 (fromList [(i,x)])) c2 (i+1)
+    else c1
+
 
 without:: Clause -> Assignment -> Clause
-without cl a = without2 cl a 0
-without2:: Clause -> Assignment -> Int -> Clause
-without2 (t,f) a n =
-  if (n < Vector.length a)
-  then
-    let val = a ! n in
-    case val of
-      0 -> without2 (t,f) a (n+1)
-      _ -> if val > 0
-           then without2 ((delete n t),f) a (n+1)
-           else without2 (t,(delete n f)) a (n+1)
-  else (t,f)
-
+without c a = without2 c a 0
+without2 c a i =
+    if i < Vector.length c
+    then
+      if (a ! i) == (c ! i)
+      then
+      without2 (update c (fromList [(i,0)])) a (i+1)
+      else without2 c a (i+1)
+    else c
 
 clauseWithoutSL:: Clause -> SignedVar -> Clause
-clauseWithoutSL (t,f) (T l) = ((delete l t),f)
-clauseWithoutSL (t,f) (F l) = (t,(delete l f))
+clauseWithoutSL c (T l) = if (c ! l) > 0
+                          then unassign c (T l)   -- should be SVar l
+                          else c
+clauseWithoutSL c (F l) = if (c ! l) < 0
+                          then unassign c (F l)   -- should be SVar l
+                          else c
 
 
 elemClause:: SignedVar -> Clause -> Bool
-elemClause a ([],[]) = False
-elemClause (T l) (t,f) = Prelude.elem l t
-elemClause (F l) (t,f) = Prelude.elem l f
+elemClause (T l) c = (c ! l) > 0
+elemClause (F l) c = (c ! l) < 0
 
+
+
+filter_dlevel:: Clause -> Assignment -> Int -> Clause
+-- get rho in conflict_analysis
+filter_dlevel c a l = filter_dlevel2 c a l 0
+filter_dlevel2 c a l i =
+  if i < Vector.length c
+     then
+       if (a ! i)==l
+       then filter_dlevel2 c a l (i+1)
+       else
+         let c' = update c (fromList [(i,0)]) in
+         filter_dlevel2 c' a l (i+1)
+     else c
+
+
+get_max_dlevel:: Clause -> Assignment -> Int
+-- determin k in conflict_analysis
+get_max_dlevel c a = get_max_dlevel2 c a 0 0
+
+get_max_dlevel2 c a i akku =
+  if i < Vector.length c
+  then
+    if (a!i) > akku
+    then get_max_dlevel2 c a (i+1) (a!i)
+    else get_max_dlevel2 c a (i+1) akku
+  else akku
+
+
+only:: Clause -> SignedVar -> Bool
+-- returns True if the Signed Literal is the only in the assignment
+only c svar = only2 c svar 0
+
+only2 c (T l) i =
+  if i < Vector.length c
+  then
+    if i==l
+    then
+      if (c!l) == 1
+      then only2 c (T l) (i+1)
+      else False
+    else
+      if (c!l) == 0
+      then  only2 c (T l) (i+1)
+      else False
+  else True
+
+only2 c (F l) i =
+  if i < Vector.length c
+  then
+    if i==l
+    then
+      if (c!l) == (-1)
+      then only2 c (F l) (i+1)
+      else False
+    else
+      if (c!l) == 0
+      then  only2 c (F l) (i+1)
+      else False
+  else True
+
+
+data RES =  Res SignedVar
+         | NIX
+         | CONF
+
+
+resolve:: Clause -> Assignment -> RES
+resolve c a = resolvefirst c a 0
+
+resolvefirst c a i =
+  if i < Vector.length c
+  then
+     if (c!i) == 0
+     then resolvefirst c a (i+1)
+     else
+       if (c!i) > 0 
+       then
+         if (a!i) > 0
+         then resolvefirst c a (i+1)
+         else resolvesecond c a (i+1) (F i)
+       else -- c!i < 0
+         if (a!i) < 0
+         then resolvefirst c a (i+1) 
+         else resolvesecond c a (i+1) (T i)
+  else CONF
+
+resolvesecond:: Clause -> Assignment -> Int -> SignedVar -> RES
+resolvesecond c a i akku =
+  if i < Vector.length c
+  then
+     if (c!i) == 0
+     then resolvesecond c a (i+1) akku
+     else
+       if (c!i) > 0
+       then
+         if (a!i) > 0
+         then resolvesecond c a (i+1) akku
+         else NIX
+       else -- c!i < 0
+         if (a!i) < 0
+         then resolvesecond c a (i+1) akku
+         else NIX
+ else Res akku
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  

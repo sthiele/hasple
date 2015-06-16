@@ -84,6 +84,11 @@ get_svar2 s (f:ls) n =
   else get_svar2 s ls (n+1)
 
 
+get_svarx:: [SPVar] -> SPVar -> SVar
+get_svarx x l = get_svar2 l x 0
+
+
+
 transforms:: [CClause] -> [SPVar] -> [Clause]
 
 transforms [] _ = []
@@ -91,14 +96,32 @@ transforms [] _ = []
 transforms (c:cs) spvars = ((transform c spvars):(transforms cs spvars))
 
 
+-- transform:: CClause -> [SPVar] -> Clause
+-- transform (t,f) spvars = ((transf2 t spvars), (transf2 f spvars))
+-- 
+-- transf2:: [SPVar] -> [SPVar] -> [SVar]
+-- transf2 [] _ = []
+-- 
+-- transf2 (spv:spvs) l = ((get_svar spv l):(transf2 spvs l))
+
+
 transform:: CClause -> [SPVar] -> Clause
-transform (t,f) spvars = ((transf2 t spvars), (transf2 f spvars))
+transform (t,f) spvars =
+  let l = length spvars
+      a = initialAssignment l
+      tsvars = map (get_svarx spvars) t
+      fsvars = map (get_svarx spvars) f
+      assi =   assign_trues (assign_falses a fsvars) tsvars
+  in
+  assi
 
-transf2:: [SPVar] -> [SPVar] -> [SVar]
-transf2 [] _ = []
+assign_trues:: Clause -> [SVar] -> Clause
+assign_trues a [] = a
+assign_trues a (v:vs) = assign_trues (assign a (T v) 1) vs
 
-transf2 (spv:spvs) l = ((get_svar spv l):(transf2 spvs l))
-
+assign_falses:: Clause -> [SVar] -> Clause
+assign_falses a [] = a
+assign_falses a (v:vs) = assign_falses (assign a (F v) 1) vs
 
 -- -----------------------------------------------------------------------------
 -- unfounded set checker
@@ -369,13 +392,16 @@ conflict_analysis nogoods nogood assig =
     let reduced_nogood = clauseWithoutSL nogood c
         sigma = c
         dl_sigma = get_dlevel assig sigma
-        (t,f)=nogood
-        rho = ([ (T l) | l<-t, (get_dlevel assig (T l))==dl_sigma ] ++ [ (F l) | l<-f, (get_dlevel assig (F l))==dl_sigma ])
+--         (t,f)=nogood
+--         rho = ([ (T l) | l<-t, (get_dlevel assig (T l))==dl_sigma ] ++ [ (F l) | l<-f, (get_dlevel assig (F l))==dl_sigma ])
+        rho = filter_dlevel nogood assig dl_sigma
     in
-    if (length rho)==1
+    if (length (get_assigned rho))==1
     then
-      let (t,f) = reduced_nogood
-          k = maximum( (map (get_dlevel assig) (map T t)) ++ (map (get_dlevel assig) (map F f))++ [0])
+      let
+--           (t,f) = reduced_nogood
+--           k = maximum( (map (get_dlevel assig) (map T t)) ++ (map (get_dlevel assig) (map F f))++ [0])
+          k = get_max_dlevel reduced_nogood assig
       in
       (nogood, sigma, k)
     else
@@ -389,19 +415,26 @@ conflict_analysis nogoods nogood assig =
   else conflict_analysis nogoods nogood nextassig
 
 
+
+
+
+  
 get_epsilon:: [Clause] -> SignedVar -> Assignment -> Clause
 
-get_epsilon [] l prefix = ([],[]) -- error ?
+-- get_epsilon [] l prefix = ([],[]) -- error ?
+get_epsilon [] l prefix = error "error in get_epsilon" -- error ?
 
 get_epsilon (ng:ngs) (T sigma) prefix =
   let temp = without ng prefix in
-  if temp == ([],[sigma])
+--   if temp == ([],[sigma])
+  if only temp (F sigma)
   then ng
   else (get_epsilon ngs (T sigma) prefix)
 
 get_epsilon (ng:ngs) (F sigma) prefix =
   let temp = without ng prefix in
-  if temp == ([sigma],[])
+--   if temp == ([sigma],[])
+  if only temp (T sigma)
   then ng
   else (get_epsilon ngs (F sigma) prefix)
 
@@ -483,14 +516,25 @@ local_propagation p dl (ng:nogoods) done todo assig =
 
 unitresult:: Int -> Assignment -> Clause -> PropRes
 
-unitresult dl assig nogood =
-  case (without nogood assig) of
-    ([],[])  -> Conflict nogood assig
-    ([l],[]) -> if isassigned l assig
-                then ASSIGNMENT assig
-                else ASSIGNMENT (assign assig (F l) dl)
-    ([],[l]) -> if isassigned l assig
-                then ASSIGNMENT assig
-                else ASSIGNMENT (assign assig (T l) dl)
-    _        -> ASSIGNMENT assig                                                -- nothing can be derived
+-- unitresult dl assig nogood =
+--   case (without nogood assig) of
+--     ([],[])  -> Conflict nogood assig
+--     ([l],[]) -> if isassigned l assig
+--                 then ASSIGNMENT assig
+--                 else ASSIGNMENT (assign assig (F l) dl)
+--     ([],[l]) -> if isassigned l assig
+--                 then ASSIGNMENT assig
+--                 else ASSIGNMENT (assign assig (T l) dl)
+--     _        -> ASSIGNMENT assig                                                -- nothing can be derived
 
+
+unitresult dl assig nogood =
+  case (resolve nogood assig) of
+    CONF  -> Conflict nogood assig
+    Res (T l) -> if isassigned l assig
+                 then ASSIGNMENT assig
+                 else ASSIGNMENT (assign assig (T l) dl)
+    Res (F l) -> if isassigned l assig
+                 then ASSIGNMENT assig
+                 else ASSIGNMENT (assign assig (F l) dl)
+    _         -> ASSIGNMENT assig                                                -- nothing can be derived
