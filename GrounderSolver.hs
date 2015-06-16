@@ -280,44 +280,45 @@ test_new x=
 -- myprg2 = myprg1++"r(b).\n"
 
 
-mpr1a = " a :- not b.\n"
-Right mp1a = readProgram mpr1a
 
 mpr1 = "a :- not b, not c.\n"
     ++ "b :- not a, not c.\n"
     ++ "c :- not a, not b.\n"
 Right mp1 = readProgram mpr1
 
-mpr1b = "q(a) :- not p(a).\n"
+mpr2 = " a :- not b.\n"
+Right mp2 = readProgram mpr2
+
+mpr3 = "q(a) :- not p(a).\n"
      ++ "q(b) :- not p(b).\n"
      ++ "p(a) :- not q(a).\n"
      ++ "p(b) :- not q(b).\n"
-Right mp1b = readProgram mpr1b
+Right mp3 = readProgram mpr3
 
-mpr2 = "a:-b.\n"
+mpr4 = "a:-b.\n"
     ++ "b:-a.\n"
-Right mp2 = readProgram mpr2
+Right mp4 = readProgram mpr4
 
-mpr2b = "a :- b.\n"
+mpr5 = "a :- b.\n"
      ++ "b :- not a.\n"
-Right mp2b = readProgram mpr2b
+Right mp5 = readProgram mpr5
 
-mpr2c = "a :- b.\n"
+mpr6 = "a :- b.\n"
      ++ "b :- not a.\n"
      ++ "b :- x.\n"
      ++ "x :- not y.\n"
      ++ "y :- not x.\n"
-Right mp2c = readProgram mpr2c
+Right mp6 = readProgram mpr6
 
-mpr2d = "a :- b.\n"
+mpr7 = "a :- b.\n"
      ++ "b :- c.\n"
      ++ "c :- not a.\n"
      ++ "c :- x.\n"
      ++ "x :- not y.\n"
      ++ "y :- not x.\n"
-Right mp2d = readProgram mpr2d
+Right mp7 = readProgram mpr7
 
-mpr3 = "f(a).\n"
+mpr8 = "f(a).\n"
     ++ "f(b).\n"
     ++ "f(c).\n"
     ++ "f(d).\n"
@@ -325,9 +326,9 @@ mpr3 = "f(a).\n"
     ++ "f(f).\n"
     ++ "q(X):- f(X), not p(X). \n"
     ++ "p(X) :-f(X), not q(X). \n"
-Right mp3 = readProgram mpr3
+Right mp8 = readProgram mpr8
 
-mpr4 = "f(a).\n"
+mpr9 = "f(a).\n"
     ++ "f(b).\n"
     ++ "f(c).\n"
     ++ "f(d).\n"
@@ -339,20 +340,20 @@ mpr4 = "f(a).\n"
     ++ "p(X) :-f(X), not q(X), not r(X).\n"
     ++ "r(X) :-f(X), not p(X), not q(X).\n"
     ++ ":- r(X).\n"
-Right mp4 = readProgram mpr4
+Right mp9 = readProgram mpr9
 
-mpr5 = ":- r(X).\n"
-Right mp5 = readProgram mpr5
+mpr10 = ":- r(X).\n"
+Right mp10 = readProgram mpr10
 
-mpr6 = "a.\n"
+mpr11 = "a.\n"
     ++ "b :- not a.\n"
     ++ "c :- a, not d.\n"
     ++ "d :- not c, not e.\n"
     ++ "e :- b.\n"
     ++ "e :- e.\n"
-Right mp6 = readProgram mpr6
+Right mp11 = readProgram mpr11
 
-mpr7 = "a :- not b.\n"
+mpr12 = "a :- not b.\n"
     ++ "b :- not a.\n"
     ++ "c :- a.\n"
     ++ "c :- b, d.\n"
@@ -360,9 +361,9 @@ mpr7 = "a :- not b.\n"
     ++ "d :- e.\n"
     ++ "e :- b, not a.\n"
     ++ "e :- c, d.\n"
-Right mp7 = readProgram mpr7
+Right mp12 = readProgram mpr12
 
-mpr8 = "f(c).\n"
+mpr13 = "f(c).\n"
     ++ "q :- f(X), not p, not r.\n"
     ++ "p :-f(X), not q, not r\n."
     ++ "r :-f(X), not p, not q.\n"

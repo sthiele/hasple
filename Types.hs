@@ -103,7 +103,7 @@ backtrack a dl = backtrack2 a dl 0
 backtrack2 a dl i =
   if i < (Vector.length a)
   then
-    if abs ( a ! i ) < dl
+    if (abs (a!i)) < dl
     then backtrack2 a dl (i+1)
     else
       backtrack2 (unassign a (T i)) dl (i+1)
@@ -362,7 +362,7 @@ get_sigma c a i = get_sigma2 c a 0
 -- get_sigma c a 6 = get_sigma2 c a 0
 
 get_sigma2 c a i =
---   trace ("get_sigma: " Prelude.++ (show c) Prelude.++ (show a) Prelude.++ (show i)) $
+  trace ("get_sigma: " Prelude.++ (show c) Prelude.++ (show a) Prelude.++ (show i)) $
   if i < Vector.length c
   then
     let prefix = unassign a (T i) in  -- TODO unassign latest

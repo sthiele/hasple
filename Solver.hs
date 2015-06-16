@@ -359,6 +359,7 @@ cdnl_enum_loop prg s dl bl dliteral ngs_p ngs assig spvars =
                                     ngs3 = (nogood:ngs2)
                                     assig3 = assign (backtrack cass dl3) sigma_uip dl3
                                 in
+                                trace ("res: " ++ (show cass) ++ (show sigma_uip) ++ (show dl3) ++ (show assig3) ) $
                                 cdnl_enum_loop prg s dl3 bl dliteral ngs_p ngs3 assig3 spvars
                               else
                                 let sigma_d = (get_dliteral dliteral (dl))
