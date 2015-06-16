@@ -21,6 +21,7 @@ module Types (
    unsign,
    invert,
    Assignment(..),
+   asslen,
    initialAssignment,
    assign,
    unassign,
@@ -46,12 +47,13 @@ module Types (
    only,
    RES(..),
    resolve,
+   get_sigma,
   ) where
 import ASP
 import SPVar
 import Data.List (nub, delete)
 import Data.Vector.Unboxed as Vector
-
+import Debug.Trace
 
 -- -------------------
 type SVar = Int
@@ -78,6 +80,10 @@ initialAssignment l =
   let x = fromList [0 | x <- [1..l]] in
   x
 
+asslen:: Assignment -> Int
+asslen a  =
+  trace ( "asslen: " Prelude.++ (show a)) $
+  Vector.length a
 
 assign:: Assignment -> SignedVar -> Int -> Assignment
 assign a (T l) dl = update a (fromList [(l,dl)])
@@ -206,10 +212,18 @@ without c a = without2 c a 0
 without2 c a i =
     if i < Vector.length c
     then
-      if (a ! i) == (c ! i)
+      if (c!i) > 0
       then
-      without2 (update c (fromList [(i,0)])) a (i+1)
-      else without2 c a (i+1)
+        if (a!i) > 0
+        then without2 (update c (fromList [(i,0)])) a (i+1)
+        else without2 c a (i+1)
+      else
+        if (c!i) < 0
+        then
+          if (a!i) < 0
+          then without2 (update c (fromList [(i,0)])) a (i+1)
+          else without2 c a (i+1)
+        else without2 c a (i+1)
     else c
 
 clauseWithoutSL:: Clause -> SignedVar -> Clause
@@ -256,36 +270,37 @@ get_max_dlevel2 c a i akku =
 
 only:: Clause -> SignedVar -> Bool
 -- returns True if the Signed Literal is the only in the assignment
-only c svar = only2 c svar 0
+only c (T l) =
+  if (c!l) == 1
+  then only2 c l 0
+  else False
+  
+only c (F l) =
+  if (c!l) == (-1)
+  then only2 c l 0
+  else False
 
-only2 c (T l) i =
+  
+only2 c l i =
   if i < Vector.length c
   then
-    if i==l
-    then
-      if (c!l) == 1
-      then only2 c (T l) (i+1)
-      else False
+    if (c!i) == 0
+    then only2 c l (i+1)
     else
-      if (c!l) == 0
-      then  only2 c (T l) (i+1)
+      if l==i
+      then  only3 c (i+1)
       else False
   else True
 
-only2 c (F l) i =
+only3 c i =
   if i < Vector.length c
   then
-    if i==l
-    then
-      if (c!l) == (-1)
-      then only2 c (F l) (i+1)
-      else False
-    else
-      if (c!l) == 0
-      then  only2 c (F l) (i+1)
-      else False
+    if (c!i) == 0
+    then only3 c (i+1)
+    else False
   else True
 
+  
 
 data RES =  Res SignedVar
          | NIX
@@ -334,7 +349,33 @@ resolvesecond c a i akku =
 
 
 
+get_sigma:: Clause -> Assignment -> (SignedVar, Assignment)
+-- used in conflict_analysis
+get_sigma c a = get_sigma2 c a 0
 
+get_sigma2 c a i =
+  if i < Vector.length c
+  then
+    let prefix = unassign a (T i) in  -- TODO unassign latest
+    if (c!i) > 0
+    then
+      let sigma = (T i)
+          temp = without c prefix
+      in
+      if only temp sigma
+      then (sigma, prefix)
+      else get_sigma2 c prefix (i+1)   -- try next sigma
+    else
+      if (c!i) > 0
+      then
+        let sigma = (F i)
+            temp = without c prefix
+        in
+        if only temp sigma
+        then (sigma,prefix)
+        else get_sigma2 c prefix (i+1)  -- try next sigma
+      else get_sigma2 c prefix (i+1)    -- try next sigma
+  else error "no sigma found"
 
 
 

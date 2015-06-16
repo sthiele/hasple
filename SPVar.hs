@@ -15,7 +15,7 @@ module SPVar (
 where
 import ASP
 import Data.List (nub, delete, intersect)
-import Debug.Trace
+-- import Debug.Trace
 
 
 data SPVar = ALit Atom                                                          -- Solver-Variable
