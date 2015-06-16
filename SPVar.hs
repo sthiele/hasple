@@ -15,7 +15,7 @@ module SPVar (
 where
 import ASP
 import Data.List (nub, delete, intersect)
-
+import Debug.Trace
 
 
 data SPVar = ALit Atom                                                          -- Solver-Variable
@@ -56,23 +56,11 @@ get_varsc:: CClause -> [SPVar]
 get_varsc (t,f) = nub (t ++ f)
 
 
-
 get_lit:: Int -> [SPVar] -> SPVar
 
 get_lit 0 spvars = head spvars
 
 get_lit n (v:vs) = get_lit (n-1) vs
-
--- get_svar:: SPVar -> [SPVar] -> SVar
--- get_svar l x = get_svar2 l x 1
--- 
--- get_svar2:: SPVar -> [SPVar] -> Int -> SVar
--- get_svar2 s (f:ls) n =
---   if s==f
---   then n
---   else get_svar2 s ls (n+1)
-
-
 
 
 atomsfromvar:: SPVar -> [Atom]
@@ -94,7 +82,7 @@ nogoods_of_lp p =
       ng1 = map get_ng1 b           -- body is true if all lits of it are true -- not ( body=false and all lits=true)
       ng2 = concatMap get_ng2 b     -- body is true if all lits of it are true -- not ( body=true and one lit=false)
       ng3 = concatMap (get_ng3 p) a -- a head is true if one body is true -- not ( head=false and one body=true)
-      ng4 = map (get_ng4 p) a       -- a head is true if one body is true -- not ( head=true and all bodies=false=
+      ng4 = map (get_ng4 p) a       -- a head is true if one body is true -- not ( head=true and all bodies=false)
       ngx = [([__bottom],[])]       -- no conflict literal
   in
   ng1++ng2++ng3++ng4++ngx

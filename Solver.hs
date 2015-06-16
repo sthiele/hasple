@@ -172,7 +172,7 @@ tarjan depg visited visited2 a  =
 
 
 
-type SPC =   (Map.Map Atom SPVar)                                               -- SourcePointerC
+type SPC =   (Map.Map Atom SPVar)                                               -- SourcePointerCollection
 emptyspc:: SPC
 
 emptyspc = Map.empty
@@ -262,7 +262,6 @@ loop_u num nums prg spc assig spvars s u p =
   then (spc, s, u, True)                                                        -- unfounded set found
   else
     let
-
       (BLit b) = (head (eb \\ af))
       pb = atomsfromvar (BLit b)
       scc_p = (scc p (pos_dep_graph prg))
@@ -322,15 +321,18 @@ cdnl_enum_loop prg s dl bl dliteral ngs_p ngs assig spvars =
   let
     (maybeassig,ngs2) = ng_prop prg dl ngs_p ngs assig spvars []
   in
---   trace( "cdnl_loop"
---       ++ (show dliteral) ++ "\n"
---       )
+--   trace( "cdnl_loop:\n"
+--   ++ (show spvars) ++ "\n"
+--   ++ "assig:" ++ (show assig) ++ "\n"
+--   ++ "dlits: " ++ (show dliteral)
+--   )
 --   $
   case maybeassig of
        ASSIGNMENT assig2 -> -- no conflict
                             let
                                 selectable = get_unassigned assig2
                             in
+--                             trace( "Prop: " ++(show assig2) ++ "\n") $
                             if null selectable
                             then                                                                       -- if all atoms then answer set found
                               let s2= s-1 in
@@ -356,6 +358,7 @@ cdnl_enum_loop prg s dl bl dliteral ngs_p ngs assig spvars =
                               cdnl_enum_loop prg s (dl+1) bl dliteral2 ngs_p ngs2 assig3 spvars
 
        Conflict ccl cass -> -- conflict
+--                             trace( "Conf: " ++(show cass) ++ "\n") $
                             if dl==1
                             then []                                                                     -- no more answer sets
                             else                                                                        -- conflict analysis and backtrack
@@ -455,7 +458,11 @@ ng_prop prg dl ngs_p ngs assig spvars u =
     maybeassig = (local_propagation prg dl (cycle nogoods) 0 (length nogoods) assig)
   in
   case maybeassig of                                                            -- TODO if prg is tight skip unfounded set check
-       ASSIGNMENT assig2 -> let u2 = u \\ (falseatoms assig2 spvars) in
+    ASSIGNMENT assig2 ->
+--        trace ( "unfound set check: "
+--          ++ (show u)
+--        ) $
+       let u2 = u \\ (falseatoms assig2 spvars) in   -- non false atoms
                             if null u2
                             then                                                -- unfounded set check
                               let u3 = (unfounded_set prg spc assig2 spvars) in
@@ -496,7 +503,7 @@ ng_prop prg dl ngs_p ngs assig spvars u =
                                 else
                                   ng_prop prg dl ngs_p ngs2 assig3 spvars u2
 
-       Conflict ccl cass -> (Conflict ccl cass, ngs)                            -- return conflic clause
+    Conflict ccl cass -> (Conflict ccl cass, ngs)                               -- return conflic clause
 
 
 local_propagation::  [Rule] -> Int -> [Clause] -> Int -> Int -> Assignment -> PropRes
@@ -515,26 +522,17 @@ local_propagation p dl (ng:nogoods) done todo assig =
 
 
 unitresult:: Int -> Assignment -> Clause -> PropRes
-
--- unitresult dl assig nogood =
---   case (without nogood assig) of
---     ([],[])  -> Conflict nogood assig
---     ([l],[]) -> if isassigned l assig
---                 then ASSIGNMENT assig
---                 else ASSIGNMENT (assign assig (F l) dl)
---     ([],[l]) -> if isassigned l assig
---                 then ASSIGNMENT assig
---                 else ASSIGNMENT (assign assig (T l) dl)
---     _        -> ASSIGNMENT assig                                                -- nothing can be derived
-
-
 unitresult dl assig nogood =
+--   trace ( "unitres: " ++ (show nogood) ++ (show assig) ++ " = "
+--   ) $
   case (resolve nogood assig) of
     CONF  -> Conflict nogood assig
-    Res (T l) -> if isassigned l assig
+    Res (T l) -> {-trace ( (show (T l)) ++ "\n") $-}
+                 if isassigned l assig
                  then ASSIGNMENT assig
                  else ASSIGNMENT (assign assig (T l) dl)
-    Res (F l) -> if isassigned l assig
+    Res (F l) -> {-trace ( (show (F l)) ++ "\n") $-}
+                 if isassigned l assig
                  then ASSIGNMENT assig
                  else ASSIGNMENT (assign assig (F l) dl)
-    _         -> ASSIGNMENT assig                                                -- nothing can be derived
+    _         -> ASSIGNMENT assig                                               -- nothing can be derived

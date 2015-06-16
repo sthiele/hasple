@@ -253,31 +253,31 @@ test_new x=
       Right prg ->  putStrLn (show_as (gr_solve prg))
 
 
-ground_facts     = "f(a).\n"
-                ++ "f(b).\n"
-                ++ "f(c).\n"
---                 ++ "r(b).\n"
-nonground_facts  = "x(X).\n"
---                 ++ "r(Y).\n"
-ground_rules     = "f(b) :- f(a). \n"
---                 ++ "a(a1) :- q(a). \n"
---                 ++ "a(b1) :- q(b). \n"
-
-nonground_rules  = "y(X) :- x(X). \n"
-                ++ "q(X) :- f(X), not p(X), not r(X). \n"
-                ++ "p(X) :- f(X), not q(X), not r(X). \n"
-                ++ "r(X) :- f(X), not p(X), not q(X). \n"
-                ++ "q2(X) :- f(X), not p2(X), not r2(X). \n"
-                ++ "p2(X) :- f(X), not q2(X), not r2(X), not a(a1). \n"
-                ++ "r2(X) :- f(X), not p2(X), not q2(X). \n"
-
-ground_ics       = ":- r(a).\n"
-                ++ ":- a(a1),a(b1).\n"
-nonground_ics    = ":- r(X)."
-
-myprg1 = ground_facts ++ nonground_facts ++ ground_rules ++ nonground_rules ++ ground_ics ++ nonground_ics
-
-myprg2 = myprg1++"r(b).\n"
+-- ground_facts     = "f(a).\n"
+--                 ++ "f(b).\n"
+--                 ++ "f(c).\n"
+-- --                 ++ "r(b).\n"
+-- nonground_facts  = "x(X).\n"
+-- --                 ++ "r(Y).\n"
+-- ground_rules     = "f(b) :- f(a). \n"
+-- --                 ++ "a(a1) :- q(a). \n"
+-- --                 ++ "a(b1) :- q(b). \n"
+-- 
+-- nonground_rules  = "y(X) :- x(X). \n"
+--                 ++ "q(X) :- f(X), not p(X), not r(X). \n"
+--                 ++ "p(X) :- f(X), not q(X), not r(X). \n"
+--                 ++ "r(X) :- f(X), not p(X), not q(X). \n"
+--                 ++ "q2(X) :- f(X), not p2(X), not r2(X). \n"
+--                 ++ "p2(X) :- f(X), not q2(X), not r2(X), not a(a1). \n"
+--                 ++ "r2(X) :- f(X), not p2(X), not q2(X). \n"
+-- 
+-- ground_ics       = ":- r(a).\n"
+--                 ++ ":- a(a1),a(b1).\n"
+-- nonground_ics    = ":- r(X)."
+-- 
+-- myprg1 = ground_facts ++ nonground_facts ++ ground_rules ++ nonground_rules ++ ground_ics ++ nonground_ics
+-- 
+-- myprg2 = myprg1++"r(b).\n"
 
 
 mpr1a = " a :- not b.\n"
