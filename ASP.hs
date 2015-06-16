@@ -106,6 +106,6 @@ atoms_p :: [Rule] -> [Atom]
 -- returns the atoms of all rules without the contradiction symbol 
 atoms_p rules =
   filter (\i -> i/=__conflict )
-  (nub (map kopf rules)++ (concatMap pbody rules) ++ (concatMap pbody rules))
+  (nub (map kopf rules)++ (concatMap pbody rules) ++ (concatMap nbody rules))
 
 
