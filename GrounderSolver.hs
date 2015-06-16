@@ -302,6 +302,21 @@ mpr2b = "a :- b.\n"
      ++ "b :- not a.\n"
 Right mp2b = readProgram mpr2b
 
+mpr2c = "a :- b.\n"
+     ++ "b :- not a.\n"
+     ++ "b :- x.\n"
+     ++ "x :- not y.\n"
+     ++ "y :- not x.\n"
+Right mp2c = readProgram mpr2c
+
+mpr2d = "a :- b.\n"
+     ++ "b :- c.\n"
+     ++ "c :- not a.\n"
+     ++ "c :- x.\n"
+     ++ "x :- not y.\n"
+     ++ "y :- not x.\n"
+Right mp2d = readProgram mpr2d
+
 mpr3 = "f(a).\n"
     ++ "f(b).\n"
     ++ "f(c).\n"

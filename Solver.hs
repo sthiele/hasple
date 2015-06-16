@@ -312,17 +312,17 @@ cdnl_enum_loop prg s dl bl dliteral ngs_p ngs assig spvars =
   let
     (maybeassig,ngs2) = ng_prop prg dl ngs_p ngs assig spvars []
   in
---   trace( "cdnl_loop:\n"
---   ++ (show spvars) ++ "\n"
---   ++ "assig:" ++ (show assig) ++ "\n"
---   ++ "dlits: " ++ (show dliteral)
---   ) $
+  trace( "cdnl_loop:\n"
+  ++ (show spvars) ++ "\n"
+  ++ "assig:" ++ (show assig) ++ "\n"
+  ++ "dlits: " ++ (show dliteral)
+  ) $
   case maybeassig of
        ASSIGNMENT assig2 -> -- no conflict
                             let
                                 selectable = get_unassigned assig2
                             in
---                             trace( "Prop: " ++(show assig2) ++ "\n") $
+                            trace( "Prop: " ++(show assig2) ++ "\n") $
                             if null selectable
                             then                                                                       -- if all atoms then answer set found
                               let s2= s-1 in
@@ -345,10 +345,11 @@ cdnl_enum_loop prg s dl bl dliteral ngs_p ngs assig spvars =
                                   dliteral2 = (((dl+1),(T sigma_d)):dliteral)
                                   assig3 = assign assig2 (T sigma_d) (dl+1)
                               in
+                              trace ( "choose: " ++ (show (T sigma_d))) $
                               cdnl_enum_loop prg s (dl+1) bl dliteral2 ngs_p ngs2 assig3 spvars
 
        Conflict ccl cass -> -- conflict
---                             trace( "Conf: " ++(show cass) ++ "\n") $
+                            trace( "Conf: " ++(show cass) ++ "\n") $
                             if dl==1
                             then []                                                                     -- no more answer sets
                             else                                                                        -- conflict analysis and backtrack
