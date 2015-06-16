@@ -203,7 +203,9 @@ joinClause2 c1 c2 i =
     if i < Vector.length c1
     then
       let x = c2 ! i in
-      joinClause2 (update c1 (fromList [(i,x)])) c2 (i+1)
+      if x /= 0
+      then joinClause2 (update c1 (fromList [(i,x)])) c2 (i+1)
+      else joinClause2 c1 c2 (i+1)
     else c1
 
 
@@ -274,13 +276,13 @@ only c (T l) =
   if (c!l) == 1
   then only2 c l 0
   else False
-  
+
 only c (F l) =
   if (c!l) == (-1)
   then only2 c l 0
   else False
 
-  
+
 only2 c l i =
   if i < Vector.length c
   then
@@ -300,7 +302,7 @@ only3 c i =
     else False
   else True
 
-  
+
 
 data RES =  Res SignedVar
          | NIX
@@ -316,14 +318,14 @@ resolvefirst c a i =
      if (c!i) == 0
      then resolvefirst c a (i+1)
      else
-       if (c!i) > 0 
+       if (c!i) > 0
        then
          if (a!i) > 0
          then resolvefirst c a (i+1)
          else resolvesecond c a (i+1) (F i)
        else -- c!i < 0
          if (a!i) < 0
-         then resolvefirst c a (i+1) 
+         then resolvefirst c a (i+1)
          else resolvesecond c a (i+1) (T i)
   else CONF
 
@@ -349,32 +351,42 @@ resolvesecond c a i akku =
 
 
 
-get_sigma:: Clause -> Assignment -> (SignedVar, Assignment)
+get_sigma:: Clause -> Assignment -> Int -> (SignedVar, Assignment)
 -- used in conflict_analysis
-get_sigma c a = get_sigma2 c a 0
+get_sigma c a i = get_sigma2 c a 0
+-- get_sigma c a 1 = get_sigma2 c a 3
+-- get_sigma c a 2 = get_sigma2 c a 2
+-- get_sigma c a 3 = get_sigma2 c a 1
+-- get_sigma c a 4 = get_sigma2 c a 0
+-- get_sigma c a 5 = get_sigma2 c a 1
+-- get_sigma c a 6 = get_sigma2 c a 0
 
 get_sigma2 c a i =
+--   trace ("get_sigma: " Prelude.++ (show c) Prelude.++ (show a) Prelude.++ (show i)) $
   if i < Vector.length c
   then
     let prefix = unassign a (T i) in  -- TODO unassign latest
+--     trace ("prefix: " Prelude.++ (show prefix) ) $
     if (c!i) > 0
     then
       let sigma = (T i)
           temp = without c prefix
       in
+--       trace ("temp: " Prelude.++ (show temp) ) $
       if only temp sigma
       then (sigma, prefix)
-      else get_sigma2 c prefix (i+1)   -- try next sigma
+      else get_sigma2 c a (i+1)   -- try next sigma
     else
-      if (c!i) > 0
+      if (c!i) < 0
       then
         let sigma = (F i)
             temp = without c prefix
         in
+--         trace ("temp: " Prelude.++ (show temp) ) $
         if only temp sigma
         then (sigma,prefix)
-        else get_sigma2 c prefix (i+1)  -- try next sigma
-      else get_sigma2 c prefix (i+1)    -- try next sigma
+        else get_sigma2 c a (i+1)  -- try next sigma
+      else get_sigma2 c a (i+1)    -- try next sigma
   else error "no sigma found"
 
 
@@ -390,4 +402,3 @@ get_sigma2 c a i =
 
 
 
-  

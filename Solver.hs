@@ -96,15 +96,6 @@ transforms [] _ = []
 transforms (c:cs) spvars = ((transform c spvars):(transforms cs spvars))
 
 
--- transform:: CClause -> [SPVar] -> Clause
--- transform (t,f) spvars = ((transf2 t spvars), (transf2 f spvars))
--- 
--- transf2:: [SPVar] -> [SPVar] -> [SVar]
--- transf2 [] _ = []
--- 
--- transf2 (spv:spvs) l = ((get_svar spv l):(transf2 spvs l))
-
-
 transform:: CClause -> [SPVar] -> Clause
 transform (t,f) spvars =
   let l = length spvars
@@ -321,12 +312,11 @@ cdnl_enum_loop prg s dl bl dliteral ngs_p ngs assig spvars =
   let
     (maybeassig,ngs2) = ng_prop prg dl ngs_p ngs assig spvars []
   in
-  trace( "cdnl_loop:\n"
-  ++ (show spvars) ++ "\n"
-  ++ "assig:" ++ (show assig) ++ "\n"
-  ++ "dlits: " ++ (show dliteral)
-  )
-  $
+--   trace( "cdnl_loop:\n"
+--   ++ (show spvars) ++ "\n"
+--   ++ "assig:" ++ (show assig) ++ "\n"
+--   ++ "dlits: " ++ (show dliteral)
+--   ) $
   case maybeassig of
        ASSIGNMENT assig2 -> -- no conflict
                             let
@@ -358,13 +348,13 @@ cdnl_enum_loop prg s dl bl dliteral ngs_p ngs assig spvars =
                               cdnl_enum_loop prg s (dl+1) bl dliteral2 ngs_p ngs2 assig3 spvars
 
        Conflict ccl cass -> -- conflict
-                            trace( "Conf: " ++(show cass) ++ "\n") $
+--                             trace( "Conf: " ++(show cass) ++ "\n") $
                             if dl==1
                             then []                                                                     -- no more answer sets
                             else                                                                        -- conflict analysis and backtrack
                               if bl < dl
                               then
-                                let (nogood, sigma_uip, dl3) = conflict_analysis (ngs_p++ngs2) ccl cass
+                                let (nogood, sigma_uip, dl3) = conflict_analysis (ngs_p++ngs2) ccl cass 1
                                     ngs3 = (nogood:ngs2)
                                     assig3 = assign (backtrack cass dl3) sigma_uip dl3
                                 in
@@ -385,62 +375,45 @@ dlbacktrack:: DLT -> Int -> DLT
 dlbacktrack dlt dl = [ (l,sl) | (l,sl) <- dlt, l < dl ]
 
 
-conflict_analysis:: [Clause] -> Clause -> Assignment -> (Clause, SignedVar, Int)
-conflict_analysis nogoods nogood assig =
-  let (sigma, prefix) = get_sigma nogood assig
+conflict_analysis:: [Clause] -> Clause -> Assignment -> Int -> (Clause, SignedVar, Int)
+conflict_analysis nogoods nogood assig i =
+  let (sigma, prefix) = get_sigma nogood assig i
+      dl_sigma = get_dlevel assig sigma
+      reduced_nogood = clauseWithoutSL nogood sigma
+      k = get_max_dlevel reduced_nogood assig
   in
-  trace ( "conflict_analysis: " ++ (show nogood) ++ (show assig) ++ (show sigma)) $
-  if elemClause sigma nogood
+--   trace ( "conflict_analysis: " ++ (show nogood) ++ (show assig) ++ (show sigma) ++ (show prefix) ++"\n"
+--     ++ "ca: reduced_nogood: "++ (show reduced_nogood)
+--     ++ " dl_sigma: " ++ (show dl_sigma)
+--     ++ " k: " ++ (show k)
+--   ) $
+  if k == dl_sigma
   then
-    trace ( "ca: constraint l1 sat") $
-    let reduced_nogood = clauseWithoutSL nogood sigma
-        dl_sigma = get_dlevel assig sigma
---         (t,f) = reduced_nogood
---         k = maximum( (map (get_dlevel assig) (map T t)) ++ (map (get_dlevel assig) (map F f))++ [0])
-        k = get_max_dlevel reduced_nogood assig
---         (t,f)=nogood
---         rho = ([ (T l) | l<-t, (get_dlevel assig (T l))==dl_sigma ] ++ [ (F l) | l<-f, (get_dlevel assig (F l))==dl_sigma ])
---         rho = filter_dlevel nogood assig dl_sigma
+    let
+      eps = get_epsilon nogoods sigma prefix
+      reduced_eps = clauseWithoutSL eps (invert sigma)
+      newnogood = joinClause reduced_nogood reduced_eps
     in
-    trace ( "ca: reduced_nogood: "++ (show reduced_nogood) 
-    ++ " dl_sigma: " ++ (show dl_sigma)
-    ++ " k: " ++ (show k)
-    ) $
-    if k == dl_sigma
-    then
-      trace ( "ca: k==dl_sigma: "++ (show k)) $
-      let
-        eps = get_epsilon nogoods sigma nextassig
-        reduced_eps = clauseWithoutSL eps (invert sigma)
-        newnogood = joinClause reduced_nogood reduced_eps
-      in
-      trace ( "ca: eps: "++ (show eps) ++ "reps: "++ (show reduced_eps)  ++ "newnogood: "++ (show newnogood)) $
-      conflict_analysis nogoods newnogood nextassig
-    else (nogood, sigma, k)
-  else
-    trace ( "ca: constraint l1 unsat next sigma") $
-    conflict_analysis nogoods nogood nextassig
+--     trace ( "ca: eps: "++ (show eps) ++ "reps: "++ (show reduced_eps)  ++ "newnogood: "++ (show newnogood)) $
+    conflict_analysis nogoods newnogood prefix (i+1)
+  else (nogood, sigma, k)
 
 
-  
 get_epsilon:: [Clause] -> SignedVar -> Assignment -> Clause
 
 -- get_epsilon [] l prefix = ([],[]) -- error ?
-get_epsilon [] l prefix =
-  let l = asslen prefix in initialAssignment l   -- error ?
+get_epsilon [] l prefix =  error "no antecedent epsilon found"
 
 get_epsilon (ng:ngs) (T sigma) prefix =
   let temp = without ng prefix in
-  trace ( "geteps: " ++ (show (T sigma)) ++ (show prefix) ++ (show ng) ++ (show temp) ++ (show (only temp (F sigma)))) $
---   if temp == ([],[sigma])
+--   trace ( "geteps: " ++ (show (T sigma)) ++ (show prefix) ++ (show ng) ++ (show temp) ++ (show (only temp (F sigma)))) $
   if only temp (F sigma)
   then ng
   else (get_epsilon ngs (T sigma) prefix)
 
 get_epsilon (ng:ngs) (F sigma) prefix =
   let temp = without ng prefix in
-  trace ( "geteps: " ++ (show (F sigma)) ++ (show prefix) ++ (show ng) ++ (show temp) ++ (show (only temp (F sigma)))) $
---   if temp == ([sigma],[])
+--   trace ( "geteps: " ++ (show (F sigma)) ++ (show prefix) ++ (show ng) ++ (show temp) ++ (show (only temp (T sigma)))) $
   if only temp (T sigma)
   then ng
   else (get_epsilon ngs (F sigma) prefix)
@@ -527,16 +500,15 @@ local_propagation p dl (ng:nogoods) done todo assig =
 
 unitresult:: Int -> Assignment -> Clause -> PropRes
 unitresult dl assig nogood =
-  trace ( "unitres: " ++ (show nogood) ++ (show assig) ++ " = "
-  ) $
+--   trace ( "unitres: " ++ (show nogood) ++ (show assig) ++ " = ") $
   case (resolve nogood assig) of
-    CONF  ->     trace ( "conflict\n") $
+    CONF  ->     {-trace ( "conflict\n") $-}
                  Conflict nogood assig
-    Res (T l) -> trace ( (show (T l)) ++ "\n") $
+    Res (T l) -> {-trace ( (show (T l)) ++ "\n") $-}
                  if isassigned l assig
                  then ASSIGNMENT assig
                  else ASSIGNMENT (assign assig (T l) dl)
-    Res (F l) -> trace ( (show (F l)) ++ "\n") $
+    Res (F l) -> {-trace ( (show (F l)) ++ "\n") $-}
                  if isassigned l assig
                  then ASSIGNMENT assig
                  else ASSIGNMENT (assign assig (F l) dl)

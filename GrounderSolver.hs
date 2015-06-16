@@ -87,7 +87,7 @@ simplifyRule2:: ([Atom],[Atom]) -> Rule -> Maybe Rule
 simplifyRule2 (t,f) (Rule h b) =
   let nb = nbody (Rule h b)
       pb = pbody (Rule h b)
-  in  
+  in
   if ( not (null (intersect nb t)) || not (null (intersect pb f)))
   then Nothing
   else
@@ -262,7 +262,7 @@ test_new x=
 -- ground_rules     = "f(b) :- f(a). \n"
 -- --                 ++ "a(a1) :- q(a). \n"
 -- --                 ++ "a(b1) :- q(b). \n"
--- 
+--
 -- nonground_rules  = "y(X) :- x(X). \n"
 --                 ++ "q(X) :- f(X), not p(X), not r(X). \n"
 --                 ++ "p(X) :- f(X), not q(X), not r(X). \n"
@@ -270,13 +270,13 @@ test_new x=
 --                 ++ "q2(X) :- f(X), not p2(X), not r2(X). \n"
 --                 ++ "p2(X) :- f(X), not q2(X), not r2(X), not a(a1). \n"
 --                 ++ "r2(X) :- f(X), not p2(X), not q2(X). \n"
--- 
+--
 -- ground_ics       = ":- r(a).\n"
 --                 ++ ":- a(a1),a(b1).\n"
 -- nonground_ics    = ":- r(X)."
--- 
+--
 -- myprg1 = ground_facts ++ nonground_facts ++ ground_rules ++ nonground_rules ++ ground_ics ++ nonground_ics
--- 
+--
 -- myprg2 = myprg1++"r(b).\n"
 
 
@@ -319,7 +319,7 @@ mpr4 = "f(a).\n"
     ++ "f(e).\n"
     ++ "f(f).\n"
     ++ "f(g).\n"
-    ++ "f(h).\n"    
+    ++ "f(h).\n"
     ++ "q(X):- f(X), not p(X), not r(X).\n"
     ++ "p(X) :-f(X), not q(X), not r(X).\n"
     ++ "r(X) :-f(X), not p(X), not q(X).\n"
