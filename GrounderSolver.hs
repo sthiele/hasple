@@ -48,8 +48,8 @@ show_as3 [] = ""
 show_as3 (x:xs) =  (show x) ++ " " ++ (show_as3 xs)
 
 
--- returns the integrity constraints of a program
 get_ics:: [Rule] -> [Rule]
+-- returns the integrity constraints of a program
 get_ics [] = []
 get_ics ((Rule h b):rs) =
   if (h == __conflict)
@@ -62,11 +62,6 @@ simplifyProgramm:: [Rule] -> ([Atom],[Atom]) -> [Rule]
 -- does remove facts
 simplifyProgramm [] (t,f) = []
 simplifyProgramm x (t,f) = (mapMaybe (simplifyRule (t,f)) x)
-
-simplifyProgramm2:: [Rule] -> ([Atom],[Atom]) -> [Rule]
--- does not remove facts
-simplifyProgramm2 [] (t,f) = []
-simplifyProgramm2 x (t,f) = (mapMaybe (simplifyRule2 (t,f)) x)
 
 
 simplifyRule:: ([Atom],[Atom]) -> Rule -> Maybe Rule
@@ -82,68 +77,15 @@ simplifyRule (t,f) (Rule h b) =
   in
   Just (normalRule h newpbody newnbody)
 
--- does not remove facts
-simplifyRule2:: ([Atom],[Atom]) -> Rule -> Maybe Rule
-simplifyRule2 (t,f) (Rule h b) =
-  let nb = nbody (Rule h b)
-      pb = pbody (Rule h b)
-  in
-  if ( not (null (intersect nb t)) || not (null (intersect pb f)))
-  then Nothing
-  else
-  let newpbody = (nub pb) \\ t
-      newnbody = (nub nb) \\ f
-  in
-  Just (normalRule h newpbody newnbody)
-
-consequences:: [Rule] -> [Atom] -> [Atom] -> ([Atom],[Atom])
--- return consequences of a programm
-consequences p t f=
-  let reduced = reduct p t
-      simplified_prg = simplifyProgramm2 p (t,f)
-      trues = facts simplified_prg
-      falses  = nfacts simplified_prg
-  in
-  if (null (trues \\ t) && null (falses \\ f))
-  then (t,f)
-  else
-    let t2 = t ++ trues
-        f2 = f ++ falses
-    in
-    consequences simplified_prg t2 f2
-
-nfacts:: [Rule] -> [Atom]
--- return atoms of a programm that dont have a matching head
-nfacts prg =
-   let a = nub (atoms_p prg)
-       he = heads_p prg
-       nfact_candidates = (a \\ he)
-   in
-   [ a | a <-nfact_candidates, not (hasmatch a he) ]
-
-hasmatch:: Atom -> [Atom] -> Bool
--- returns True if a matching atom exists in the list
-hasmatch a [] = False
-hasmatch a (b:bs) =
-  case matchAtom a b of
-    Just x  -> True
-    Nothing -> hasmatch a bs
-
-testy:: [Atom] -> Atom -> [Atom]
-testy [] a = []
-testy (x:xs) a =
-  case matchAtom a x of
-     Just x -> [a]
-     Nothing -> testy xs a
 
 groundProgramx:: [Rule] -> AtomMap -> [Rule]
 groundProgramx p am =
   let am2 = insert_atoms am (heads_p  p)
       pg1 = nub (concatMap  (groundRule am2)  p)
   in
-    if pg1==p
-       then pg1
-       else groundProgram pg1
+  if pg1==p
+  then pg1
+  else groundProgram pg1
 
 
 get_query_rules:: [Rule] -> Atom -> [Rule]
@@ -164,20 +106,14 @@ get_query_rulesx rules acc found a =
 
 get_query_rules2:: [Rule] -> Atom -> [Rule]
 get_query_rules2 [] _ = []
--- get_query_rules2 (r:rs) a =
---   case matchAtom (kopf r) a of
---        Just binding ->  let gr = groundRule2 r binding
---                             grs = get_query_rules2 rs a
---                         in
---                         nub (gr: grs)
---        Nothing ->       get_query_rules2 rs a
+
 get_query_rules2 (r:rs) a =
   case matchAtom (kopf r) a of
-       Just binding ->  let gr = applySubs binding r
-                            grs = get_query_rules2 rs a
-                        in
-                        nub (gr: grs)
-       Nothing ->       get_query_rules2 rs a
+    Just binding -> let gr = applySubs binding r
+                        grs = get_query_rules2 rs a
+                    in
+                    nub (gr: grs)
+    Nothing ->      get_query_rules2 rs a
 
 -- ------------------------------------------------------------
 
@@ -207,8 +143,7 @@ gr_solve_l (prg, cons, falses) =
          queries = get_query_rules prg choice
          gr_queries = (simplifyProgramm (groundProgramx (queries++ics) mos) (cons,falses))
          eval_atoms = nub (atoms_p gr_queries)
-
-         tas =  (assi (gr_queries))
+         tas = (assi (gr_queries))
          nfalses = map (nt falses eval_atoms) tas
          ncons = map (cons ++) tas  --as candidates
          mixed = zip ncons nfalses
@@ -219,14 +154,6 @@ gr_solve_l (prg, cons, falses) =
        concatMap gr_solve_l list
 
 
-
-
-intersectAll:: [[Atom]] -> [Atom]
-intersectAll [] = []
-intersectAll [x] = x
-intersectAll (x:xs) = intersect x (intersectAll xs)
-
-
 nt:: [Atom] -> [Atom] -> [Atom] -> [Atom]
 nt old a t = old ++ (a \\ t)
 
@@ -234,25 +161,39 @@ nt old a t = old ++ (a \\ t)
 -- Tests
 -- -------------------------------------
 
-test_old:: [Char] -> IO ()
+test_old:: [Char] -> String
 test_old x =
-    do
-         case readProgram x of
-           Left  err -> putStrLn ("ParseError: " ++ show err)
-           Right val -> putStrLn (
---                         "Program found:\n" ++
---                         show_lp val ++
-                        show_as  (assi (groundProgram val))
-                        )
-
-test_new:: [Char] -> IO ()
-test_new x=
   do
     case readProgram x of
-      Left  err -> putStrLn ("ParseError: " ++ show err)
-      Right prg ->  putStrLn (show_as (gr_solve prg))
+      Left  err -> "ParseError: " ++ (show err)
+      Right prg -> 
+--                      "Program found:\n" ++
+--                      show_lp prg ++
+                   show_as (sort (map sort (assi (groundProgram prg))))
+                   
 
+test_new:: [Char] -> String
+test_new x =
+  do
+    case readProgram x of
+      Left  err -> "ParseError: " ++ (show err)
+      Right prg -> show_as (sort (map sort (gr_solve prg)))
+      
+test:: [Char] -> IO()
+test x =
+  do
+    case readProgram x of
+      Left  err -> print $ "ParseError: " ++ (show err)
+      Right prg -> putStrLn $ show_as (gr_solve prg)
 
+      
+test_good:: [Char] -> String
+test_good x =
+  do
+    case readProgram x of
+      Left  err -> "ParseError: " ++ (show err)
+      Right prg -> show_as (sort (map sort (anssets (groundProgram prg))))
+                   
 -- ground_facts     = "f(a).\n"
 --                 ++ "f(b).\n"
 --                 ++ "f(c).\n"
@@ -290,9 +231,9 @@ mpr2 = " a :- not b.\n"
 Right mp2 = readProgram mpr2
 
 mpr3 = "q(a) :- not p(a).\n"
-     ++ "q(b) :- not p(b).\n"
-     ++ "p(a) :- not q(a).\n"
-     ++ "p(b) :- not q(b).\n"
+    ++ "q(b) :- not p(b).\n"
+    ++ "p(a) :- not q(a).\n"
+    ++ "p(b) :- not q(b).\n"
 Right mp3 = readProgram mpr3
 
 mpr4 = "a:-b.\n"
@@ -300,7 +241,7 @@ mpr4 = "a:-b.\n"
 Right mp4 = readProgram mpr4
 
 mpr5 = "a :- b.\n"
-     ++ "b :- not a.\n"
+    ++ "b :- not a.\n"
 Right mp5 = readProgram mpr5
 
 mpr6 = "a :- b.\n"
@@ -310,12 +251,26 @@ mpr6 = "a :- b.\n"
      ++ "y :- not x.\n"
 Right mp6 = readProgram mpr6
 
-mpr7 = "a :- b.\n"
-     ++ "b :- c.\n"
-     ++ "c :- not a.\n"
-     ++ "c :- x.\n"
+mpr6a = "v :- u,y.\n"   -- example from Conflict-Driven Answer Set Solving p4
+     ++ "u :- v.\n"
+     ++ "u :- x.\n"
      ++ "x :- not y.\n"
      ++ "y :- not x.\n"
+Right mp6a = readProgram mpr6a
+
+mpr6b = "v :- u.\n"
+     ++ "u :- v.\n"
+     ++ "u :- x.\n"
+     ++ "x :- not y.\n"
+     ++ "y :- not x.\n"
+Right mp6b = readProgram mpr6b
+
+mpr7 = "a :- b.\n"
+    ++ "b :- c.\n"
+    ++ "c :- not a.\n"
+    ++ "c :- x.\n"
+    ++ "x :- not y.\n"
+    ++ "y :- not x.\n"
 Right mp7 = readProgram mpr7
 
 mpr8 = "f(a).\n"
@@ -346,34 +301,49 @@ mpr10 = ":- r(X).\n"
 Right mp10 = readProgram mpr10
 
 mpr11 = "a.\n"
-    ++ "b :- not a.\n"
-    ++ "c :- a, not d.\n"
-    ++ "d :- not c, not e.\n"
-    ++ "e :- b.\n"
-    ++ "e :- e.\n"
+     ++ "b :- not a.\n"
+     ++ "c :- a, not d.\n"
+     ++ "d :- not c, not e.\n"
+     ++ "e :- b.\n"
+     ++ "e :- e.\n"
 Right mp11 = readProgram mpr11
 
 mpr12 = "a :- not b.\n"
-    ++ "b :- not a.\n"
-    ++ "c :- a.\n"
-    ++ "c :- b, d.\n"
-    ++ "d :- b, c.\n"
-    ++ "d :- e.\n"
-    ++ "e :- b, not a.\n"
-    ++ "e :- c, d.\n"
+     ++ "b :- not a.\n"
+     ++ "c :- a.\n"
+     ++ "c :- b, d.\n"
+     ++ "d :- b, c.\n"
+     ++ "d :- e.\n"
+     ++ "e :- b, not a.\n"
+     ++ "e :- c, d.\n"
 Right mp12 = readProgram mpr12
 
 mpr13 = "f(c).\n"
-    ++ "q :- f(X), not p, not r.\n"
-    ++ "p :-f(X), not q, not r\n."
-    ++ "r :-f(X), not p, not q.\n"
-    ++ ":- r.\n"
-    ++ "p :- f(X), not q, not r.\n"
-    ++ "f:-q.\n"
+     ++ "q :- f(X), not p, not r.\n"
+     ++ "p :-f(X), not q, not r\n."
+     ++ "r :-f(X), not p, not q.\n"
+     ++ ":- r.\n"
+     ++ "p :- f(X), not q, not r.\n"
+     ++ "f:-q.\n"
 
 
 
-
+unit_test =
+  (test_new mpr1)==(test_good mpr1) &&
+  (test_new mpr2)==(test_good mpr2) &&
+  (test_new mpr3)==(test_good mpr3) &&
+  (test_new mpr4)==(test_good mpr4) &&
+  (test_new mpr5)==(test_good mpr5) &&
+  (test_new mpr6)==(test_good mpr6) &&
+  (test_new mpr6a)==(test_good mpr6a) &&
+  (test_new mpr6b)==(test_good mpr6b) &&
+  (test_new mpr7)==(test_good mpr7) &&  -- infinite
+--   (test_new mpr8)==(test_good mpr8) &&  -- test takes too long
+--   (test_new mpr9)==(test_good mpr9) &&  -- test takes too long
+  (test_new mpr10)==(test_good mpr10) &&
+  (test_new mpr11)==(test_good mpr11) &&
+  (test_new mpr12)==(test_good mpr12) &&
+  (test_new mpr13)==(test_good mpr13)
 
 
 

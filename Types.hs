@@ -26,14 +26,13 @@ module Types (
    assign,
    unassign,
    backtrack,
-   get_dlevel,
+   get_dlevel_alevel,
    elemAss,
    isassigned,
    get_unassigned,
    get_assigned,
    get_tassigned,
    get_fassigned,
-   get_first_assigned_var,
    falselits,
    trueatoms,
    falseatoms,
@@ -42,12 +41,14 @@ module Types (
    without,
    clauseWithoutSL,
    elemClause,
-   filter_dlevel,
-   get_max_dlevel,
+--    filter_dlevel,
+   get_max_dlevel_alevel,
    only,
    RES(..),
    resolve,
    get_sigma,
+   filter_dl_al,
+   is_included
   ) where
 import ASP
 import SPVar
@@ -89,9 +90,9 @@ assign:: Assignment -> SignedVar -> Int -> Assignment
 assign a (T l) dl = update a (fromList [(l,dl)])
 assign a (F l) dl = update a (fromList [(l,-dl)])
 
-get_dlevel:: Assignment -> SignedVar -> Int
-get_dlevel a (T l) = (a ! l)
-get_dlevel a (F l) = -(a ! l)
+get_dlevel_alevel:: Assignment -> SignedVar -> Int
+get_dlevel_alevel a (T l) = (a ! l)
+get_dlevel_alevel a (F l) = -(a ! l)
 
 unassign:: Assignment -> SignedVar -> Assignment
 unassign a (T l) = update a (fromList [(l,0)])
@@ -139,72 +140,54 @@ get_fassigned a = if Vector.null a
 
 
 
--- get first assigned variable in the list
-get_first_assigned_var:: Assignment -> SignedVar
-get_first_assigned_var a  = get_first_assigned_var2 a 0
 
-get_first_assigned_var2 a n =
-  if n < (Vector.length a)
-                             then
-                               let val = a ! n in
-                               case val of
-                                 0 -> get_first_assigned_var2 a (n+1)
-                                 _ -> if val > 0
-                                         then (T n)
-                                         else (F n)
-                             else error "no more assigned variables"
+
 
 
 
 falselits:: Assignment -> [SPVar] -> [SPVar]
 falselits x spvars = falselits2 x spvars 0
-falselits2 a spvars n =
-  if n < Vector.length a
-  then    case a ! n of
-       (-1) -> ((get_lit n spvars):(falselits2 a spvars (n+1)))
-       _  ->  (falselits2 a spvars (n+1))
+falselits2 a spvars i =
+  if i < Vector.length a
+  then if (a!i) < 0
+       then ((get_lit i spvars):(falselits2 a spvars (i+1)))
+       else (falselits2 a spvars (i+1))
   else []
-
-
 
 
 trueatoms:: Assignment -> [SPVar] -> [Atom]
 trueatoms x spvars = trueatoms2 x spvars 0
-trueatoms2 a spvars n =
-  if n < Vector.length a
+trueatoms2 a spvars i =
+  if i < Vector.length a
   then
-    if (a ! n) > 0
-    then (atomsfromvar (get_lit n spvars)) Prelude.++ (trueatoms2 a spvars (n+1))
-    else  (trueatoms2 a spvars (n+1))
+    if (a!i) > 0
+    then (atomsfromvar (get_lit i spvars)) Prelude.++ (trueatoms2 a spvars (i+1))
+    else  (trueatoms2 a spvars (i+1))
   else []
 
 
 falseatoms:: Assignment -> [SPVar] -> [Atom]
 falseatoms x spvars = falseatoms2 x spvars 0
-falseatoms2 a spvars n =
-  if n < Vector.length a
+falseatoms2 a spvars i =
+  if i < Vector.length a
   then
-    if (a ! n) <0
-    then (atomsfromvar (get_lit n spvars)) Prelude.++ (falseatoms2 a spvars (n+1))
-    else (falseatoms2 a spvars (n+1))
+    if (a!i) <0
+    then (atomsfromvar (get_lit i spvars)) Prelude.++ (falseatoms2 a spvars (i+1))
+    else (falseatoms2 a spvars (i+1))
   else []
 
 
 
 -- -----------------------------------------
--- type Clause = ([SVar],[SVar])
 type Clause = Vector Int
 
-
 joinClause:: Clause -> Clause -> Clause
--- joinClause (t1,f1) (t2,f2) = ( nub (t1 Prelude.++ t2),nub (f1 Prelude.++ f2))
 joinClause c1 c2 = joinClause2 c1 c2 0
 joinClause2 c1 c2 i =
     if i < Vector.length c1
     then
-      let x = c2 ! i in
-      if x /= 0
-      then joinClause2 (update c1 (fromList [(i,x)])) c2 (i+1)
+      if (c2!i) /= 0
+      then joinClause2 (update c1 (fromList [(i,(c2!i))])) c2 (i+1)
       else joinClause2 c1 c2 (i+1)
     else c1
 
@@ -229,12 +212,14 @@ without2 c a i =
     else c
 
 clauseWithoutSL:: Clause -> SignedVar -> Clause
-clauseWithoutSL c (T l) = if (c ! l) > 0
-                          then unassign c (T l)   -- should be SVar l
-                          else c
-clauseWithoutSL c (F l) = if (c ! l) < 0
-                          then unassign c (F l)   -- should be SVar l
-                          else c
+clauseWithoutSL c (T l) =
+  if (c ! l) > 0
+  then unassign c (T l)   -- should be SVar l
+  else c
+clauseWithoutSL c (F l) =
+  if (c ! l) < 0
+  then unassign c (F l)   -- should be SVar l
+  else c
 
 
 elemClause:: SignedVar -> Clause -> Bool
@@ -243,30 +228,19 @@ elemClause (F l) c = (c ! l) < 0
 
 
 
-filter_dlevel:: Clause -> Assignment -> Int -> Clause
--- get rho in conflict_analysis
-filter_dlevel c a l = filter_dlevel2 c a l 0
-filter_dlevel2 c a l i =
-  if i < Vector.length c
-     then
-       if (a ! i)==l
-       then filter_dlevel2 c a l (i+1)
-       else
-         let c' = update c (fromList [(i,0)]) in
-         filter_dlevel2 c' a l (i+1)
-     else c
 
 
-get_max_dlevel:: Clause -> Assignment -> Int
+
+get_max_dlevel_alevel:: Clause -> Assignment -> Int
 -- determin k in conflict_analysis
-get_max_dlevel c a = get_max_dlevel2 c a 0 0
+get_max_dlevel_alevel c a = get_max_dlevel_alevel2 c a 0 0
 
-get_max_dlevel2 c a i akku =
+get_max_dlevel_alevel2 c a i akku =
   if i < Vector.length c
   then
     if (a!i) > akku
-    then get_max_dlevel2 c a (i+1) (a!i)
-    else get_max_dlevel2 c a (i+1) akku
+    then get_max_dlevel_alevel2 c a (i+1) (a!i)
+    else get_max_dlevel_alevel2 c a (i+1) akku
   else akku
 
 
@@ -348,24 +322,57 @@ resolvesecond c a i akku =
  else Res akku
 
 
+get_last_assigned_var:: Clause -> Assignment -> SVar
+-- get last assigned variable in the list
+get_last_assigned_var c a  = get_last_assigned_var2 c a 0
 
+get_last_assigned_var2 c a n =
+  if n < (Vector.length c)
+  then
+    if (c!n) == 0
+    then get_last_assigned_var2 c a (n+1)
+    else
+       let val = a ! n in
+       case val of
+         0 -> get_last_assigned_var2 c a (n+1)
+         _ -> get_last_assigned_var3 c a (n+1) (n, abs val)
+  else error "no more assigned variables"
 
+get_last_assigned_var3 c a n (akku,akkuval) =
+  if n < (Vector.length c)
+  then
+    if (c!n) == 0
+    then get_last_assigned_var3 c a (n+1) (akku,akkuval)
+    else 
+       let val = a ! n in
+       if abs val > akkuval
+       then get_last_assigned_var3 c a (n+1) (n, abs val)
+       else get_last_assigned_var3 c a (n+1) (akku,akkuval)
+   else akku
+     
 
 get_sigma:: Clause -> Assignment -> Int -> (SignedVar, Assignment)
 -- used in conflict_analysis
-get_sigma c a i = get_sigma2 c a 0
--- get_sigma c a 1 = get_sigma2 c a 3
+
+-- get_sigma c a 1 = get_sigma2 c a 3  -- mpr 5
 -- get_sigma c a 2 = get_sigma2 c a 2
 -- get_sigma c a 3 = get_sigma2 c a 1
--- get_sigma c a 4 = get_sigma2 c a 0
--- get_sigma c a 5 = get_sigma2 c a 1
--- get_sigma c a 6 = get_sigma2 c a 0
+
+-- get_sigma c a 1 = get_sigma2 c a 8  -- mpr 6
+-- get_sigma c a 2 = get_sigma2 c a 4
+-- get_sigma c a 3 = get_sigma2 c a 5
+
+
+get_sigma c a i =
+  let last_assigned_var = get_last_assigned_var c a in
+--   trace ("lastvar: " Prelude.++ (show c) Prelude.++ (show a) Prelude.++ (show last_assigned_var)) $
+  get_sigma2 c a last_assigned_var
 
 get_sigma2 c a i =
-  trace ("get_sigma: " Prelude.++ (show c) Prelude.++ (show a) Prelude.++ (show i)) $
+--   trace ("get_sigma: " Prelude.++ (show c) Prelude.++ (show a) Prelude.++ (show i)) $
   if i < Vector.length c
   then
-    let prefix = unassign a (T i) in  -- TODO unassign latest
+  let prefix = unassign a (T i)   in
 --     trace ("prefix: " Prelude.++ (show prefix) ) $
     if (c!i) > 0
     then
@@ -391,14 +398,42 @@ get_sigma2 c a i =
 
 
 
+filter_dl_al:: Clause -> Assignment -> Int -> Clause
+filter_dl_al c a l = filter_dl_al2 c a l 0
+filter_dl_al2:: Clause -> Assignment -> Int -> Int -> Clause
+filter_dl_al2 c a l i =
+  if i < Vector.length c
+  then
+     if (abs (a!i)) == l
+     then filter_dl_al2 c a l (i+1)
+     else
+       let c' = update c (fromList [(i,0)]) in
+       filter_dl_al2 c' a l (i+1)
+ else c
 
 
 
-
-
-
-
-
-
+is_included:: Clause -> Assignment -> Bool
+is_included c a = is_included2 c a 0
+is_included2:: Clause -> Assignment -> Int -> Bool
+is_included2 c a i =
+  if i < Vector.length c
+  then
+    if (a!i) > 0
+    then
+      if (c!i) < 0
+      then False
+      else is_included2 c a (i+1)
+    else
+      if (a!i) < 0
+      then
+        if (c!i) > 0
+        then False
+        else is_included2 c a (i+1)
+      else -- (a!i) == 0
+        if (c!i) == 0
+        then is_included2 c a (i+1)
+        else False
+  else True
 
 

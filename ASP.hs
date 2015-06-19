@@ -16,8 +16,18 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module ASP (
-   Term(..), Atom(..), __conflict, Literal(..),Rule(..), basicRule, normalRule,
-   pbody, nbody, heads_p, atoms_p,
+   Term(..),
+   Atom(..),
+   __conflict,
+--    __true,
+   Literal(..),
+   Rule(..),
+   basicRule,
+   normalRule,
+   pbody,
+   nbody,
+   heads_p,
+   atoms_p,
   ) where
     
 import Data.List (nub)                  
@@ -57,6 +67,8 @@ instance Show Atom where
     
 
 __conflict = (Atom "conflict" [])
+-- __true = (Atom "true" [])
+
 
 data Literal = PAtom Atom | NAtom Atom deriving (Eq, Ord) -- asp literal
 instance Show Literal where
