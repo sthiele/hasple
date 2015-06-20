@@ -166,11 +166,11 @@ test_old x =
   do
     case readProgram x of
       Left  err -> "ParseError: " ++ (show err)
-      Right prg -> 
+      Right prg ->
 --                      "Program found:\n" ++
 --                      show_lp prg ++
                    show_as (sort (map sort (assi (groundProgram prg))))
-                   
+
 
 test_new:: [Char] -> String
 test_new x =
@@ -178,7 +178,7 @@ test_new x =
     case readProgram x of
       Left  err -> "ParseError: " ++ (show err)
       Right prg -> show_as (sort (map sort (gr_solve prg)))
-      
+
 test:: [Char] -> IO()
 test x =
   do
@@ -186,14 +186,14 @@ test x =
       Left  err -> print $ "ParseError: " ++ (show err)
       Right prg -> putStrLn $ show_as (gr_solve prg)
 
-      
+
 test_good:: [Char] -> String
 test_good x =
   do
     case readProgram x of
       Left  err -> "ParseError: " ++ (show err)
       Right prg -> show_as (sort (map sort (anssets (groundProgram prg))))
-                   
+
 -- ground_facts     = "f(a).\n"
 --                 ++ "f(b).\n"
 --                 ++ "f(c).\n"
@@ -334,7 +334,7 @@ unit_test =
   (test_new mpr3)==(test_good mpr3) &&
   (test_new mpr4)==(test_good mpr4) &&
   (test_new mpr5)==(test_good mpr5) &&
-  (test_new mpr6)==(test_good mpr6) &&
+   (test_new mpr6)==(test_good mpr6) &&
   (test_new mpr6a)==(test_good mpr6a) &&
   (test_new mpr6b)==(test_good mpr6b) &&
   (test_new mpr7)==(test_good mpr7) &&  -- infinite

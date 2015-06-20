@@ -151,7 +151,7 @@ cdnl_enum_loop::
   -> [(Int,Int)]           -- al2dl
   -> [Clause]              -- program nogoods
   -> [Clause]              -- learned nogoods
-  -> Assignment            
+  -> Assignment
   -> [SPVar]               -- maging SPVar 2 SVar(Int)
   -> [[Atom]]              -- found answer sets
 
@@ -235,15 +235,16 @@ cdnl_enum_loop prg s dl bl al dliteral alt ngs_p ngs assig spvars =
                                alt2 = ((al2,dl+1):alt)
                                assig3 = assign assig2 (T sigma_d) (al2)
                            in
+                           mtrace ("al: " ++ (show al2)) $
                            mtrace ( "choose: " ++ (show (T sigma_d))) $
                            cdnl_enum_loop prg s (dl+1) bl (al2+1) dliteral2 alt2 ngs_p ngs2 assig3 spvars
 
-                           
+
 al2dl:: [(Int,Int)] -> Int -> Int
 al2dl ((al1,dl1):rest) al =
-  if al>al1
-  then dl1
-  else al2dl rest al
+  if al<al1
+  then al2dl rest al
+  else dl1
 
 dl2al:: [(Int,Int)] -> Int -> Int
 dl2al ((al1,dl1):rest) dl =
@@ -276,13 +277,16 @@ conflict_analysis alt nogoods nogood assig i =
       dl_sigma = get_dlevel_alevel assig sigma
       reduced_nogood = clauseWithoutSL nogood sigma
       k = get_max_dlevel_alevel reduced_nogood assig
+      dl = al2dl alt dl_sigma
+      al = dl2al alt dl
   in
---   mtrace ( "conflict_analysis: " ++ (show nogood) ++ (show assig) ++ (show sigma) ++ (show prefix) ) $
+  mtrace ( "conflict_analysis: " ++ (show nogood) ++ (show assig) ++ (show sigma) ++ (show prefix) ) $
 --   mtrace ( "ca: reduced_nogood: "++ (show reduced_nogood)) $
---   mtrace ( " dl_sigma: " ++ (show dl_sigma)) $
+  mtrace ( " dl_sigma: " ++ (show dl_sigma)) $
+  mtrace ( " alnew: " ++ (show al)) $
 --   mtrace ( " k: " ++ (show k)) $
-  let rhos = filter_dl_al nogood assig dl_sigma in
---   mtrace ( "rhos: " ++ (show rhos) ++ " sigma: " ++ (show sigma)) $
+  let rhos = filter_dl_al nogood assig al in
+  mtrace ( "rhos: " ++ (show rhos) ++ " sigma: " ++ (show sigma)) $
   if only rhos sigma
   then (nogood, sigma, k)
   else
@@ -291,7 +295,7 @@ conflict_analysis alt nogoods nogood assig i =
       reduced_eps = clauseWithoutSL eps (invert sigma)
       newnogood = joinClause reduced_nogood reduced_eps
     in
-    mtrace ( ">>> ca: reeps: "++ (show reduced_eps) ++ "redel: "++ (show reduced_nogood)  ++ "newnogood: "++ (show newnogood)) $
+    trace ( ">>> ca: reeps: "++ (show reduced_eps) ++ "redel: "++ (show reduced_nogood)  ++ "newnogood: "++ (show newnogood)) $
     conflict_analysis alt nogoods newnogood prefix (i+1)
 
 
@@ -378,31 +382,33 @@ ng_prop prg al ngs_p ngs assig spvars u =
 
     Conflict ccl cass -> (Conflict ccl cass, ngs,al2)                               -- return conflic clause
 
-    
+
 
 local_propagation::  [Rule] -> Int -> [Clause] -> Int -> Int -> Assignment -> (PropRes,Int)
 -- takes a program a cyclic list of nogoods and an assignment and returns a propagation result
 local_propagation p al (ng:nogoods) done todo assig =
   let up = unitresult al assig ng  in
-  trace ("al: " ++ (show al)) $
+--   trace ("al: " ++ (show al)) $
   case up of
     Nix           -> if (done+1) == todo
                      then (ASSIGNMENT assig,al)
                      else (local_propagation p al nogoods (done+1) todo assig)
-    ASSI newassig -> local_propagation p (al+1) nogoods 0 todo newassig         -- increase assignment level
-    Conf ccl -> (Conflict ccl assig,al)                                              -- return conflict clause
+    ASSI newassig ->
+      trace ("al: " ++ (show al)) $
+      local_propagation p (al+1) nogoods 0 todo newassig         -- increase assignment level
+    Conf ccl -> (Conflict ccl assig,al)                                         -- return conflict clause
 
 
 data Res = ASSI Assignment  -- result of propagation can either be a conflict or a new assignment
-         | Conf Clause 
+         | Conf Clause
          | Nix
-         deriving (Show,Eq)    
+         deriving (Show,Eq)
 
 unitresult:: Int -> Assignment -> Clause -> Res
 unitresult dl assig nogood =
   case (resolve nogood assig) of
     CONF  ->     mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig) ++ " = conflict") $
-                 Conf nogood 
+                 Conf nogood
     Res (T l) -> if isassigned l assig
                  then
 --                    mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig)) $

@@ -343,13 +343,13 @@ get_last_assigned_var3 c a n (akku,akkuval) =
   then
     if (c!n) == 0
     then get_last_assigned_var3 c a (n+1) (akku,akkuval)
-    else 
+    else
        let val = a ! n in
        if abs val > akkuval
        then get_last_assigned_var3 c a (n+1) (n, abs val)
        else get_last_assigned_var3 c a (n+1) (akku,akkuval)
    else akku
-     
+
 
 get_sigma:: Clause -> Assignment -> Int -> (SignedVar, Assignment)
 -- used in conflict_analysis
@@ -404,12 +404,12 @@ filter_dl_al2:: Clause -> Assignment -> Int -> Int -> Clause
 filter_dl_al2 c a l i =
   if i < Vector.length c
   then
-     if (abs (a!i)) == l
-     then filter_dl_al2 c a l (i+1)
-     else
+     if (abs (a!i)) < l
+     then
        let c' = update c (fromList [(i,0)]) in
        filter_dl_al2 c' a l (i+1)
- else c
+     else filter_dl_al2 c a l (i+1)
+  else c
 
 
 
