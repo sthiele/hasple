@@ -123,12 +123,6 @@ assign_falses a (v:vs) = assign_falses (assign a (F v) 1) vs
 -- Conflict Driven Nogood Learning - Enumeration
 
 
-
-
-
-
-
-
 cdnl_enum:: [Rule] -> Int -> [[Atom]]
 
 cdnl_enum prg s =
@@ -159,15 +153,14 @@ cdnl_enum_loop prg s dl bl al dliteral alt ngs_p ngs assig spvars =
   let
     (maybeassig,ngs2,al2) = ng_prop prg al ngs_p ngs assig spvars []
   in
-  mtrace( "\ncdnl_loop:\n"
-  ++ (show spvars) ++ "\n"
-  ++ "assig:" ++ (show assig) ++ "\n"
-  ++ "dlits: " ++ (show dliteral)++ "\n"
-  ++ "al2dl: " ++ (show alt)
-  ) $
+--   mtrace( "\ncdnl_loop:\n"
+--   ++ (show spvars) ++ "\n"
+--   ++ "assig:" ++ (show assig) ++ "\n"
+--   ++ "dlits: " ++ (show dliteral)++ "\n"
+--   ++ "al2dl: " ++ (show alt)) $
   case maybeassig of
     Conflict ccl cass -> -- conflict
-                         mtrace( "Conf: " ++(show cass) ++ "\n") $
+--                          mtrace( "Conf: " ++(show cass) ++ "\n") $
                          if dl==1
                          then []                                                                     -- no more answer sets
                          else                                                                        -- conflict analysis and backtrack
@@ -175,26 +168,26 @@ cdnl_enum_loop prg s dl bl al dliteral alt ngs_p ngs assig spvars =
                            then
                              let (learnednogood, sigma_uip, alx) = conflict_analysis alt (ngs_p++ngs2) ccl cass 1
                              in
-                             mtrace ("uip:  " ++ (show sigma_uip) ) $
-                             mtrace ("found al: " ++ (show alx) ++ " learnednogood: " ++ (show learnednogood) ) $
+--                              mtrace ("uip:  " ++ (show sigma_uip) ) $
+--                              mtrace ("found al: " ++ (show alx) ++ " learnednogood: " ++ (show learnednogood) ) $
                              let
                                  dl3 = (al2dl alt alx)
                                  al3 = dl2al alt dl3
                              in
-                             mtrace ( "new al: " ++ (show al3) )$
+--                              mtrace ( "new al: " ++ (show al3) )$
                              let
                                  ngs3 = (learnednogood:ngs2)
-                                 assigxxxx=(backtrack cass al3)
+--                                  assigxxxx=(backtrack cass al3)
                                  assig3 = assign (backtrack cass al3) (invert sigma_uip) (al3)
                              in
-                             mtrace ( "btassig: " ++ (show assigxxxx) )$
-                             mtrace ( "neassig: " ++ (show assig3) ) $
+--                              mtrace ( "btassig: " ++ (show assigxxxx) )$
+--                              mtrace ( "neassig: " ++ (show assig3) ) $
                              let
                                  dliteral2 = dlbacktrack dliteral dl3
                                  alt2 = albacktrack alt dl3
                              in
-                             mtrace ("nedlits: " ++ (show dliteral2) ) $
-                             mtrace ("nealt  : " ++ (show alt2) ) $
+--                              mtrace ("nedlits: " ++ (show dliteral2) ) $
+--                              mtrace ("nealt  : " ++ (show alt2) ) $
                              cdnl_enum_loop prg s (dl3-1) bl (al3+1) dliteral2 alt2 ngs_p ngs3 assig3 spvars
                            else
                              let sigma_d = (get_dliteral dliteral (dl))
@@ -210,7 +203,7 @@ cdnl_enum_loop prg s dl bl al dliteral alt ngs_p ngs assig spvars =
                          let
                              selectable = get_unassigned assig2
                          in
-                         mtrace( "Prop: " ++(show assig2) ++ "\n") $
+--                          mtrace( "Prop: " ++(show assig2) ++ "\n") $
                          if null selectable
                          then                                                                       -- if all atoms then answer set found
                            let s2= s-1 in
@@ -222,11 +215,24 @@ cdnl_enum_loop prg s dl bl al dliteral alt ngs_p ngs assig spvars =
                                  sigma_d = (get_dliteral dliteral (dl))
                                  dl2 = dl-1
                                  bl2 = dl2
+                             in
+--                              trace ("bt to: " ++ (show dl2)) $
+                             let
                                  dliteral2 = dlbacktrack dliteral dl
+                             in
+--                              trace ("new dlits: " ++ (show dliteral2)) $
+                             let
+                                 cal = (dl2al alt dl)
                                  alt2 = albacktrack alt dl
-                                 assig3 = backtrack assig2 (dl2al alt dl)
-                                 assig4 = assign assig3 (invert sigma_d) dl2                         -- invert last decision literal
-                                 remaining_as = cdnl_enum_loop prg s2 dl2 bl2 al dliteral2 alt2 ngs_p ngs2 assig4 spvars
+                                 assig3 = backtrack assig2 cal
+                                 assig4 = assign assig3 (invert sigma_d) cal                         -- invert last decision literal
+                             in
+--                              trace ("new al2dl: " ++ (show alt2)) $
+--                              trace ("bt assig to:" ++ (show cal)) $
+--                              trace ("assig3: " ++ (show assig3)) $
+--                              trace ("assig4: " ++ (show assig4)) $
+                             let
+                                 remaining_as = cdnl_enum_loop prg s2 dl2 bl2 (cal+1) dliteral2 alt2 ngs_p ngs2 assig4 spvars
                              in
                              ((nub (trueatoms assig2 spvars)):remaining_as)
                          else                                                                        -- select new lit
@@ -235,8 +241,8 @@ cdnl_enum_loop prg s dl bl al dliteral alt ngs_p ngs assig spvars =
                                alt2 = ((al2,dl+1):alt)
                                assig3 = assign assig2 (T sigma_d) (al2)
                            in
-                           mtrace ("al: " ++ (show al2)) $
-                           mtrace ( "choose: " ++ (show (T sigma_d))) $
+--                            mtrace ("al: " ++ (show al2)) $
+--                            mtrace ( "choose: " ++ (show (T sigma_d))) $
                            cdnl_enum_loop prg s (dl+1) bl (al2+1) dliteral2 alt2 ngs_p ngs2 assig3 spvars
 
 
@@ -280,13 +286,13 @@ conflict_analysis alt nogoods nogood assig i =
       dl = al2dl alt dl_sigma
       al = dl2al alt dl
   in
-  mtrace ( "conflict_analysis: " ++ (show nogood) ++ (show assig) ++ (show sigma) ++ (show prefix) ) $
+--   mtrace ( "conflict_analysis: " ++ (show nogood) ++ (show assig) ++ (show sigma) ++ (show prefix) ) $
 --   mtrace ( "ca: reduced_nogood: "++ (show reduced_nogood)) $
-  mtrace ( " dl_sigma: " ++ (show dl_sigma)) $
-  mtrace ( " alnew: " ++ (show al)) $
+--   mtrace ( " dl_sigma: " ++ (show dl_sigma)) $
+--   mtrace ( " alnew: " ++ (show al)) $
 --   mtrace ( " k: " ++ (show k)) $
   let rhos = filter_dl_al nogood assig al in
-  mtrace ( "rhos: " ++ (show rhos) ++ " sigma: " ++ (show sigma)) $
+--   mtrace ( "rhos: " ++ (show rhos) ++ " sigma: " ++ (show sigma)) $
   if only rhos sigma
   then (nogood, sigma, k)
   else
@@ -295,7 +301,7 @@ conflict_analysis alt nogoods nogood assig i =
       reduced_eps = clauseWithoutSL eps (invert sigma)
       newnogood = joinClause reduced_nogood reduced_eps
     in
-    trace ( ">>> ca: reeps: "++ (show reduced_eps) ++ "redel: "++ (show reduced_nogood)  ++ "newnogood: "++ (show newnogood)) $
+--     trace ( ">>> ca: reeps: "++ (show reduced_eps) ++ "redel: "++ (show reduced_nogood)  ++ "newnogood: "++ (show newnogood)) $
     conflict_analysis alt nogoods newnogood prefix (i+1)
 
 
@@ -307,8 +313,8 @@ get_epsilon [] l prefix =  error "no antecedent epsilon found"
 
 get_epsilon (ng:ngs) sigma prefix =
   let temp = clauseWithoutSL ng (invert sigma) in
-  mtrace ( "geteps: " ++ (show (sigma)) ++ (show ng) ++ (show temp) ++ (show prefix)
-  ++ " isincl: " ++ (show (is_included temp prefix))) $
+--   mtrace ( "geteps: " ++ (show (sigma)) ++ (show ng) ++ (show temp) ++ (show prefix)
+--   ++ " isincl: " ++ (show (is_included temp prefix))) $
   if is_included temp prefix
   then ng
   else (get_epsilon ngs sigma prefix)
@@ -394,7 +400,7 @@ local_propagation p al (ng:nogoods) done todo assig =
                      then (ASSIGNMENT assig,al)
                      else (local_propagation p al nogoods (done+1) todo assig)
     ASSI newassig ->
-      trace ("al: " ++ (show al)) $
+--       trace ("al: " ++ (show al)) $
       local_propagation p (al+1) nogoods 0 todo newassig         -- increase assignment level
     Conf ccl -> (Conflict ccl assig,al)                                         -- return conflict clause
 
@@ -407,21 +413,21 @@ data Res = ASSI Assignment  -- result of propagation can either be a conflict or
 unitresult:: Int -> Assignment -> Clause -> Res
 unitresult dl assig nogood =
   case (resolve nogood assig) of
-    CONF  ->     mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig) ++ " = conflict") $
+    CONF  ->     {-mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig) ++ " = conflict") $-}
                  Conf nogood
     Res (T l) -> if isassigned l assig
                  then
 --                    mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig)) $
                    Nix
                  else
-                   mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig) ++ " = " ++ (show (T l))) $
+--                    mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig) ++ " = " ++ (show (T l))) $
                    ASSI (assign assig (T l) dl)
     Res (F l) -> if isassigned l assig
                  then
 --                    mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig)) $
                    Nix
                  else
-                   mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig) ++ " = " ++ (show (F l))) $
+--                    mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig) ++ " = " ++ (show (F l))) $
                    ASSI (assign assig (F l) dl)
     NIX       -> {-mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig)) $-}
                  Nix                                                            -- nothing can be derived

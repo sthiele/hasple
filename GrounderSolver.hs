@@ -276,9 +276,6 @@ Right mp7 = readProgram mpr7
 mpr8 = "f(a).\n"
     ++ "f(b).\n"
     ++ "f(c).\n"
-    ++ "f(d).\n"
-    ++ "f(e).\n"
-    ++ "f(f).\n"
     ++ "q(X):- f(X), not p(X). \n"
     ++ "p(X) :-f(X), not q(X). \n"
 Right mp8 = readProgram mpr8
@@ -334,7 +331,7 @@ unit_test =
   (test_new mpr3)==(test_good mpr3) &&
   (test_new mpr4)==(test_good mpr4) &&
   (test_new mpr5)==(test_good mpr5) &&
-   (test_new mpr6)==(test_good mpr6) &&
+  (test_new mpr6)==(test_good mpr6) &&
   (test_new mpr6a)==(test_good mpr6a) &&
   (test_new mpr6b)==(test_good mpr6b) &&
   (test_new mpr7)==(test_good mpr7) &&  -- infinite

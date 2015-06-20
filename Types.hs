@@ -139,12 +139,6 @@ get_fassigned a = if Vector.null a
                   else toList (findIndices (<0) a)
 
 
-
-
-
-
-
-
 falselits:: Assignment -> [SPVar] -> [SPVar]
 falselits x spvars = falselits2 x spvars 0
 falselits2 a spvars i =
