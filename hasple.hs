@@ -27,7 +27,7 @@ get_answersets:: [Rule] -> Int -> [[Atom]]
 -- get_answersets prg i = anssets (groundProgram prg)    -- for old style grounding->solving
 get_answersets prg i = gr_solve  prg                     -- for interleaved grounding/solving
 
-main:: IO ()  
+main:: IO ()
 main =
   do
     args <- getArgs
@@ -38,8 +38,8 @@ main =
          contents <- readFile (head args)
          case readProgram contents of
            Left  err -> putStrLn ("ParseError: " ++ show err)
-           Right val -> putStrLn $ show_as (get_answersets val 0)
+           Right val -> print_as (get_answersets val 0)
 --               let bytestring = BC.pack (show_as (get_answersets val 0)) in
 --               BC.putStrLn bytestring
-                  
+
 

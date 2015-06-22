@@ -16,7 +16,7 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module GrounderSolver (
-  show_as,
+  show_as, print_as,
   gr_solve,
 )where
 
@@ -39,14 +39,30 @@ show_as:: [[Atom]] -> [Char]
 show_as [] = "No Answersets"
 show_as (x:xs) = (show_as2 (x:xs) 1)
 
+print_as [] = putStr "No Answersets"
+print_as (x:xs) = print_as2 1 (x:xs)
+
 show_as2:: [[Atom]] -> Int -> [Char]
 show_as2 [] n = ""
 show_as2 (x:xs) n = "Answer " ++ (show n) ++ ":\n" ++ show_as3 x ++"\n"++ (show_as2 xs (n+1))
+
+print_as2 n [] = print ""
+print_as2 n (x:xs)  = do
+    putStr "Answer "
+    print n
+    print_as3 x
+    print_as2 (n+1) xs
 
 show_as3:: [Atom] -> [Char]
 show_as3 [] = ""
 show_as3 (x:xs) =  (show x) ++ " " ++ (show_as3 xs)
 
+print_as3 [] = putStr "\n"
+print_as3 (x:xs) =
+    do
+        putStr (show x)
+        putStr " "
+        print_as3 xs
 
 get_ics:: [Rule] -> [Rule]
 -- returns the integrity constraints of a program
