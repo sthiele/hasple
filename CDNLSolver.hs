@@ -229,8 +229,6 @@ dlbacktrack dlt l = [ (dl,sl) | (dl,sl) <- dlt, dl < l ]
 
 
 
-
-
 conflict_analysis:: [(Int,Int)] -> [Clause] -> Clause -> Assignment -> (Clause, SignedVar, Int)
 conflict_analysis alt nogoods nogood assig =
   let (sigma, prefix) = get_sigma nogood assig

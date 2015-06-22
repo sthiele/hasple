@@ -19,7 +19,6 @@ module ASP (
    Term(..),
    Atom(..),
    __conflict,
---    __true,
    Literal(..),
    Rule(..),
    basicRule,
@@ -67,7 +66,6 @@ instance Show Atom where
     
 
 __conflict = (Atom "conflict" [])
--- __true = (Atom "true" [])
 
 
 data Literal = PAtom Atom | NAtom Atom deriving (Eq, Ord) -- asp literal

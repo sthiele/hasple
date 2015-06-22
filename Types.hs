@@ -21,12 +21,11 @@ module Types (
    unsign,
    invert,
    Assignment(..),
-   asslen,
    initialAssignment,
    assign,
    unassign,
    backtrack,
-   get_dlevel_alevel,
+   get_alevel,
    elemAss,
    isassigned,
    get_unassigned,
@@ -36,25 +35,23 @@ module Types (
    falselits,
    trueatoms,
    falseatoms,
+   nonfalseatoms,
    Clause(..),
-   joinClause,
-   without,
+   joinClauses,
    clauseWithoutSL,
-   elemClause,
---    filter_dlevel,
-   get_max_dlevel_alevel,
+   get_max_alevel,
    only,
    RES(..),
    resolve,
    get_sigma,
-   filter_dl_al,
+   filter_al,
    is_included
   ) where
 import ASP
 import SPVar
 import Data.List (nub, delete)
 import Data.Vector.Unboxed as Vector
-import Debug.Trace
+-- import Debug.Trace
 
 -- -------------------
 type SVar = Int
@@ -81,22 +78,19 @@ initialAssignment l =
   let x = fromList [0 | x <- [1..l]] in
   x
 
-asslen:: Assignment -> Int
-asslen a  =
-  trace ( "asslen: " Prelude.++ (show a)) $
-  Vector.length a
 
 assign:: Assignment -> SignedVar -> Int -> Assignment
 assign a (T l) dl = update a (fromList [(l,dl)])
 assign a (F l) dl = update a (fromList [(l,-dl)])
 
-get_dlevel_alevel:: Assignment -> SignedVar -> Int
-get_dlevel_alevel a (T l) = (a ! l)
-get_dlevel_alevel a (F l) = -(a ! l)
+get_alevel:: Assignment -> SignedVar -> Int
+get_alevel a (T l) = (a ! l)
+get_alevel a (F l) = -(a ! l)
 
-unassign:: Assignment -> SignedVar -> Assignment
-unassign a (T l) = update a (fromList [(l,0)])
-unassign a (F l) = update a (fromList [(l,0)])
+
+unassign:: Assignment -> SVar -> Assignment
+unassign a l = update a (fromList [(l,0)])
+
 
 backtrack:: Assignment -> Int -> Assignment
 backtrack a dl = backtrack2 a dl 0
@@ -107,8 +101,8 @@ backtrack2 a dl i =
     if (abs (a!i)) < dl
     then backtrack2 a dl (i+1)
     else
-      backtrack2 (unassign a (T i)) dl (i+1)
-    else a
+      backtrack2 (unassign a i) dl (i+1)
+  else a
 
 elemAss:: SignedVar -> Assignment -> Bool
 elemAss (F l) a = (a ! l) < 0
@@ -165,24 +159,33 @@ falseatoms x spvars = falseatoms2 x spvars 0
 falseatoms2 a spvars i =
   if i < Vector.length a
   then
-    if (a!i) <0
+    if (a!i) < 0
     then (atomsfromvar (get_lit i spvars)) Prelude.++ (falseatoms2 a spvars (i+1))
     else (falseatoms2 a spvars (i+1))
   else []
 
 
+nonfalseatoms:: Assignment -> [SPVar] -> [Atom]
+nonfalseatoms x spvars = nonfalseatoms2 x spvars 0
+nonfalseatoms2 a spvars i =
+  if i < Vector.length a
+  then
+    if (a!i) < 0
+    then (nonfalseatoms2 a spvars (i+1))
+    else (atomsfromvar (get_lit i spvars)) Prelude.++ (nonfalseatoms2 a spvars (i+1))
+  else []
 
 -- -----------------------------------------
 type Clause = Vector Int
 
-joinClause:: Clause -> Clause -> Clause
-joinClause c1 c2 = joinClause2 c1 c2 0
-joinClause2 c1 c2 i =
+joinClauses:: Clause -> Clause -> Clause
+joinClauses c1 c2 = joinClauses2 c1 c2 0
+joinClauses2 c1 c2 i =
     if i < Vector.length c1
     then
       if (c2!i) /= 0
-      then joinClause2 (update c1 (fromList [(i,(c2!i))])) c2 (i+1)
-      else joinClause2 c1 c2 (i+1)
+      then joinClauses2 (update c1 (fromList [(i,(c2!i))])) c2 (i+1)
+      else joinClauses2 c1 c2 (i+1)
     else c1
 
 
@@ -208,33 +211,25 @@ without2 c a i =
 clauseWithoutSL:: Clause -> SignedVar -> Clause
 clauseWithoutSL c (T l) =
   if (c ! l) > 0
-  then unassign c (T l)   -- should be SVar l
+  then unassign c l
   else c
 clauseWithoutSL c (F l) =
   if (c ! l) < 0
-  then unassign c (F l)   -- should be SVar l
+  then unassign c l
   else c
 
 
-elemClause:: SignedVar -> Clause -> Bool
-elemClause (T l) c = (c ! l) > 0
-elemClause (F l) c = (c ! l) < 0
 
-
-
-
-
-
-get_max_dlevel_alevel:: Clause -> Assignment -> Int
+get_max_alevel:: Clause -> Assignment -> Int
 -- determin k in conflict_analysis
-get_max_dlevel_alevel c a = get_max_dlevel_alevel2 c a 0 0
+get_max_alevel c a = get_max_alevel2 c a 0 0
 
-get_max_dlevel_alevel2 c a i akku =
+get_max_alevel2 c a i akku =
   if i < Vector.length c
   then
     if (a!i) > akku
-    then get_max_dlevel_alevel2 c a (i+1) (a!i)
-    else get_max_dlevel_alevel2 c a (i+1) akku
+    then get_max_alevel2 c a (i+1) (a!i)
+    else get_max_alevel2 c a (i+1) akku
   else akku
 
 
@@ -345,19 +340,9 @@ get_last_assigned_var3 c a n (akku,akkuval) =
    else akku
 
 
-get_sigma:: Clause -> Assignment -> Int -> (SignedVar, Assignment)
+get_sigma:: Clause -> Assignment -> (SignedVar, Assignment)
 -- used in conflict_analysis
-
--- get_sigma c a 1 = get_sigma2 c a 3  -- mpr 5
--- get_sigma c a 2 = get_sigma2 c a 2
--- get_sigma c a 3 = get_sigma2 c a 1
-
--- get_sigma c a 1 = get_sigma2 c a 8  -- mpr 6
--- get_sigma c a 2 = get_sigma2 c a 4
--- get_sigma c a 3 = get_sigma2 c a 5
-
-
-get_sigma c a i =
+get_sigma c a =
   let last_assigned_var = get_last_assigned_var c a in
 --   trace ("lastvar: " Prelude.++ (show c) Prelude.++ (show a) Prelude.++ (show last_assigned_var)) $
   get_sigma2 c a last_assigned_var
@@ -366,7 +351,7 @@ get_sigma2 c a i =
 --   trace ("get_sigma: " Prelude.++ (show c) Prelude.++ (show a) Prelude.++ (show i)) $
   if i < Vector.length c
   then
-  let prefix = unassign a (T i)   in
+  let prefix = unassign a i in
 --     trace ("prefix: " Prelude.++ (show prefix) ) $
     if (c!i) > 0
     then
@@ -392,17 +377,17 @@ get_sigma2 c a i =
 
 
 
-filter_dl_al:: Clause -> Assignment -> Int -> Clause
-filter_dl_al c a l = filter_dl_al2 c a l 0
-filter_dl_al2:: Clause -> Assignment -> Int -> Int -> Clause
-filter_dl_al2 c a l i =
+filter_al:: Clause -> Assignment -> Int -> Clause
+filter_al c a l = filter_al2 c a l 0
+filter_al2:: Clause -> Assignment -> Int -> Int -> Clause
+filter_al2 c a l i =
   if i < Vector.length c
   then
      if (abs (a!i)) < l
      then
        let c' = update c (fromList [(i,0)]) in
-       filter_dl_al2 c' a l (i+1)
-     else filter_dl_al2 c a l (i+1)
+       filter_al2 c' a l (i+1)
+     else filter_al2 c a l (i+1)
   else c
 
 
