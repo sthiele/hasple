@@ -17,7 +17,7 @@
 
 module CDNLSolver (
    cdnl_enum,
-  ) where
+) where
 
 import ASP
 import SPVar

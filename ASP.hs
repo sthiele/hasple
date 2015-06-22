@@ -27,7 +27,7 @@ module ASP (
    nbody,
    heads_p,
    atoms_p,
-  ) where
+) where
     
 import Data.List (nub)                  
 -- --------------------------------------------------------------

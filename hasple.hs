@@ -25,7 +25,7 @@ import GrounderSolver -- for interleaved grounding/solving
 
 get_answersets:: [Rule] -> Int -> [[Atom]]
 -- get_answersets prg i = anssets (groundProgram prg)    -- for old style grounding->solving
-get_answersets prg i = gr_solve  prg                     -- for interleaved grounding/solving
+get_answersets prg i = gr_solve prg                      -- for interleaved grounding/solving
 
 main:: IO ()
 main =

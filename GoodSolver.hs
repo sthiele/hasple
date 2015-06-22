@@ -19,7 +19,7 @@ module GoodSolver (
    anssets,
    reduct,
    facts,
-  ) where
+) where
 
 import ASP
 import Data.List (sort, nub, intersect, (\\) )

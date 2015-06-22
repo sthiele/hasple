@@ -17,7 +17,7 @@
 
 module GrounderSolver (
   gr_solve,
-)where
+) where
 
 import Grounder
 -- import GoodSolver
@@ -42,7 +42,7 @@ get_ics ((Rule h b):rs) =
 
 
 simplifyProgramm:: [Rule] -> ([Atom],[Atom]) -> [Rule]
--- does remove facts
+-- removes facts
 simplifyProgramm [] (t,f) = []
 simplifyProgramm x (t,f) = (mapMaybe (simplifyRule (t,f)) x)
 
@@ -86,7 +86,6 @@ get_query_rulesx rules acc found a =
   else concatMap (get_query_rulesx rules nacc (a:found)) nn
 
 
-
 get_query_rules2:: [Rule] -> Atom -> [Rule]
 get_query_rules2 [] _ = []
 
@@ -98,15 +97,16 @@ get_query_rules2 (r:rs) a =
                     nub (gr: grs)
     Nothing ->      get_query_rules2 rs a
 
--- ------------------------------------------------------------
-
+    
+-- -----------------------------------------------------------------------------
 
 gr_solve:: [Rule] -> [[Atom]]
 -- gr_solve, returns the answer sets of a program
 gr_solve prg =  gr_solve_l (prg,[],[])
 
--- returns the answer sets of a program that are consistent with the answer candidate
+
 gr_solve_l:: ([Rule],[Atom],[Atom]) -> [[Atom]]
+-- returns the answer sets of a program that are consistent with the answer candidate
 gr_solve_l (prg, cons, falses) =
   let
     mos = insert_atoms emptyAtomMap cons

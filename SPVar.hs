@@ -1,18 +1,16 @@
 module SPVar (
    SPVar(..),
-   __bottom,
-   get_lit,
-   atomsfromvar,
+--    __bottom,
    bodies2vars,
+   atomsfromvar,
    bodies,
    external_bodies,
-   nogoods_of_lp,
-   loop_nogoods,
    get_vars,
    CClause,
-)
-
-where
+   nogoods_of_lp,
+   loop_nogoods,
+) where
+       
 import ASP
 import Data.List (nub, delete, intersect)
 -- import Debug.Trace
@@ -37,6 +35,13 @@ bodies2vars:: [[Literal]] -> [SPVar]
 bodies2vars bs = [(BLit b) | b <- bs ]
 
 
+atomsfromvar:: SPVar -> [Atom]
+
+atomsfromvar (ALit a) = [a]
+
+atomsfromvar (BLit b) = [ a | PAtom a <- b]
+
+
 bodies_p:: [Rule] -> [[Literal]]
 -- returns all bodies of a program
 bodies_p p = [(body r) | r <-p ]
@@ -45,34 +50,19 @@ bodies:: [Rule] -> Atom -> [[Literal]]
 -- returns all bodies of rules with the atom as head
 bodies p a  = [(body r) | r<-p , (kopf r)==a ]
 
+-- ---------------------------------------------------------------------------------
+
+type CClause = ([SPVar],[SPVar])
+
+
 get_vars:: [CClause] -> [SPVar]
 
-get_vars [] = []
-
-get_vars (c:cs) = nub ((get_varsc c) ++ (get_vars cs))
+get_vars cs = nub (concatMap get_varsc cs)
 
 get_varsc:: CClause -> [SPVar]
 
 get_varsc (t,f) = nub (t ++ f)
 
-
-get_lit:: Int -> [SPVar] -> SPVar
-
-get_lit 0 spvars = head spvars
-
-get_lit n (v:vs) = get_lit (n-1) vs
-
-
-atomsfromvar:: SPVar -> [Atom]
-
-atomsfromvar (ALit a) = [a]
-
-atomsfromvar (BLit b) = [ a | PAtom a <- b]
-
-
--- ---------------------------------------------------------------------------------
-
-type CClause = ([SPVar],[SPVar])
 
 nogoods_of_lp:: [Rule] -> [CClause]
 

@@ -16,11 +16,11 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module Types (
-   SVar(..),
+   SVar,
    SignedVar(..),
    unsign,
    invert,
-   Assignment(..),
+   Assignment,
    initialAssignment,
    assign,
    unassign,
@@ -29,14 +29,11 @@ module Types (
    elemAss,
    isassigned,
    get_unassigned,
-   get_assigned,
-   get_tassigned,
-   get_fassigned,
    falselits,
    trueatoms,
    falseatoms,
    nonfalseatoms,
-   Clause(..),
+   Clause,
    joinClauses,
    clauseWithoutSL,
    get_max_alevel,
@@ -46,14 +43,14 @@ module Types (
    get_sigma,
    filter_al,
    is_included
-  ) where
+) where
+  
 import ASP
 import SPVar
 import Data.List (nub, delete)
 import Data.Vector.Unboxed as Vector
 -- import Debug.Trace
 
--- -------------------
 type SVar = Int
 
 data SignedVar = T SVar
@@ -70,7 +67,7 @@ invert (F l) = (T l)
 
 
 -- -----------------------------------------
--- type Assignment = [Int]
+
 type Assignment = Vector Int
 
 initialAssignment:: Int -> Assignment
@@ -133,49 +130,28 @@ get_fassigned a = if Vector.null a
                   else toList (findIndices (<0) a)
 
 
-falselits:: Assignment -> [SPVar] -> [SPVar]
-falselits x spvars = falselits2 x spvars 0
-falselits2 a spvars i =
-  if i < Vector.length a
-  then if (a!i) < 0
-       then ((get_lit i spvars):(falselits2 a spvars (i+1)))
-       else (falselits2 a spvars (i+1))
-  else []
+get_lit:: [SPVar] -> Int -> SPVar
+get_lit spvars 0 = Prelude.head spvars
+get_lit (v:vs) n = get_lit vs (n-1)
 
+
+falselits:: Assignment -> [SPVar] -> [SPVar]
+falselits a spvars = Prelude.map (get_lit spvars) (get_fassigned a)
 
 trueatoms:: Assignment -> [SPVar] -> [Atom]
-trueatoms x spvars = trueatoms2 x spvars 0
-trueatoms2 a spvars i =
-  if i < Vector.length a
-  then
-    if (a!i) > 0
-    then (atomsfromvar (get_lit i spvars)) Prelude.++ (trueatoms2 a spvars (i+1))
-    else  (trueatoms2 a spvars (i+1))
-  else []
-
+trueatoms a spvars =  Prelude.concatMap atomsfromvar (Prelude.map (get_lit spvars) (get_tassigned a))
 
 falseatoms:: Assignment -> [SPVar] -> [Atom]
-falseatoms x spvars = falseatoms2 x spvars 0
-falseatoms2 a spvars i =
-  if i < Vector.length a
-  then
-    if (a!i) < 0
-    then (atomsfromvar (get_lit i spvars)) Prelude.++ (falseatoms2 a spvars (i+1))
-    else (falseatoms2 a spvars (i+1))
-  else []
+
+falseatoms a spvars =  Prelude.concatMap atomsfromvar (Prelude.map (get_lit spvars) (get_fassigned a))
 
 
 nonfalseatoms:: Assignment -> [SPVar] -> [Atom]
-nonfalseatoms x spvars = nonfalseatoms2 x spvars 0
-nonfalseatoms2 a spvars i =
-  if i < Vector.length a
-  then
-    if (a!i) < 0
-    then (nonfalseatoms2 a spvars (i+1))
-    else (atomsfromvar (get_lit i spvars)) Prelude.++ (nonfalseatoms2 a spvars (i+1))
-  else []
+nonfalseatoms a spvars = Prelude.concatMap atomsfromvar (Prelude.map (get_lit spvars) (toList (findIndices (>=0) a)))
+
 
 -- -----------------------------------------
+
 type Clause = Vector Int
 
 joinClauses:: Clause -> Clause -> Clause
@@ -217,7 +193,6 @@ clauseWithoutSL c (F l) =
   if (c ! l) < 0
   then unassign c l
   else c
-
 
 
 get_max_alevel:: Clause -> Assignment -> Int
