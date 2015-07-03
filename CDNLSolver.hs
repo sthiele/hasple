@@ -29,7 +29,81 @@ import Data.Maybe
 -- import Data.List.Extra (nubOrd)
 -- use sort to order list nub (nubOrd) to remove duplicates from list -- maybe use Sets instead?
 import qualified Data.Map as Map
--- import Debug.Trace
+import Debug.Trace
+
+
+
+
+data CDNLSolver = CDNLSolver { prg:: [Rule]      -- the program
+                             , nogoods:: NoGoodStore
+                             , assignment:: Assignment  -- an assignment
+                             , s:: Int           -- s
+                             , dlevel:: Int          -- the decision level
+                             , alevel:: Int          -- the assignment level
+                             , blevel:: Int          -- blocked level
+                             , spvars:: [SPVar]   -- mapping SPVar 2 SVar(Int)
+                             , sat:: Bool
+--                              , ans:: [[Atom]]    -- found answer sets
+}
+
+data NoGoodStore = NoGoodStore { program_nogoods:: [Clause] -- program nogoods
+                               , learned_nogoods:: [Clause] -- learned nogoods
+}
+get_ng:: NoGoodStore -> Int -> Maybe Clause
+get_ng (NoGoodStore png lng) i =
+  if i < length png
+  then
+    Just (head (drop i png))
+  else
+    if i < (length png) + (length lng)
+    then Just (head (drop (i-length png) lng))
+    else Nothing
+
+
+-- local_prop::  [Rule] -> Int -> ([Clause],[Clause],[Clause],[Clause]) -> Int -> Int -> Assignment -> (PropRes,Int,[Clause],[Clause])
+-- local_prop::CDNLSolver -> Int -> CDNLSolver
+-- -- takes a program a cyclic list of nogoods and an assignment and returns a propagation result
+-- -- local_prop p al ([],[],ngs_p,ngs) done todo a = local_prop p al (reverse ngs_p,reverse ngs,[],[]) done todo a
+-- local_prop s done =
+--   let mng = get_ng (nogoods s)
+--   in
+--   case mng of
+--        Just ng -> let up resolve (alevel s) nogood (assignment s)  in
+--                   case up of
+--     NIX         -> if (done+1) == todo
+--                    then (ASSIGNMENT a,al,r1,(ng:nogoods)++r2)
+--                    else (local_prop p al ([],nogoods,r1,(ng:r2)) (done+1) todo a)
+--     NIXU ng'    -> if (done+1) == todo
+--                    then (ASSIGNMENT a,al,r1,(ng':nogoods)++r2)
+--                    else (local_prop p al ([],nogoods,r1,(ng':r2)) (done+1) todo a)
+-- 
+--     Res a'      -> local_prop p (al+1) ([],nogoods,r1,(ng:r2)) 0 todo a'         -- increase assignment level
+--     ResU a' ng' -> local_prop p (al+1) ([],nogoods,r1,(ng':r2)) 0 todo a'        -- increase assignment level
+-- 
+--     CONF -> (Conflict ng a,al,r1,(ng:nogoods)++r2)                                       -- return conflict clause
+-- 
+--                       
+--        Nothing -> s
+
+-- 
+-- 
+-- local_prop p al (ng:nogoods,ngs,r1,r2) done todo a =
+--   let up = resolve al ng a  in
+-- --   trace ("al: " ++ (show al)) $
+--   case up of
+--     NIX         -> if (done+1) == todo
+--                    then (ASSIGNMENT a,al,(ng:nogoods)++r1,ngs)
+--                    else (local_prop p al (nogoods,ngs,(ng:r1),r2) (done+1) todo a)
+--     NIXU ng'    -> if (done+1) == todo
+--                    then (ASSIGNMENT a,al,(ng':nogoods)++r1,ngs)
+--                    else (local_prop p al (nogoods,ngs,(ng':r1),r2) (done+1) todo a)
+-- 
+--     Res a'      -> local_prop p (al+1) (nogoods,ngs,(ng:r1),r2) 0 todo a'        -- increase assignment level
+--     ResU a' ng' -> local_prop p (al+1) (nogoods,ngs,(ng':r1),r2) 0 todo a'       -- increase assignment level
+-- 
+--     CONF -> (Conflict ng a,al,(ng:nogoods)++r1,ngs)                                       -- return conflict clause
+
+    
 
 
 get_svar:: SPVar -> [SPVar] -> SVar
@@ -59,15 +133,22 @@ transform (t,f) spvars =
       a = initialAssignment l
       tsvars = map (get_svarx spvars) t
       fsvars = map (get_svarx spvars) f
-      assi =   assign_trues (assign_falses a fsvars) tsvars
+      a' = assign_trues (assign_falses a fsvars) tsvars
+      allvars=tsvars++fsvars
+      number_of_vars = length allvars
   in
-  assi
+  if number_of_vars == 1
+  then (a',head allvars,head allvars)
+  else let w= head allvars
+           v= head (tail allvars)
+       in
+       (a',w,v)
 
-assign_trues:: Clause -> [SVar] -> Clause
+assign_trues:: Assignment -> [SVar] -> Assignment
 assign_trues a [] = a
 assign_trues a (v:vs) = assign_trues (assign a (T v) 1) vs
 
-assign_falses:: Clause -> [SVar] -> Clause
+assign_falses:: Assignment -> [SVar] -> Assignment
 assign_falses a [] = a
 assign_falses a (v:vs) = assign_falses (assign a (F v) 1) vs
 
@@ -105,7 +186,7 @@ cdnl_enum_loop::
 
 cdnl_enum_loop prg s dl bl al dliteral alt ngs_p ngs assig spvars =
   let
-    (maybeassig,ngs2,al2) = ng_prop prg al ngs_p ngs assig spvars []
+    (maybeassig,al2,ngs_p',ngs') = ng_prop prg al ngs_p ngs assig spvars []
   in
 --   trace( "\ncdnl_loop:\n"
 --   ++ (show spvars) ++ "\n"
@@ -120,7 +201,7 @@ cdnl_enum_loop prg s dl bl al dliteral alt ngs_p ngs assig spvars =
                          else                                                                        -- conflict analysis and backtrack
                            if bl < dl
                            then
-                             let (learnednogood, sigma_uip, alx) = conflict_analysis alt (ngs_p++ngs2) ccl cass
+                             let (learnednogood, sigma_uip, alx) = conflict_analysis alt (ngs_p'++ngs') ccl cass
                              in
 --                              mtrace ("uip:  " ++ (show sigma_uip) ) $
 --                              mtrace ("found al: " ++ (show alx) ++ " learnednogood: " ++ (show learnednogood) ) $
@@ -130,7 +211,7 @@ cdnl_enum_loop prg s dl bl al dliteral alt ngs_p ngs assig spvars =
                              in
 --                              mtrace ( "new al: " ++ (show al3) )$
                              let
-                                 ngs3 = (learnednogood:ngs2)
+                                 ngs'' = (learnednogood:ngs')
 --                                  assigxxxx=(backtrack cass al3)
                                  assig3 = assign (backtrack cass al3) (invert sigma_uip) (al3)
                              in
@@ -142,7 +223,7 @@ cdnl_enum_loop prg s dl bl al dliteral alt ngs_p ngs assig spvars =
                              in
 --                              mtrace ("nedlits: " ++ (show dliteral2) ) $
 --                              mtrace ("nealt  : " ++ (show alt2) ) $
-                             cdnl_enum_loop prg s (dl3-1) bl (al3+1) dliteral2 alt2 ngs_p ngs3 assig3 spvars
+                             cdnl_enum_loop prg s (dl3-1) bl (al3+1) dliteral2 alt2 ngs_p' ngs'' assig3 spvars
                            else
                              let sigma_d = (get_dliteral dliteral (dl))
                                  dl2 = dl-1
@@ -150,7 +231,7 @@ cdnl_enum_loop prg s dl bl al dliteral alt ngs_p ngs assig spvars =
                                  al3 = (dl2al alt dl2)
                                  assig3 = assign (backtrack cass al3) (invert sigma_d) al3
                                  alt2 = albacktrack alt dl2
-                                 remaining_as = cdnl_enum_loop prg s dl2 bl2 al3 dliteral alt2 ngs_p ngs2 assig3 spvars
+                                 remaining_as = cdnl_enum_loop prg s dl2 bl2 al3 dliteral alt2 ngs_p' ngs' assig3 spvars
                              in
                              remaining_as
     ASSIGNMENT assig2 -> -- no conflict
@@ -186,7 +267,7 @@ cdnl_enum_loop prg s dl bl al dliteral alt ngs_p ngs assig spvars =
 --                              trace ("assig3: " ++ (show assig3)) $
 --                              trace ("assig4: " ++ (show assig4)) $
                              let
-                                 remaining_as = cdnl_enum_loop prg s2 dl2 bl2 (cal+1) dliteral2 alt2 ngs_p ngs2 assig4 spvars
+                                 remaining_as = cdnl_enum_loop prg s2 dl2 bl2 (cal+1) dliteral2 alt2 ngs_p' ngs' assig4 spvars
                              in
                              ((nub (trueatoms assig2 spvars)):remaining_as)
                          else                                                                        -- select new lit
@@ -197,7 +278,7 @@ cdnl_enum_loop prg s dl bl al dliteral alt ngs_p ngs assig spvars =
                            in
 --                            mtrace ("al: " ++ (show al2)) $
 --                            mtrace ( "choose: " ++ (show (T sigma_d))) $
-                           cdnl_enum_loop prg s (dl+1) bl (al2+1) dliteral2 alt2 ngs_p ngs2 assig3 spvars
+                           cdnl_enum_loop prg s (dl+1) bl (al2+1) dliteral2 alt2 ngs_p' ngs' assig3 spvars
 
 
 al2dl:: [(Int,Int)] -> Int -> Int
@@ -281,12 +362,13 @@ data PropRes =  ASSIGNMENT Assignment  -- result of propagation can either be a 
          deriving (Show,Eq)
 
 
-ng_prop::  [Rule] -> Int -> [Clause] -> [Clause] -> Assignment -> [SPVar] -> [Atom] -> (PropRes,[Clause],Int)
+ng_prop::  [Rule] -> Int -> [Clause] -> [Clause] -> Assignment -> [SPVar] -> [Atom] -> (PropRes,Int,[Clause],[Clause])
 ng_prop prg al ngs_p ngs assig spvars u =
   let
     spc = initspc prg
-    nogoods= ngs_p++ngs
-    (maybeassig,al2) = (local_propagation prg al (cycle nogoods) 0 (length nogoods) assig)
+--     nogoods= ngs_p++ngs
+    number_of_nogoods = (length ngs_p) +(length ngs)
+    (maybeassig,al2,ngs_p',ngs') = (local_propagation prg al (ngs_p,ngs,[],[]) 0 number_of_nogoods assig)
   in
   case maybeassig of                                                            -- TODO if prg is tight skip unfounded set check
     ASSIGNMENT assig2 ->
@@ -299,7 +381,7 @@ ng_prop prg al ngs_p ngs assig spvars u =
                             then                                                -- unfounded set check
                               let u3 = (unfounded_set prg spc assig2 spvars) in
                               if null u3
-                              then (ASSIGNMENT assig2, ngs,al2)
+                              then (ASSIGNMENT assig2,al2,ngs_p',ngs')
                               else                                              -- learn loop nogood
                                 let
                                     p = get_svar ((ALit (head u3))) spvars
@@ -311,74 +393,96 @@ ng_prop prg al ngs_p ngs assig spvars u =
                                       ngs_of_loop = transforms cngs_of_loop spvars
                                   in
 
-                                  (ASSIGNMENT assig2,(ngs_of_loop++ngs),al2)
+                                  (ASSIGNMENT assig2,al2,ngs_p',(ngs_of_loop++ngs'))
                                 else
                                   let
                                     assig3 = assign assig2 (F p) al2             -- extend assignment
                                   in
                                   case elemAss (F p) assig2 of
-                                    True  -> ng_prop prg al2 ngs_p ngs assig2 spvars u3
-                                    False -> ng_prop prg al2 ngs_p ngs assig3 spvars u3
+                                    True  -> ng_prop prg al2 ngs_p' ngs' assig2 spvars u3
+                                    False -> ng_prop prg al2 ngs_p' ngs' assig3 spvars u3
                             else                                                -- learn loop nogood from u2
                               let
                                   p = get_svar ((ALit (head u2))) spvars
                                   cngs_of_loop = (loop_nogoods prg u2)
-                                  ngs2 = (transforms cngs_of_loop spvars) ++ngs
+                                  ngs_of_loop = (transforms cngs_of_loop spvars)
                               in
                               if elemAss (T p) assig2
-                              then (ASSIGNMENT assig2, ngs2,al2)
+                              then (ASSIGNMENT assig2, al2,ngs_p',(ngs_of_loop++ngs'))
                               else
                                 let
                                   assig3 = assign assig2 (F p) al2              -- extend assignment
                                 in
                                 if (elemAss (F p) assig2)
                                 then
-                                  ng_prop prg al2 ngs_p ngs2 assig2 spvars u2
+                                  ng_prop prg al2 ngs_p' (ngs_of_loop++ngs') assig2 spvars u2
                                 else
-                                  ng_prop prg al2 ngs_p ngs2 assig3 spvars u2
+                                  ng_prop prg al2 ngs_p' (ngs_of_loop++ngs') assig3 spvars u2
 
-    Conflict ccl cass -> (Conflict ccl cass, ngs,al2)                               -- return conflic clause
+    Conflict ccl cass -> (Conflict ccl cass,al2,ngs_p',ngs')              -- return conflic clause
 
 
 
-local_propagation::  [Rule] -> Int -> [Clause] -> Int -> Int -> Assignment -> (PropRes,Int)
+local_propagation::  [Rule] -> Int -> ([Clause],[Clause],[Clause],[Clause]) -> Int -> Int -> Assignment -> (PropRes,Int,[Clause],[Clause])
 -- takes a program a cyclic list of nogoods and an assignment and returns a propagation result
-local_propagation p al (ng:nogoods) done todo assig =
-  let up = unitresult al assig ng  in
+local_propagation p al ([],[],ngs_p,ngs) done todo a = local_propagation p al (reverse ngs_p,reverse ngs,[],[]) done todo a
+local_propagation p al ([],ng:nogoods,r1,r2) done todo a =
+  let up = resolve al ng a  in
 --   trace ("al: " ++ (show al)) $
   case up of
-    Nix           -> if (done+1) == todo
-                     then (ASSIGNMENT assig,al)
-                     else (local_propagation p al nogoods (done+1) todo assig)
-    ASSI newassig ->
---       trace ("al: " ++ (show al)) $
-      local_propagation p (al+1) nogoods 0 todo newassig         -- increase assignment level
-    Conf ccl -> (Conflict ccl assig,al)                                         -- return conflict clause
+    NIX         -> if (done+1) == todo
+                   then (ASSIGNMENT a,al,r1,(ng:nogoods)++r2)
+                   else (local_propagation p al ([],nogoods,r1,(ng:r2)) (done+1) todo a)
+    NIXU ng'    -> if (done+1) == todo
+                   then (ASSIGNMENT a,al,r1,(ng':nogoods)++r2)
+                   else (local_propagation p al ([],nogoods,r1,(ng':r2)) (done+1) todo a)
+
+    Res a'      -> local_propagation p (al+1) ([],nogoods,r1,(ng:r2)) 0 todo a'         -- increase assignment level
+    ResU a' ng' -> local_propagation p (al+1) ([],nogoods,r1,(ng':r2)) 0 todo a'        -- increase assignment level
+
+    CONF -> (Conflict ng a,al,r1,(ng:nogoods)++r2)                                       -- return conflict clause
+
+    
+local_propagation p al (ng:nogoods,ngs,r1,r2) done todo a =
+  let up = resolve al ng a  in
+--   trace ("al: " ++ (show al)) $
+  case up of
+    NIX         -> if (done+1) == todo
+                   then (ASSIGNMENT a,al,(ng:nogoods)++r1,ngs)
+                   else (local_propagation p al (nogoods,ngs,(ng:r1),r2) (done+1) todo a)
+    NIXU ng'    -> if (done+1) == todo
+                   then (ASSIGNMENT a,al,(ng':nogoods)++r1,ngs)
+                   else (local_propagation p al (nogoods,ngs,(ng':r1),r2) (done+1) todo a)
+                     
+    Res a'      -> local_propagation p (al+1) (nogoods,ngs,(ng:r1),r2) 0 todo a'        -- increase assignment level
+    ResU a' ng' -> local_propagation p (al+1) (nogoods,ngs,(ng':r1),r2) 0 todo a'       -- increase assignment level
+    
+    CONF -> (Conflict ng a,al,(ng:nogoods)++r1,ngs)                                       -- return conflict clause
 
 
-data Res = ASSI Assignment  -- result of propagation can either be a conflict or a new assignment
-         | Conf Clause
-         | Nix
-         deriving (Show,Eq)
-
-unitresult:: Int -> Assignment -> Clause -> Res
-unitresult dl assig nogood =
-  case (resolve nogood assig) of
-    CONF  ->     {-mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig) ++ " = conflict") $-}
-                 Conf nogood
-    Res (T l) -> if isassigned l assig
-                 then
---                    mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig)) $
-                   Nix
-                 else
---                    mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig) ++ " = " ++ (show (T l))) $
-                   ASSI (assign assig (T l) dl)
-    Res (F l) -> if isassigned l assig
-                 then
---                    mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig)) $
-                   Nix
-                 else
---                    mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig) ++ " = " ++ (show (F l))) $
-                   ASSI (assign assig (F l) dl)
-    NIX       -> {-mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig)) $-}
-                 Nix                                                            -- nothing can be derived
+-- data Res = ASSI Assignment  -- result of propagation can either be a conflict or a new assignment
+--          | Conf Clause
+--          | Nix
+--          deriving (Show,Eq)
+-- 
+-- unitresult:: Int -> Assignment -> Clause -> Res
+-- unitresult dl assig nogood =
+--   case (resolve nogood assig) of
+--     CONF  ->     {-mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig) ++ " = conflict") $-}
+--                  Conf nogood
+--     Res (T l) -> if isassigned l assig
+--                  then
+-- --                    mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig)) $
+--                    Nix
+--                  else
+-- --                    mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig) ++ " = " ++ (show (T l))) $
+--                    ASSI (assign assig (T l) dl)
+--     Res (F l) -> if isassigned l assig
+--                  then
+-- --                    mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig)) $
+--                    Nix
+--                  else
+-- --                    mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig) ++ " = " ++ (show (F l))) $
+--                    ASSI (assign assig (F l) dl)
+--     NIX       -> {-mtrace ("unitres: " ++ (show nogood) ++" "++ (show assig)) $-}
+--                  Nix                                                            -- nothing can be derived
