@@ -33,8 +33,7 @@ import Debug.Trace
 import Grounder
 import LPParser -- for parsing tests
 
-data TSolver = TSolver { boocons:: [Clause]   -- list of clauses/boolean constraints
-                       , counter:: Int        -- counter
+data TSolver = TSolver { boocons:: NoGoodStore   -- list of clauses/boolean constraints
                        , assignment_level     :: Int        -- assignmenetlevel
                        , assig  :: Assignment -- an assignment
                        , conf   :: Bool       -- is the state of the solver cons or incons
@@ -49,123 +48,94 @@ Right mp1 = readProgram mpr1
 
 
 tsolv = let cngs = (nub (nogoods_of_lp (groundProgram mp1)))
-	    vars = get_vars cngs
-	    l    = length vars
+            vars = get_vars cngs
+            l    = length vars
             assi = initialAssignment l
-            ngs  =  transforms cngs vars 
+            ngs  = new_ngs (transforms cngs vars) [] 
         in 
-        TSolver ngs (-1) 0 assi False
+        TSolver ngs 0 assi False
 
 
 choose:: TSolver -> TSolver
 choose s =
   if (conf s)
   then s
-  else if ((counter s)+1) < length (boocons s)
-       then TSolver (boocons s) ((counter s) +1) (assignment_level s) (assig s) (conf s)
+  else if ((counter $ boocons s)+1) < ngs_size (boocons s)
+       then 
+         let (NoGoodStore png ln pnga lnga counter) = boocons s
+             ngs' = (NoGoodStore png ln pnga lnga (counter+1))
+         in 
+         TSolver ngs' (assignment_level s) (assig s) (conf s)
        else s
+
 
 resolv:: TSolver -> TSolver
 resolv s =
 --  trace ("resolv: " ++ (show s)) $
   if (conf s)
   then s
-  else 
+  else  
     let al = (assignment_level s)
-        ng = (boocons s)!!(counter s)
+        ng = get_ng (boocons s)
         x  = resolve al ng (assig s)
     in
     case x of
-	NIX         -> s
-	NIXU ng'    -> s -- TODO update nogoodStore
-	                                                                                                               
-	Res a'      -> TSolver (boocons s) (-1) (al+1) a' (conf s)        -- TODO increase assignment level
-	ResU a' ng' -> TSolver (boocons s) (-1) (al+1) a' (conf s)        -- TODO update nogoodstore, increase assignment level
-	                                                                                                               
-	CONF ->        TSolver (boocons s) (counter s) al  (assig s) True     -- set conflict
+       NIX         -> s
+       NIXU ng'    -> s -- TODO update nogoodStore
+                                                                                                                      
+       Res a'      -> let ngs' = update_ngs (boocons s) in
+                      TSolver ngs' (al+1) a' (conf s)       
+       ResU a' ng' -> let ngs' = upgrade_ngs (boocons s) ng' in
+                      TSolver ngs' (al+1) a' (conf s)
+                                                                                                                      
+       CONF ->        TSolver (boocons s) al (assig s) True     -- set conflict
 
       
 
 
-prop:: TSolver -> (TSolver,Int)
+prop:: TSolver -> TSolver
 prop s =
 --  trace ("prop: " ++ (show s)) $
   if (conf s)
-  then (s,(counter s))
+  then s
   else 
     if (choose s) /= s
     then prop $ resolv $ (choose s)
-    else (s,-1)
+    else s
 
-
-data CDNLSolver = CDNLSolver { prg:: [Rule]      -- the program
-                             , nogoods:: NoGoodStore
-                             , assignment:: Assignment  -- an assignment
-                             , s:: Int           -- s
-                             , dlevel:: Int          -- the decision level
-                             , alevel:: Int          -- the assignment level
-                             , blevel:: Int          -- blocked level
-                             , spvars:: [SPVar]   -- mapping SPVar 2 SVar(Int)
-                             , sat:: Bool
---                              , ans:: [[Atom]]    -- found answer sets
-}
 
 data NoGoodStore = NoGoodStore { program_nogoods:: [Clause] -- program nogoods
                                , learned_nogoods:: [Clause] -- learned nogoods
-}
-get_ng:: NoGoodStore -> Int -> Maybe Clause
-get_ng (NoGoodStore png lng) i =
-  if i < length png
-  then
-    Just (head (drop i png))
+                               , png_akku:: [Clause]        -- learned nogoods
+                               , lng_akku:: [Clause]        -- learned nogoods
+                               , counter:: Int
+} deriving (Show, Eq)
+
+new_ngs:: [Clause] -> [Clause] -> NoGoodStore
+new_ngs png lng = NoGoodStore png lng [] [] (-1)
+
+ngs_size:: NoGoodStore -> Int
+ngs_size (NoGoodStore png lng _ _ counter) = (length png) + (length lng)
+
+get_ng:: NoGoodStore -> Clause
+get_ng (NoGoodStore png lng _ _ counter) =
+  if counter < length png
+  then png!!counter
   else
-    if i < (length png) + (length lng)
-    then Just (head (drop (i-length png) lng))
-    else Nothing
+    if counter < (length png) + (length lng)
+    then lng!!(counter-length png)
+    else error "NoGoodStore out of bounds"
 
 
--- local_prop::  [Rule] -> Int -> ([Clause],[Clause],[Clause],[Clause]) -> Int -> Int -> Assignment -> (PropRes,Int,[Clause],[Clause])
--- local_prop::CDNLSolver -> Int -> CDNLSolver
--- -- takes a program a cyclic list of nogoods and an assignment and returns a propagation result
--- -- local_prop p al ([],[],ngs_p,ngs) done todo a = local_prop p al (reverse ngs_p,reverse ngs,[],[]) done todo a
--- local_prop s done =
---   let mng = get_ng (nogoods s)
---   in
---   case mng of
---        Just ng -> let up resolve (alevel s) nogood (assignment s)  in
---                   case up of
---		     NIX         -> if (done+1) == todo
---                		    then (ASSIGNMENT a,al,r1,(ng:nogoods)++r2)
---        	        	    else (local_prop p al ([],nogoods,r1,(ng:r2)) (done+1) todo a)
---		     NIXU ng'    -> if (done+1) == todo
---		                    then (ASSIGNMENT a,al,r1,(ng':nogoods)++r2)
---        		            else (local_prop p al ([],nogoods,r1,(ng':r2)) (done+1) todo a)
--- 
---		     Res a'      -> local_prop p (al+1) ([],nogoods,r1,(ng:r2)) 0 todo a'         -- increase assignment level
---		     ResU a' ng' -> local_prop p (al+1) ([],nogoods,r1,(ng':r2)) 0 todo a'        -- increase assignment level
--- 
---		     CONF -> (Conflict ng a,al,r1,(ng:nogoods)++r2)                                       -- return conflict clause
---        Nothing -> s
+update_ngs:: NoGoodStore -> NoGoodStore
+update_ngs (NoGoodStore png lng pnga lnga _) =
+  (NoGoodStore png lng pnga lnga (-1))
 
--- 
--- 
--- local_prop p al (ng:nogoods,ngs,r1,r2) done todo a =
---   let up = resolve al ng a  in
--- --   trace ("al: " ++ (show al)) $
---   case up of
---     NIX         -> if (done+1) == todo
---                    then (ASSIGNMENT a,al,(ng:nogoods)++r1,ngs)
---                    else (local_prop p al (nogoods,ngs,(ng:r1),r2) (done+1) todo a)OA
---     NIXU ng'    -> if (done+1) == todo
---                    then (ASSIGNMENT a,al,(ng':nogoods)++r1,ngs)
---                    else (local_prop p al (nogoods,ngs,(ng':r1),r2) (done+1) todo a)
--- 
---     Res a'      -> local_prop p (al+1) (nogoods,ngs,(ng:r1),r2) 0 todo a'        -- increase assignment level
---     ResU a' ng' -> local_prop p (al+1) (nogoods,ngs,(ng':r1),r2) 0 todo a'       -- increase assignment level
--- 
---     CONF -> (Conflict ng a,al,(ng:nogoods)++r1,ngs)                                       -- return conflict clause
 
-    
+upgrade_ngs:: NoGoodStore -> Clause -> NoGoodStore
+upgrade_ngs (NoGoodStore png lng _ _ _) ng =
+  (NoGoodStore png lng [] [] (-1))
+
 
 
 get_svar:: SPVar -> [SPVar] -> SVar
@@ -430,7 +400,7 @@ ng_prop prg al ngs_p ngs assig spvars u =
     spc = initspc prg
 --     nogoods= ngs_p++ngs
     number_of_nogoods = (length ngs_p) +(length ngs)
-    (maybeassig,al2,ngs_p',ngs') = (local_propagation al (ngs_p,ngs,[],[]) 0 number_of_nogoods assig)
+    (maybeassig,al2,ngs_p',ngs') = (local_propagation al (ngs_p,ngs) assig)
   in
   case maybeassig of                                                            -- TODO if prg is tight skip unfounded set check
     ASSIGNMENT assig2 ->
@@ -485,28 +455,27 @@ ng_prop prg al ngs_p ngs assig spvars u =
 
 
 
-local_propagation::  Int -> ([Clause],[Clause],[Clause],[Clause]) -> Int -> Int -> Assignment -> (PropRes,Int,[Clause],[Clause])
--- takes a program a cyclic list of nogoods and an assignment and returns a propagation result
+local_propagation::  Int -> ([Clause],[Clause]) -> Assignment -> (PropRes,Int,[Clause],[Clause])
+-- takes a program a list of nogoods and an assignment and returns a propagation result
 
-local_propagation al (ngs_p,ngs,_,_) 0 todo a =
+local_propagation al (pngs,lngs) a =
 --  trace (">> loc_prop: " ++ (show a)) $ 
-  -- ignore todo
-  -- mix program nogoods with learned nogoods
   -- no update of nogoods
   let assi   = a
-      ngs'   = ngs_p ++ ngs 
-      s      = TSolver ngs' (-1) al assi False
+      ngs    = new_ngs pngs lngs 
+      s      = TSolver ngs al assi False
   in
 --  trace (">>       s : " ++ (show s)) $
   let
-      (s',i) = prop s
+      s'     = prop s
   in
- -- trace ("loc_prop s': " ++ (show s')) $
-  if i == (-1)
-  then -- no conflict
-    (ASSIGNMENT (assig s'), (assignment_level s'), ngs_p, ngs) -- TODO update nogoods
-  else -- conflict with clause (counter s')
-    (Conflict (ngs'!!(counter s')) (assig s'), (assignment_level s'), ngs_p, ngs) -- TODO update nogoods
+--  trace ("loc_prop s': " ++ (show s')) $
+  if conf s'
+  then -- conflict with clause (counter s')
+    let ngs' = boocons s' in
+    (Conflict (get_ng ngs') (assig s'), (assignment_level s'), (program_nogoods $ boocons s'), (learned_nogoods $ boocons s'))-- TODO update nogoods
+  else -- no conflict
+    (ASSIGNMENT (assig s'), (assignment_level s'), (program_nogoods $ boocons s'), (learned_nogoods $ boocons s')) -- TODO update nogoods
 
 
 
