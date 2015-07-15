@@ -30,8 +30,72 @@ import Data.Maybe
 -- use sort to order list nub (nubOrd) to remove duplicates from list -- maybe use Sets instead?
 import qualified Data.Map as Map
 import Debug.Trace
+import Grounder
+import LPParser -- for parsing tests
+
+data TSolver = TSolver { boocons:: [Clause]   -- list of clauses/boolean constraints
+                       , counter:: Int        -- counter
+                       , assignment_level     :: Int        -- assignmenetlevel
+                       , assig  :: Assignment -- an assignment
+                       , conf   :: Bool       -- is the state of the solver cons or incons
+                       } deriving (Show, Eq)
+
+mpr1 = "a :- not b, not c.\n"
+    ++ "b :- not a, not c.\n"
+    ++ "c :- not a, not b.\n"
+-- mpr1 = "a :- not b.\n"
+
+Right mp1 = readProgram mpr1
 
 
+tsolv = let cngs = (nub (nogoods_of_lp (groundProgram mp1)))
+	    vars = get_vars cngs
+	    l    = length vars
+            assi = initialAssignment l
+            ngs  =  transforms cngs vars 
+        in 
+        TSolver ngs (-1) 0 assi False
+
+
+choose:: TSolver -> TSolver
+choose s =
+  if (conf s)
+  then s
+  else if ((counter s)+1) < length (boocons s)
+       then TSolver (boocons s) ((counter s) +1) (assignment_level s) (assig s) (conf s)
+       else s
+
+resolv:: TSolver -> TSolver
+resolv s =
+--  trace ("resolv: " ++ (show s)) $
+  if (conf s)
+  then s
+  else 
+    let al = (assignment_level s)
+        ng = (boocons s)!!(counter s)
+        x  = resolve al ng (assig s)
+    in
+    case x of
+	NIX         -> s
+	NIXU ng'    -> s -- TODO update nogoodStore
+	                                                                                                               
+	Res a'      -> TSolver (boocons s) (-1) (al+1) a' (conf s)        -- TODO increase assignment level
+	ResU a' ng' -> TSolver (boocons s) (-1) (al+1) a' (conf s)        -- TODO update nogoodstore, increase assignment level
+	                                                                                                               
+	CONF ->        TSolver (boocons s) (counter s) al  (assig s) True     -- set conflict
+
+      
+
+
+prop:: TSolver -> (TSolver,Int)
+prop s =
+--  trace ("prop: " ++ (show s)) $
+  if (conf s)
+  then (s,(counter s))
+  else 
+    if (choose s) /= s
+    then prop $ resolv $ (choose s)
+    else (s,-1)
 
 
 data CDNLSolver = CDNLSolver { prg:: [Rule]      -- the program
@@ -70,19 +134,17 @@ get_ng (NoGoodStore png lng) i =
 --   case mng of
 --        Just ng -> let up resolve (alevel s) nogood (assignment s)  in
 --                   case up of
---     NIX         -> if (done+1) == todo
---                    then (ASSIGNMENT a,al,r1,(ng:nogoods)++r2)
---                    else (local_prop p al ([],nogoods,r1,(ng:r2)) (done+1) todo a)
---     NIXU ng'    -> if (done+1) == todo
---                    then (ASSIGNMENT a,al,r1,(ng':nogoods)++r2)
---                    else (local_prop p al ([],nogoods,r1,(ng':r2)) (done+1) todo a)
+--		     NIX         -> if (done+1) == todo
+--                		    then (ASSIGNMENT a,al,r1,(ng:nogoods)++r2)
+--        	        	    else (local_prop p al ([],nogoods,r1,(ng:r2)) (done+1) todo a)
+--		     NIXU ng'    -> if (done+1) == todo
+--		                    then (ASSIGNMENT a,al,r1,(ng':nogoods)++r2)
+--        		            else (local_prop p al ([],nogoods,r1,(ng':r2)) (done+1) todo a)
 -- 
---     Res a'      -> local_prop p (al+1) ([],nogoods,r1,(ng:r2)) 0 todo a'         -- increase assignment level
---     ResU a' ng' -> local_prop p (al+1) ([],nogoods,r1,(ng':r2)) 0 todo a'        -- increase assignment level
+--		     Res a'      -> local_prop p (al+1) ([],nogoods,r1,(ng:r2)) 0 todo a'         -- increase assignment level
+--		     ResU a' ng' -> local_prop p (al+1) ([],nogoods,r1,(ng':r2)) 0 todo a'        -- increase assignment level
 -- 
---     CONF -> (Conflict ng a,al,r1,(ng:nogoods)++r2)                                       -- return conflict clause
--- 
---                       
+--		     CONF -> (Conflict ng a,al,r1,(ng:nogoods)++r2)                                       -- return conflict clause
 --        Nothing -> s
 
 -- 
@@ -93,7 +155,7 @@ get_ng (NoGoodStore png lng) i =
 --   case up of
 --     NIX         -> if (done+1) == todo
 --                    then (ASSIGNMENT a,al,(ng:nogoods)++r1,ngs)
---                    else (local_prop p al (nogoods,ngs,(ng:r1),r2) (done+1) todo a)
+--                    else (local_prop p al (nogoods,ngs,(ng:r1),r2) (done+1) todo a)OA
 --     NIXU ng'    -> if (done+1) == todo
 --                    then (ASSIGNMENT a,al,(ng':nogoods)++r1,ngs)
 --                    else (local_prop p al (nogoods,ngs,(ng':r1),r2) (done+1) todo a)
@@ -368,7 +430,7 @@ ng_prop prg al ngs_p ngs assig spvars u =
     spc = initspc prg
 --     nogoods= ngs_p++ngs
     number_of_nogoods = (length ngs_p) +(length ngs)
-    (maybeassig,al2,ngs_p',ngs') = (local_propagation prg al (ngs_p,ngs,[],[]) 0 number_of_nogoods assig)
+    (maybeassig,al2,ngs_p',ngs') = (local_propagation al (ngs_p,ngs,[],[]) 0 number_of_nogoods assig)
   in
   case maybeassig of                                                            -- TODO if prg is tight skip unfounded set check
     ASSIGNMENT assig2 ->
@@ -423,41 +485,64 @@ ng_prop prg al ngs_p ngs assig spvars u =
 
 
 
-local_propagation::  [Rule] -> Int -> ([Clause],[Clause],[Clause],[Clause]) -> Int -> Int -> Assignment -> (PropRes,Int,[Clause],[Clause])
+local_propagation::  Int -> ([Clause],[Clause],[Clause],[Clause]) -> Int -> Int -> Assignment -> (PropRes,Int,[Clause],[Clause])
 -- takes a program a cyclic list of nogoods and an assignment and returns a propagation result
-local_propagation p al ([],[],ngs_p,ngs) done todo a = local_propagation p al (reverse ngs_p,reverse ngs,[],[]) done todo a
-local_propagation p al ([],ng:nogoods,r1,r2) done todo a =
-  let up = resolve al ng a  in
---   trace ("al: " ++ (show al)) $
-  case up of
-    NIX         -> if (done+1) == todo
-                   then (ASSIGNMENT a,al,r1,(ng:nogoods)++r2)
-                   else (local_propagation p al ([],nogoods,r1,(ng:r2)) (done+1) todo a)
-    NIXU ng'    -> if (done+1) == todo
-                   then (ASSIGNMENT a,al,r1,(ng':nogoods)++r2)
-                   else (local_propagation p al ([],nogoods,r1,(ng':r2)) (done+1) todo a)
 
-    Res a'      -> local_propagation p (al+1) ([],nogoods,r1,(ng:r2)) 0 todo a'         -- increase assignment level
-    ResU a' ng' -> local_propagation p (al+1) ([],nogoods,r1,(ng':r2)) 0 todo a'        -- increase assignment level
+local_propagation al (ngs_p,ngs,_,_) 0 todo a =
+--  trace (">> loc_prop: " ++ (show a)) $ 
+  -- ignore todo
+  -- mix program nogoods with learned nogoods
+  -- no update of nogoods
+  let assi   = a
+      ngs'   = ngs_p ++ ngs 
+      s      = TSolver ngs' (-1) al assi False
+  in
+--  trace (">>       s : " ++ (show s)) $
+  let
+      (s',i) = prop s
+  in
+ -- trace ("loc_prop s': " ++ (show s')) $
+  if i == (-1)
+  then -- no conflict
+    (ASSIGNMENT (assig s'), (assignment_level s'), ngs_p, ngs) -- TODO update nogoods
+  else -- conflict with clause (counter s')
+    (Conflict (ngs'!!(counter s')) (assig s'), (assignment_level s'), ngs_p, ngs) -- TODO update nogoods
 
-    CONF -> (Conflict ng a,al,r1,(ng:nogoods)++r2)                                       -- return conflict clause
 
-    
-local_propagation p al (ng:nogoods,ngs,r1,r2) done todo a =
-  let up = resolve al ng a  in
---   trace ("al: " ++ (show al)) $
-  case up of
-    NIX         -> if (done+1) == todo
-                   then (ASSIGNMENT a,al,(ng:nogoods)++r1,ngs)
-                   else (local_propagation p al (nogoods,ngs,(ng:r1),r2) (done+1) todo a)
-    NIXU ng'    -> if (done+1) == todo
-                   then (ASSIGNMENT a,al,(ng':nogoods)++r1,ngs)
-                   else (local_propagation p al (nogoods,ngs,(ng':r1),r2) (done+1) todo a)
-                     
-    Res a'      -> local_propagation p (al+1) (nogoods,ngs,(ng:r1),r2) 0 todo a'        -- increase assignment level
-    ResU a' ng' -> local_propagation p (al+1) (nogoods,ngs,(ng':r1),r2) 0 todo a'       -- increase assignment level
-    
-    CONF -> (Conflict ng a,al,(ng:nogoods)++r1,ngs)                                       -- return conflict clause
+
+-- local_propagation al ([],[],ngs_p,ngs) done todo a = local_propagation al (reverse ngs_p,reverse ngs,[],[]) done todo a
+-- local_propagation al ([],ng:nogoods,r1,r2) done todo a =
+--   let up = resolve al ng a  in
+-- --   trace ("al: " ++ (show al)) $
+--   case up of
+--     NIX         -> if (done+1) == todo
+--                    then (ASSIGNMENT a,al,r1,(ng:nogoods)++r2)
+--                    else (local_propagation al ([],nogoods,r1,(ng:r2)) (done+1) todo a)
+--     NIXU ng'    -> if (done+1) == todo
+--                    then (ASSIGNMENT a,al,r1,(ng':nogoods)++r2)
+--                    else (local_propagation al ([],nogoods,r1,(ng':r2)) (done+1) todo a)
+-- 
+--     Res a'      -> local_propagation (al+1) ([],nogoods,r1,(ng:r2)) 0 todo a'         -- increase assignment level
+--     ResU a' ng' -> local_propagation (al+1) ([],nogoods,r1,(ng':r2)) 0 todo a'        -- increase assignment level
+-- 
+--     CONF -> (Conflict ng a,al,r1,(ng:nogoods)++r2)                                       -- return conflict clause
+-- 
+--     
+-- local_propagation al (ng:nogoods,ngs,r1,r2) done todo a =
+--   let up = resolve al ng a  in
+-- --   trace ("al: " ++ (show al)) $
+--   case up of
+--     NIX         -> if (done+1) == todo
+--                    then (ASSIGNMENT a,al,(ng:nogoods)++r1,ngs)
+--                    else (local_propagation al (nogoods,ngs,(ng:r1),r2) (done+1) todo a)
+--     NIXU ng'    -> if (done+1) == todo
+--                    then (ASSIGNMENT a,al,(ng':nogoods)++r1,ngs)
+--                    else (local_propagation al (nogoods,ngs,(ng':r1),r2) (done+1) todo a)
+--                      
+--     Res a'      -> local_propagation (al+1) (nogoods,ngs,(ng:r1),r2) 0 todo a'        -- increase assignment level
+--     ResU a' ng' -> local_propagation (al+1) (nogoods,ngs,(ng':r1),r2) 0 todo a'       -- increase assignment level
+--     
+--     CONF -> (Conflict ng a,al,(ng:nogoods)++r1,ngs)                                       -- return conflict clause
 
 
 -- data Res = ASSI Assignment  -- result of propagation can either be a conflict or a new assignment
