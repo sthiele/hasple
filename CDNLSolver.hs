@@ -72,17 +72,25 @@ choose s =
 --       else s
 
 
-choose2:: NoGoodStore -> NoGoodStore
+
+canchoose :: NoGoodStore -> Bool
+-- returns true if not all nogoods have been tested
+canchoose (NoGoodStore png lng pnga lnga counter) =
+  if (counter+1) <  (length png) + (length lng) 
+  then True
+  else False
+
+choose2 :: NoGoodStore -> NoGoodStore
 choose2 (NoGoodStore png lng pnga lnga counter) =
 --  trace ("choose2: ") $ 
-  if (counter+1) <  (length png) + (length lng) 
-  then (NoGoodStore png lng pnga lnga (counter+1))
-  else (NoGoodStore png lng pnga lnga counter)
+--  if (counter+1) <  (length png) + (length lng) 
+--  then 
+    (NoGoodStore png lng pnga lnga (counter+1))
+--  else (NoGoodStore png lng pnga lnga counter)
 
 
 resolv:: TSolver -> TSolver
 resolv s =
---  trace ("resolv: " ++ (show s)) $
   if (conf s)
   then s
   else  
@@ -90,16 +98,16 @@ resolv s =
         ng = get_ng (boocons s)
         x  = resolve al ng (assig s)
     in
+ --   trace ("resolv: " ++ (show (assig s)) ++ (show ng)) $
     case x of
-       NIX         -> let ngs' = update_ngs (boocons s) in
-                      TSolver ngs' al (assig s) (conf s)
+       NIX         -> s
        NIXU ng'    -> let ngs' = upgrade_ngs (boocons s) ng' in
                       TSolver ngs' al (assig s) (conf s)
                                                                                                                       
-       Res a'      -> let ngs' = rewind $ update_ngs (boocons s) in
+       Res a'      -> let ngs' = rewind (boocons s) in
                       TSolver ngs' (al+1) a' (conf s)      
  
-       ResU a' ng' -> let ngs' = rewind $ upgrade_ngs (boocons s) ng' in
+       ResU a' ng' -> let ngs' =  up_rew_ngs (boocons s) ng' in
                       TSolver ngs' (al+1) a' (conf s)
                                                                                                                       
        CONF ->        TSolver (boocons s) al (assig s) True     -- set conflict
@@ -113,7 +121,7 @@ prop s =
   if (conf s)
   then s
   else 
-    if counter (boocons (choose s)) /= counter (boocons s)
+    if canchoose (boocons s)
     then prop $ resolv $ (choose s)
     else s
 
@@ -142,6 +150,11 @@ get_ng (NoGoodStore png lng _ _ counter) =
     then lng!!(counter-length png)
     else error "NoGoodStore out of bounds"
 
+p_nogoods ngs = (program_nogoods ngs) ++ (png_akku ngs)
+l_nogoods ngs = (learned_nogoods ngs) ++ (lng_akku ngs)
+
+
+
 
 
 rewind :: NoGoodStore -> NoGoodStore
@@ -150,24 +163,14 @@ rewind (NoGoodStore png lng pnga lnga counter) =
 --  trace ("rewind: ") $ 
   if counter < length png
   then 
-    let png' = ((drop (counter+1) png) ++ pnga) in
+    let png' = png ++ pnga in
     (NoGoodStore png' lng [] [] (-1))
   else
-    let lng' = ((drop (counter+1-length png) lng) ++ lnga) in
-    (NoGoodStore pnga lng' [] [] (-1))
+    let png' = png ++ pnga
+        lng' = lng ++ lnga 
+    in
+    (NoGoodStore png' lng' [] [] (-1))
 
-
-update_ngs:: NoGoodStore -> NoGoodStore
--- put current ng into akku
-update_ngs (NoGoodStore png lng pnga lnga counter) =
---  trace ("update_ngs: ") $
-  if counter < length png
-  then 
-    let pnga' = ((png!!counter):pnga) in
-    (NoGoodStore png lng pnga' lnga counter)
-  else
-    let lnga' = ((lng!!(counter-length png)):lnga) in
-    (NoGoodStore png lng pnga lnga' counter)
 
 
 upgrade_ngs:: NoGoodStore -> Clause -> NoGoodStore
@@ -176,11 +179,29 @@ upgrade_ngs (NoGoodStore png lng pnga lnga counter) ng =
 --  trace ("upgrade_ngs: ") $ 
   if counter < length png
   then 
-    let pnga' = (ng:pnga) in
-    (NoGoodStore png lng pnga' lnga counter)
+    let png'  = drop (counter+1) png
+        pnga' = (take counter png) ++ (ng:pnga) in
+    (NoGoodStore png' lng pnga' lnga (-1))
   else
-    let lnga' = (ng:lnga) in
-    (NoGoodStore png lng pnga lnga' counter)
+    let png'  = []
+        pnga' = png++pnga
+        lng'  = drop (counter+1-length png) lng
+        lnga' = (take (counter-length png) lng)++(ng:lnga) in
+    (NoGoodStore png' lng' pnga' lnga' (-1))
+
+
+up_rew_ngs:: NoGoodStore -> Clause -> NoGoodStore
+-- upgrade and rewind
+up_rew_ngs (NoGoodStore png lng pnga lnga counter) ng =
+--  trace ("up_rew_ngs: ") $ 
+  if counter < length png
+  then 
+    let png' = (ng: ((take counter png) ++ (drop (counter+1) png) ++ pnga)) in
+    (NoGoodStore png' lng [] [] (-1))
+  else
+    let png'  = png++pnga
+        lng'  = (ng: ((take (counter-length png) lng) ++ (drop (counter+1-length png) lng) ++ lnga)) in
+    (NoGoodStore png' lng' [] [] (-1))
 
 
 
@@ -273,7 +294,7 @@ cdnl_enum_loop prg s dl bl al dliteral alt ngs_p ngs assig spvars =
 --   ++ "al2dl: " ++ (show alt)) $
   case maybeassig of
     Conflict ccl cass -> -- conflict
---                          mtrace( "Conf: " ++(show cass) ++ "\n") $
+ --                        trace( "Conf: " ++(show cass) ++ "\n") $
                          if dl==1
                          then []                                                                     -- no more answer sets
                          else                                                                        -- conflict analysis and backtrack
@@ -322,6 +343,7 @@ cdnl_enum_loop prg s dl bl al dliteral alt ngs_p ngs assig spvars =
                            let s2= s-1 in
                            if (dl==1 || s2==0)
                            then                                                                     -- last answer set
+  --                           trace ("AS: " ++ (show [nub (trueatoms assig2 spvars)])) $
                              [nub (trueatoms assig2 spvars)]
                            else                                                                     -- backtrack for remaining answer sets
                              let
@@ -347,6 +369,7 @@ cdnl_enum_loop prg s dl bl al dliteral alt ngs_p ngs assig spvars =
                              let
                                  remaining_as = cdnl_enum_loop prg s2 dl2 bl2 (cal+1) dliteral2 alt2 ngs_p' ngs' assig4 spvars
                              in
+                           --  trace ("AS1: " ++ (show [nub (trueatoms assig2 spvars)])) $
                              ((nub (trueatoms assig2 spvars)):remaining_as)
                          else                                                                        -- select new lit
                            let sigma_d = head selectable
@@ -355,7 +378,7 @@ cdnl_enum_loop prg s dl bl al dliteral alt ngs_p ngs assig spvars =
                                assig3 = assign assig2 (T sigma_d) (al2)
                            in
 --                            mtrace ("al: " ++ (show al2)) $
---                            mtrace ( "choose: " ++ (show (T sigma_d))) $
+--                           trace ( "choose: " ++ (show (T sigma_d))) $
                            cdnl_enum_loop prg s (dl+1) bl (al2+1) dliteral2 alt2 ngs_p' ngs' assig3 spvars
 
 
@@ -444,8 +467,6 @@ ng_prop::  [Rule] -> Int -> [Clause] -> [Clause] -> Assignment -> [SPVar] -> [At
 ng_prop prg al ngs_p ngs assig spvars u =
   let
     spc = initspc prg
---     nogoods= ngs_p++ngs
-    number_of_nogoods = (length ngs_p) +(length ngs)
     (maybeassig,al2,ngs_p',ngs') = (local_propagation al (ngs_p,ngs) assig)
   in
   case maybeassig of                                                            -- TODO if prg is tight skip unfounded set check
@@ -519,9 +540,9 @@ local_propagation al (pngs,lngs) a =
   if conf s'
   then -- conflict with clause (counter s')
     let ngs' = boocons s' in
-    (Conflict (get_ng ngs') (assig s'), (assignment_level s'), (program_nogoods $ boocons s'), (learned_nogoods $ boocons s'))-- TODO update nogoods
+    (Conflict (get_ng ngs') (assig s'), (assignment_level s'), (p_nogoods $ boocons s'), (l_nogoods $ boocons s'))-- TODO update nogoods
   else -- no conflict
-    (ASSIGNMENT (assig s'), (assignment_level s'), (program_nogoods $ boocons s'), (learned_nogoods $ boocons s')) -- TODO update nogoods
+    (ASSIGNMENT (assig s'), (assignment_level s'), (p_nogoods $ boocons s'), (l_nogoods $ boocons s')) -- TODO update nogoods
 
 
 
