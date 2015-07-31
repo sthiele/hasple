@@ -30,33 +30,15 @@ import Data.Maybe
 -- use sort to order list nub (nubOrd) to remove duplicates from list -- maybe use Sets instead?
 import qualified Data.Map as Map
 import Debug.Trace
-import Grounder
-import LPParser -- for parsing tests
 
-data TSolver = TSolver { boocons:: NoGoodStore   -- list of clauses/boolean constraints
-                       , assignment_level     :: Int        -- assignmenetlevel
-                       , assig  :: Assignment -- an assignment
-                       , conf   :: Bool       -- is the state of the solver cons or incons
+data TSolver = TSolver { boocons          :: NoGoodStore -- list of clauses/boolean constraints
+                       , assignment_level :: Int         -- assignmenetlevel
+                       , assig            :: Assignment  -- an assignment
+                       , conf             :: Bool        -- is the state of the solver cons or incons
                        } deriving (Show, Eq)
 
-mpr1 = "a :- not b, not c.\n"
-    ++ "b :- not a, not c.\n"
-    ++ "c :- not a, not b.\n"
--- mpr1 = "a :- not b.\n"
 
-Right mp1 = readProgram mpr1
-
-
-tsolv = let cngs = (nub (nogoods_of_lp (groundProgram mp1)))
-            vars = get_vars cngs
-            l    = length vars
-            assi = initialAssignment l
-            ngs  = new_ngs (transforms cngs vars) [] 
-        in 
-        TSolver ngs 0 assi False
-
-
-choose:: TSolver -> TSolver
+choose :: TSolver -> TSolver
 choose s =
   if (conf s)
   then s
@@ -76,7 +58,7 @@ choose2 :: NoGoodStore -> NoGoodStore
 choose2 (NoGoodStore png lng pnga lnga counter) = (NoGoodStore png lng pnga lnga (counter+1))
 
 
-resolv:: TSolver -> TSolver
+resolv :: TSolver -> TSolver
 -- is only called if conf is false
 resolv s =
     let al = (assignment_level s)
@@ -94,14 +76,14 @@ resolv s =
        ResU a' ng' -> let ngs' =  up_rew_ngs (boocons s) ng' in
                       TSolver ngs' (al+1) a' (conf s)
                                                                                                                       
-       CONF ->        TSolver (boocons s) al (assig s) True     -- set conflict
+       CONF        -> TSolver (boocons s) al (assig s) True     -- set conflict
 
       
 
 
-local_propagation:: TSolver -> TSolver
+local_propagation :: TSolver -> TSolver
 local_propagation s =
-  if (conf s)
+  if conf s
   then s
   else 
     if canchoose (boocons s)
@@ -109,20 +91,20 @@ local_propagation s =
     else s
 
 
-data NoGoodStore = NoGoodStore { program_nogoods:: [Clause] -- program nogoods
-                               , learned_nogoods:: [Clause] -- learned nogoods
-                               , png_akku:: [Clause]        -- learned nogoods
-                               , lng_akku:: [Clause]        -- learned nogoods
-                               , counter:: Int
+data NoGoodStore = NoGoodStore { program_nogoods :: [Clause] -- program nogoods
+                               , learned_nogoods :: [Clause] -- learned nogoods
+                               , png_akku        :: [Clause] -- program nogoods akku
+                               , lng_akku        :: [Clause] -- learned nogoods akku
+                               , counter         :: Int
 } deriving (Show, Eq)
 
-new_ngs:: [Clause] -> [Clause] -> NoGoodStore
+new_ngs :: [Clause] -> [Clause] -> NoGoodStore
 new_ngs png lng = NoGoodStore png lng [] [] (-1)
 
-ngs_size:: NoGoodStore -> Int
+ngs_size :: NoGoodStore -> Int
 ngs_size (NoGoodStore png lng _ _ _) = (length png) + (length lng)
 
-get_ng:: NoGoodStore -> Clause
+get_ng :: NoGoodStore -> Clause
 -- get current nogood
 get_ng (NoGoodStore png lng _ _ counter) =
   if counter < length png
@@ -154,7 +136,7 @@ rewind (NoGoodStore png lng pnga lnga counter) =
 
 
 
-upgrade_ngs:: NoGoodStore -> Clause -> NoGoodStore
+upgrade_ngs :: NoGoodStore -> Clause -> NoGoodStore
 -- replace current nogood with new nogood reset nogood store
 upgrade_ngs (NoGoodStore png lng pnga lnga counter) ng =
   if counter < length png
@@ -170,7 +152,7 @@ upgrade_ngs (NoGoodStore png lng pnga lnga counter) ng =
     (NoGoodStore png' lng' pnga' lnga' (-1))
 
 
-up_rew_ngs:: NoGoodStore -> Clause -> NoGoodStore
+up_rew_ngs :: NoGoodStore -> Clause -> NoGoodStore
 -- upgrade and rewind
 up_rew_ngs (NoGoodStore png lng pnga lnga counter) ng =
   if counter < length png
@@ -184,49 +166,50 @@ up_rew_ngs (NoGoodStore png lng pnga lnga counter) ng =
 
 
 
-get_svar:: SPVar -> [SPVar] -> SVar
+get_svar :: SPVar -> [SPVar] -> SVar
 get_svar l x = get_svar2 l x 0
 
-get_svar2:: SPVar -> [SPVar] -> Int -> SVar
+get_svar2 :: SPVar -> [SPVar] -> Int -> SVar
 get_svar2 s (f:ls) n =
   if s==f
   then n
   else get_svar2 s ls (n+1)
 
 
-get_svarx:: [SPVar] -> SPVar -> SVar
+get_svarx :: [SPVar] -> SPVar -> SVar
 get_svarx x l = get_svar2 l x 0
 
 
-transforms:: [CClause] -> [SPVar] -> [Clause]
+transforms :: [CClause] -> [SPVar] -> [Clause]
 
 transforms [] _ = []
 
 transforms (c:cs) spvars = ((transform c spvars):(transforms cs spvars))
 
 
-transform:: CClause -> [SPVar] -> Clause
+transform :: CClause -> [SPVar] -> Clause
 transform (t,f) spvars =
-  let l = length spvars
-      a = initialAssignment l
-      tsvars = map (get_svarx spvars) t
-      fsvars = map (get_svarx spvars) f
-      a' = assign_trues (assign_falses a fsvars) tsvars
-      allvars=tsvars++fsvars
+  let l              = length spvars
+      a              = initialAssignment l
+      tsvars         = map (get_svarx spvars) t
+      fsvars         = map (get_svarx spvars) f
+      a'             = assign_trues (assign_falses a fsvars) tsvars
+      allvars        = tsvars++fsvars
       number_of_vars = length allvars
   in
   if number_of_vars == 1
   then (a',head allvars,head allvars)
-  else let w= head allvars
-           v= head (tail allvars)
-       in
-       (a',w,v)
+  else 
+    let w= head allvars
+        v= head (tail allvars)
+    in
+    (a',w,v)
 
-assign_trues:: Assignment -> [SVar] -> Assignment
+assign_trues :: Assignment -> [SVar] -> Assignment
 assign_trues a [] = a
 assign_trues a (v:vs) = assign_trues (assign a (T v) 1) vs
 
-assign_falses:: Assignment -> [SVar] -> Assignment
+assign_falses :: Assignment -> [SVar] -> Assignment
 assign_falses a [] = a
 assign_falses a (v:vs) = assign_falses (assign a (F v) 1) vs
 
@@ -236,19 +219,19 @@ assign_falses a (v:vs) = assign_falses (assign a (F v) 1) vs
 -- Conflict Driven Nogood Learning - Enumeration
 
 
-cdnl_enum:: [Rule] -> Int -> [[Atom]]
+cdnl_enum :: [Rule] -> Int -> [[Atom]]
 
 cdnl_enum prg s =
   let cngs = (nub (nogoods_of_lp prg))
       vars = get_vars cngs
-      l = length vars
+      l    = length vars
       assi = initialAssignment l
-      ngs =  transforms cngs vars
+      ngs  =  transforms cngs vars
   in
   cdnl_enum_loop prg 0 1 1 1 [] [(1,1)] ngs [] assi vars
 
 
-cdnl_enum_loop::
+cdnl_enum_loop ::
   [Rule]                   -- the program
   -> Int                   -- s
   -> Int                   -- decision level
@@ -274,45 +257,42 @@ cdnl_enum_loop prg s dl bl al dliteral alt ngs_p ngs assig spvars =
                            if bl < dl
                            then
                              let (learnednogood, sigma_uip, alx) = conflict_analysis alt (ngs_p'++ngs') ccl cass
-                                 dl3 = (al2dl alt alx)
-                                 al3 = dl2al alt dl3
-                                 ngs'' = (learnednogood:ngs')
---                                  assigxxxx=(backtrack cass al3)
-                                 assig3 = assign (backtrack cass al3) (invert sigma_uip) (al3)
+                                 dl3       = (al2dl alt alx)
+                                 al3       = dl2al alt dl3
+                                 ngs''     = (learnednogood:ngs')
+                                 assig3    = assign (backtrack cass al3) (invert sigma_uip) (al3)
                                  dliteral2 = dlbacktrack dliteral dl3
-                                 alt2 = albacktrack alt dl3
+                                 alt2      = albacktrack alt dl3
                              in
                              cdnl_enum_loop prg s (dl3-1) bl (al3+1) dliteral2 alt2 ngs_p' ngs'' assig3 spvars
                            else
-                             let sigma_d = (get_dliteral dliteral (dl))
-                                 dl2 = dl-1
-                                 bl2 = dl2
-                                 al3 = (dl2al alt dl2)
-                                 assig3 = assign (backtrack cass al3) (invert sigma_d) al3
-                                 alt2 = albacktrack alt dl2
+                             let sigma_d      = (get_dliteral dliteral (dl))
+                                 dl2          = dl-1
+                                 bl2          = dl2
+                                 al3          = (dl2al alt dl2)
+                                 assig3       = assign (backtrack cass al3) (invert sigma_d) al3
+                                 alt2         = albacktrack alt dl2
                                  remaining_as = cdnl_enum_loop prg s dl2 bl2 al3 dliteral alt2 ngs_p' ngs' assig3 spvars
                              in
                              remaining_as
+
     ASSIGNMENT assig2 -> -- no conflict
-                         let
-                             selectable = get_unassigned assig2
-                         in
+                         let selectable = get_unassigned assig2 in
                          if null selectable
                          then                                                                       -- if all atoms then answer set found
                            let s2= s-1 in
                            if (dl==1 || s2==0)
-                           then                                                                     -- last answer set
-                             [nub (trueatoms assig2 spvars)]
+                           then [nub (trueatoms assig2 spvars)]                                     -- last answer set
                            else                                                                     -- backtrack for remaining answer sets
                              let
-                                 sigma_d = (get_dliteral dliteral (dl))
-                                 dl2 = dl-1
-                                 bl2 = dl2
-                                 dliteral2 = dlbacktrack dliteral dl
-                                 cal = (dl2al alt dl)
-                                 alt2 = albacktrack alt dl
-                                 assig3 = backtrack assig2 cal
-                                 assig4 = assign assig3 (invert sigma_d) cal                         -- invert last decision literal
+                                 sigma_d      = (get_dliteral dliteral (dl))
+                                 dl2          = dl-1
+                                 bl2          = dl2
+                                 dliteral2    = dlbacktrack dliteral dl
+                                 cal          = (dl2al alt dl)
+                                 alt2         = albacktrack alt dl
+                                 assig3       = backtrack assig2 cal
+                                 assig4       = assign assig3 (invert sigma_d) cal                         -- invert last decision literal
                                  remaining_as = cdnl_enum_loop prg s2 dl2 bl2 (cal+1) dliteral2 alt2 ngs_p' ngs' assig4 spvars
                              in
                              ((nub (trueatoms assig2 spvars)):remaining_as)
@@ -357,25 +337,25 @@ dlbacktrack dlt l = [ (dl,sl) | (dl,sl) <- dlt, dl < l ]
 conflict_analysis:: [(Int,Int)] -> [Clause] -> Clause -> Assignment -> (Clause, SignedVar, Int)
 conflict_analysis alt nogoods nogood assig =
   let (sigma, prefix) = get_sigma nogood assig
-      dl_sigma = get_alevel assig sigma
-      reduced_nogood = clauseWithoutSL nogood sigma
-      k = get_max_alevel reduced_nogood assig
-      dl = al2dl alt dl_sigma
-      al = dl2al alt dl
-      rhos = filter_al nogood assig al in
+      dl_sigma        = get_alevel assig sigma
+      reduced_nogood  = clauseWithoutSL nogood sigma
+      k               = get_max_alevel reduced_nogood assig
+      dl              = al2dl alt dl_sigma
+      al              = dl2al alt dl
+      rhos            = filter_al nogood assig al in
   if only rhos sigma
   then (nogood, sigma, k)
   else
     let
-      eps = get_epsilon nogoods sigma prefix
+      eps         = get_epsilon nogoods sigma prefix
       reduced_eps = clauseWithoutSL eps (invert sigma)
-      newnogood = joinClauses reduced_nogood reduced_eps
+      newnogood   = joinClauses reduced_nogood reduced_eps
     in
     conflict_analysis alt nogoods newnogood prefix
 
 
 
-get_epsilon:: [Clause] -> SignedVar -> Assignment -> Clause
+get_epsilon :: [Clause] -> SignedVar -> Assignment -> Clause
 
 get_epsilon [] l prefix =  error "no antecedent epsilon found"
 
@@ -396,10 +376,13 @@ data PropRes =  ASSIGNMENT Assignment  -- result of propagation can either be a 
          deriving (Show,Eq)
 
 
-ng_prop::  [Rule] -> Int -> [Clause] -> [Clause] -> Assignment -> [SPVar] -> [Atom] -> (PropRes,Int,[Clause],[Clause])
+tight :: [Rule] -> Bool  -- TODO implement tigness check
+tight p = False
+
+ng_prop :: [Rule] -> Int -> [Clause] -> [Clause] -> Assignment -> [SPVar] -> [Atom] -> (PropRes,Int,[Clause],[Clause])
 ng_prop prg al png lng a spvars u =
   let
-    spc = initspc prg
+    spc    = initspc prg
     ngs    = new_ngs png lng 
     s      = TSolver ngs al a False
     s'     = local_propagation s
@@ -411,51 +394,42 @@ ng_prop prg al png lng a spvars u =
   in
   if conf s'
   then
-    let conflict_nogood  = get_ng ngs'
-    in
-    (Conflict conflict_nogood a', al', png', lng')                 -- return conflic clause
+    let conflict_nogood  = get_ng ngs' in
+    (Conflict conflict_nogood a', al', png', lng')            -- return conflic nogood
   else
-                                                              -- TODO if prg is tight skip unfounded set check
-    let u2 = u \\ (falseatoms a' spvars) in         -- non false atoms
-    if null u2
-    then                                                -- unfounded set check
-      let u3 = (unfounded_set prg spc a' spvars) in
-      if null u3
-      then (ASSIGNMENT a', al', png', lng')
-      else                                              -- learn loop nogood
-        let
-            p = get_svar ((ALit (head u3))) spvars
+    if tight prg
+    then (ASSIGNMENT a', al', png', lng')
+    else 
+      let u2 = u \\ (falseatoms a' spvars) in      -- non false atoms
+      if null u2
+      then                                                    -- unfounded set check
+        let u3 = (unfounded_set prg spc a' spvars) in
+        if null u3
+        then (ASSIGNMENT a', al', png', lng')
+        else                                                  -- learn loop nogood
+          let p = get_svar ((ALit (head u3))) spvars in
+          if elemAss (T p) a'
+          then
+            let cngs_of_loop = (loop_nogoods prg u3)
+                ngs_of_loop = transforms cngs_of_loop spvars
+            in
+            (ASSIGNMENT a', al', png', (ngs_of_loop++lng'))
+          else
+            let a'' = assign a' (F p) al' in                  -- extend assignment
+            case elemAss (F p) a' of
+              True  -> ng_prop prg al' png' lng' a' spvars u3
+              False -> ng_prop prg al' png' lng' a'' spvars u3
+      else                                                    -- learn loop nogood from u2
+        let p = get_svar ((ALit (head u2))) spvars
+            cngs_of_loop = (loop_nogoods prg u2)
+            ngs_of_loop = (transforms cngs_of_loop spvars)
         in
         if elemAss (T p) a'
-        then
-          let cngs_of_loop = (loop_nogoods prg u3)
-              ngs_of_loop = transforms cngs_of_loop spvars
-          in
-                                                                                                             
-          (ASSIGNMENT a', al', png', (ngs_of_loop++lng'))
+        then (ASSIGNMENT a', al', png', (ngs_of_loop++lng'))
         else
-          let
-            a'' = assign a' (F p) al'                  -- extend assignment
-          in
-          case elemAss (F p) a' of
-            True  -> ng_prop prg al' png' lng' a' spvars u3
-            False -> ng_prop prg al' png' lng' a'' spvars u3
-    else                                               -- learn loop nogood from u2
-      let
-          p = get_svar ((ALit (head u2))) spvars
-          cngs_of_loop = (loop_nogoods prg u2)
-          ngs_of_loop = (transforms cngs_of_loop spvars)
-      in
-      if elemAss (T p) a'
-      then (ASSIGNMENT a', al', png', (ngs_of_loop++lng'))
-      else
-        let
-          a'' = assign a' (F p) al'                   -- extend assignment
-        in
-        if (elemAss (F p) a')
-        then
-          ng_prop prg al' png' (ngs_of_loop++lng') a' spvars u2
-        else
-          ng_prop prg al' png' (ngs_of_loop++lng') a'' spvars u2
+          let a'' = assign a' (F p) al' in                    -- extend assignment
+          if (elemAss (F p) a')
+          then ng_prop prg al' png' (ngs_of_loop++lng') a' spvars u2
+          else ng_prop prg al' png' (ngs_of_loop++lng') a'' spvars u2
    
 
