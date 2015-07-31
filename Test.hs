@@ -9,6 +9,7 @@ import GoodSolver
 import GrounderSolver
 import LPParser -- for parsing tests
 import Data.List (sort)
+import Debug.Trace
 
 test_good:: [Char] -> [[Atom]]
 test_good x =
@@ -171,18 +172,35 @@ mpr13 = "f(c).\n"
 Right mp13 = readProgram mpr13
 
 unit_test =
-  (test_new mpr1)==(test_good mpr1) &&
-  (test_new mpr2)==(test_good mpr2) &&
-  (test_new mpr3)==(test_good mpr3) &&
-  (test_new mpr4)==(test_good mpr4) &&
-  (test_new mpr5)==(test_good mpr5) &&
-  (test_new mpr6)==(test_good mpr6) &&
-  (test_new mpr6a)==(test_good mpr6a) &&
-  (test_new mpr6b)==(test_good mpr6b) &&
-  (test_new mpr7)==(test_good mpr7) &&  -- infinite
---   (test_new mpr8)==(test_good mpr8) &&  -- test takes too long
---   (test_new mpr9)==(test_good mpr9) &&  -- test takes too long
-  (test_new mpr10)==(test_good mpr10) &&
-  (test_new mpr11)==(test_good mpr11) &&
-  (test_new mpr12)==(test_good mpr12) &&
-  (test_new mpr13)==(test_good mpr13)
+  let t1 = (test_new mpr1)==(test_good mpr1) 
+      t2 = (test_new mpr2)==(test_good mpr2) 
+      t3 = (test_new mpr3)==(test_good mpr3) 
+      t4 = (test_new mpr4)==(test_good mpr4) 
+      t5 = (test_new mpr5)==(test_good mpr5) 
+      t6 = (test_new mpr6)==(test_good mpr6)
+      t7 = (test_new mpr6a)==(test_good mpr6a) 
+      t8 = (test_new mpr6b)==(test_good mpr6b) 
+      t9 = (test_new mpr7)==(test_good mpr7)   -- infinite
+--       t10 = (test_new mpr8)==(test_good mpr8)   -- test takes too long
+--       t11 = (test_new mpr9)==(test_good mpr9)   -- test takes too long
+      t12 = (test_new mpr10)==(test_good mpr10) 
+      t13 = (test_new mpr11)==(test_good mpr11) 
+      t14 = (test_new mpr12)==(test_good mpr12) 
+      t15 = (test_new mpr13)==(test_good mpr13)
+  in
+  trace ("test1:  " ++ (show t1)) $
+  trace ("test2:  " ++ (show t2)) $
+  trace ("test3:  " ++ (show t3)) $
+  trace ("test4:  " ++ (show t4)) $
+  trace ("test5:  " ++ (show t5)) $
+  trace ("test6:  " ++ (show t6)) $
+  trace ("test7:  " ++ (show t7)) $
+  trace ("test8:  " ++ (show t8)) $
+  trace ("test9:  " ++ (show t9)) $
+  trace ("test12: " ++ (show t12)) $
+  trace ("test13: " ++ (show t13)) $
+  trace ("test14: " ++ (show t14)) $
+  trace ("test15: " ++ (show t15)) $
+  t1&&t2&&t3&&t4&&t5&&t6&&t7&&t8&&t9&&t12&&t13&&t14&&t15
+  
+  

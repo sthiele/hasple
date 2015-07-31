@@ -60,13 +60,24 @@ choose:: TSolver -> TSolver
 choose s =
   if (conf s)
   then s
-  else if ((counter $ boocons s)+1) < ngs_size (boocons s)
-       then 
-         let (NoGoodStore png ln pnga lnga counter) = boocons s
-             ngs' = (NoGoodStore png ln pnga lnga (counter+1))
-         in 
-         TSolver ngs' (assignment_level s) (assig s) (conf s)
-       else s
+  else TSolver (choose2 $ boocons s) (assignment_level s) (assig s) (conf s)
+
+
+--       if ((counter $ boocons s)+1) < ngs_size (boocons s)
+--       then 
+--         let (NoGoodStore png ln pnga lnga counter) = boocons s
+--             ngs' = (NoGoodStore png ln pnga lnga (counter+1))
+--         in 
+--         TSolver ngs' (assignment_level s) (assig s) (conf s)
+--       else s
+
+
+choose2:: NoGoodStore -> NoGoodStore
+choose2 (NoGoodStore png lng pnga lnga counter) =
+--  trace ("choose2: ") $ 
+  if (counter+1) <  (length png) + (length lng) 
+  then (NoGoodStore png lng pnga lnga (counter+1))
+  else (NoGoodStore png lng pnga lnga counter)
 
 
 resolv:: TSolver -> TSolver
@@ -80,12 +91,15 @@ resolv s =
         x  = resolve al ng (assig s)
     in
     case x of
-       NIX         -> s
-       NIXU ng'    -> s -- TODO update nogoodStore
+       NIX         -> let ngs' = update_ngs (boocons s) in
+                      TSolver ngs' al (assig s) (conf s)
+       NIXU ng'    -> let ngs' = upgrade_ngs (boocons s) ng' in
+                      TSolver ngs' al (assig s) (conf s)
                                                                                                                       
-       Res a'      -> let ngs' = update_ngs (boocons s) in
-                      TSolver ngs' (al+1) a' (conf s)       
-       ResU a' ng' -> let ngs' = upgrade_ngs (boocons s) ng' in
+       Res a'      -> let ngs' = rewind $ update_ngs (boocons s) in
+                      TSolver ngs' (al+1) a' (conf s)      
+ 
+       ResU a' ng' -> let ngs' = rewind $ upgrade_ngs (boocons s) ng' in
                       TSolver ngs' (al+1) a' (conf s)
                                                                                                                       
        CONF ->        TSolver (boocons s) al (assig s) True     -- set conflict
@@ -99,7 +113,7 @@ prop s =
   if (conf s)
   then s
   else 
-    if (choose s) /= s
+    if counter (boocons (choose s)) /= counter (boocons s)
     then prop $ resolv $ (choose s)
     else s
 
@@ -115,10 +129,12 @@ new_ngs:: [Clause] -> [Clause] -> NoGoodStore
 new_ngs png lng = NoGoodStore png lng [] [] (-1)
 
 ngs_size:: NoGoodStore -> Int
-ngs_size (NoGoodStore png lng _ _ counter) = (length png) + (length lng)
+ngs_size (NoGoodStore png lng _ _ _) = (length png) + (length lng)
 
 get_ng:: NoGoodStore -> Clause
+-- get current nogood
 get_ng (NoGoodStore png lng _ _ counter) =
+--  trace ("get_ng: " ++ (show counter)) $
   if counter < length png
   then png!!counter
   else
@@ -127,14 +143,44 @@ get_ng (NoGoodStore png lng _ _ counter) =
     else error "NoGoodStore out of bounds"
 
 
+
+rewind :: NoGoodStore -> NoGoodStore
+-- basically reset the nogood store because some resolvent was found
+rewind (NoGoodStore png lng pnga lnga counter) =
+--  trace ("rewind: ") $ 
+  if counter < length png
+  then 
+    let png' = ((drop (counter+1) png) ++ pnga) in
+    (NoGoodStore png' lng [] [] (-1))
+  else
+    let lng' = ((drop (counter+1-length png) lng) ++ lnga) in
+    (NoGoodStore pnga lng' [] [] (-1))
+
+
 update_ngs:: NoGoodStore -> NoGoodStore
-update_ngs (NoGoodStore png lng pnga lnga _) =
-  (NoGoodStore png lng pnga lnga (-1))
+-- put current ng into akku
+update_ngs (NoGoodStore png lng pnga lnga counter) =
+--  trace ("update_ngs: ") $
+  if counter < length png
+  then 
+    let pnga' = ((png!!counter):pnga) in
+    (NoGoodStore png lng pnga' lnga counter)
+  else
+    let lnga' = ((lng!!(counter-length png)):lnga) in
+    (NoGoodStore png lng pnga lnga' counter)
 
 
 upgrade_ngs:: NoGoodStore -> Clause -> NoGoodStore
-upgrade_ngs (NoGoodStore png lng _ _ _) ng =
-  (NoGoodStore png lng [] [] (-1))
+-- replace current nogood with new nogood reset nogood store
+upgrade_ngs (NoGoodStore png lng pnga lnga counter) ng =
+--  trace ("upgrade_ngs: ") $ 
+  if counter < length png
+  then 
+    let pnga' = (ng:pnga) in
+    (NoGoodStore png lng pnga' lnga counter)
+  else
+    let lnga' = (ng:lnga) in
+    (NoGoodStore png lng pnga lnga' counter)
 
 
 
