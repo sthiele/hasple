@@ -57,42 +57,40 @@ import Debug.Trace
 type SVar = Int
 
 data SignedVar = T SVar
-         | F SVar
-         deriving (Show,Eq,Ord)
+               | F SVar
+               deriving (Show,Eq,Ord)
 
-unsign:: SignedVar -> SVar
+unsign :: SignedVar -> SVar
 unsign (T l) = l
 unsign (F l) = l
 
-invert:: SignedVar -> SignedVar
-invert (T l) = (F l)
-invert (F l) = (T l)
+invert :: SignedVar -> SignedVar
+invert (T l) = F l
+invert (F l) = T l
 
 
 -- -----------------------------------------
 
 type Assignment = Vector Int
 
-initialAssignment:: Int -> Assignment
-initialAssignment l =
-  let x = fromList [0 | x <- [1..l]] in
-  x
+initialAssignment :: Int -> Assignment
+initialAssignment l = fromList [ 0 | x <- [1..l]] 
 
 
-assign:: Assignment -> SignedVar -> Int -> Assignment
+assign :: Assignment -> SignedVar -> Int -> Assignment
 assign a (T l) dl = a // [(l,dl)]
 assign a (F l) dl = a // [(l,-dl)]
 
-get_alevel:: Assignment -> SignedVar -> Int
-get_alevel a (T l) = (a ! l)
-get_alevel a (F l) = -(a ! l)
+get_alevel :: Assignment -> SignedVar -> Int
+get_alevel a (T l) = (a!l)
+get_alevel a (F l) = -(a!l)
 
 
-unassign:: Assignment -> SVar -> Assignment
+unassign :: Assignment -> SVar -> Assignment
 unassign a l = a // [(l,0)]
   
 
-backtrack:: Assignment -> Int -> Assignment
+backtrack :: Assignment -> Int -> Assignment
 backtrack a dl = backtrack2 a dl 0
 
 backtrack2 a dl i =
@@ -104,52 +102,52 @@ backtrack2 a dl i =
       backtrack2 (unassign a i) dl (i+1)
   else a
 
-elemAss:: SignedVar -> Assignment -> Bool
+elemAss :: SignedVar -> Assignment -> Bool
 elemAss (F l) a = (a ! l) < 0
 elemAss (T l) a = ((a ! l) > 0)
 
-isassigned:: SVar -> Assignment -> Bool
+isassigned :: SVar -> Assignment -> Bool
 isassigned l a = ((a ! l) /= 0)
 
-get_unassigned:: Assignment -> [SVar]
+get_unassigned :: Assignment -> [SVar]
 get_unassigned a = if Vector.null a
                    then []
                    else toList (findIndices (==0) a)
 
-get_assigned:: Assignment -> [SVar]
+get_assigned :: Assignment -> [SVar]
 get_assigned a = if Vector.null a
                  then []
                  else toList (findIndices (/=0) a)
 
 
-get_tassigned:: Assignment -> [SVar]
+get_tassigned :: Assignment -> [SVar]
 get_tassigned a = if Vector.null a
                   then []
                   else toList (findIndices (>0) a)
 
-get_fassigned:: Assignment -> [SVar]
+get_fassigned :: Assignment -> [SVar]
 get_fassigned a = if Vector.null a
                   then []
                   else toList (findIndices (<0) a)
 
 
-get_lit:: [SPVar] -> Int -> SPVar
+get_lit :: [SPVar] -> Int -> SPVar
 get_lit spvars 0 = Prelude.head spvars
 get_lit (v:vs) n = get_lit vs (n-1)
 
 
-falselits:: Assignment -> [SPVar] -> [SPVar]
+falselits :: Assignment -> [SPVar] -> [SPVar]
 falselits a spvars = Prelude.map (get_lit spvars) (get_fassigned a)
 
-trueatoms:: Assignment -> [SPVar] -> [Atom]
+trueatoms :: Assignment -> [SPVar] -> [Atom]
 trueatoms a spvars =  Prelude.concatMap atomsfromvar (Prelude.map (get_lit spvars) (get_tassigned a))
 
-falseatoms:: Assignment -> [SPVar] -> [Atom]
+falseatoms :: Assignment -> [SPVar] -> [Atom]
 
 falseatoms a spvars =  Prelude.concatMap atomsfromvar (Prelude.map (get_lit spvars) (get_fassigned a))
 
 
-nonfalseatoms:: Assignment -> [SPVar] -> [Atom]
+nonfalseatoms :: Assignment -> [SPVar] -> [Atom]
 nonfalseatoms a spvars = Prelude.concatMap atomsfromvar (Prelude.map (get_lit spvars) (toList (findIndices (>=0) a)))
 
 
@@ -157,39 +155,39 @@ nonfalseatoms a spvars = Prelude.concatMap atomsfromvar (Prelude.map (get_lit sp
 
 type Clause = ((Vector Int), Int, Int)
 
-joinClauses:: Clause -> Clause -> Clause
+joinClauses :: Clause -> Clause -> Clause
 joinClauses c1 c2 = joinClauses2 c1 c2 0
 joinClauses2 (c1,w1,v1) (c2,w2,v2) i =
-    if i < Vector.length c1
-    then
-      if (c2!i) /= 0
-      then joinClauses2 ((c1 // [(i,(c2!i))]),w1,v1) (c2,w2,v2) (i+1)
-      else joinClauses2 (c1,w1,v1) (c2,w2,v2) (i+1)
-    else (c1,w1,v1)
+  if i < Vector.length c1
+  then
+    if (c2!i) /= 0
+    then joinClauses2 ((c1 // [(i,(c2!i))]),w1,v1) (c2,w2,v2) (i+1)
+    else joinClauses2 (c1,w1,v1) (c2,w2,v2) (i+1)
+  else (c1,w1,v1)
 
 
-without:: Assignment -> Assignment -> Assignment
+without :: Assignment -> Assignment -> Assignment
 without c a = without2 c a 0
 without2 c a i =
-    if i < Vector.length c
+  if i < Vector.length c
+  then
+    if (c!i) > 0
     then
-      if (c!i) > 0
+      if (a!i) > 0
+      then without2 (c // [(i,0)]) a (i+1)
+        else without2 c a (i+1)
+    else
+      if (c!i) < 0
       then
-        if (a!i) > 0
+        if (a!i) < 0
         then without2 (c // [(i,0)]) a (i+1)
         else without2 c a (i+1)
-      else
-        if (c!i) < 0
-        then
-          if (a!i) < 0
-          then without2 (c // [(i,0)]) a (i+1)
-          else without2 c a (i+1)
-        else without2 c a (i+1)
-    else c
+      else without2 c a (i+1)
+  else c
 
 
 
-clauseWithoutSL:: Clause -> SignedVar -> Clause
+clauseWithoutSL :: Clause -> SignedVar -> Clause
 clauseWithoutSL (c,w,v) (T l) =
   if (c ! l) > 0
   then (unassign c l,w,v)
@@ -200,7 +198,7 @@ clauseWithoutSL (c,w,v) (F l) =
   else (c,w,v)
 
 
-get_max_alevel:: Clause -> Assignment -> Int
+get_max_alevel :: Clause -> Assignment -> Int
 -- determin k in conflict_analysis
 get_max_alevel (c,w,v) a = get_max_alevel2 c a 0 0
 
@@ -213,7 +211,7 @@ get_max_alevel2 c a i akku =
   else akku
 
 
-only:: Assignment -> SignedVar -> Bool
+only :: Assignment -> SignedVar -> Bool
 -- returns True if the Signed Literal is the only in the assignment
 only c (T l) =
   if (c!l) == 1
@@ -254,12 +252,9 @@ data RES = Res Assignment
          | CONF
 
 
-resolve:: Int -> Clause -> Assignment -> RES
+resolve :: Int -> Clause -> Assignment -> RES
 
 resolve al (c,w,v) a =
---   trace ("resolve ng: "Prelude.++(show c)) $
---   trace ("assignment: "Prelude.++(show a)) $
---   trace ("w,v: "Prelude.++(show w)Prelude.++(show v)) $
   if w == v -- unit clause
   then 
     if (a!w > 0 && c!w > 0) ||  (a!w < 0 && c!w < 0)
@@ -280,26 +275,24 @@ resolve al (c,w,v) a =
     else NIX
   
 updatewatch1 al (c,w,v) a =
---   trace ("updatewatch1: ") $
   case new_watch1 (c,w,v) a of
-  Just w' ->  if (a!v > 0 && c!v > 0) || (a!v < 0 && c!v < 0) -- assigned
-              then updatewatch2x al (c,w',v) a
-              else NIXU (c,w',v)
-  Nothing ->  if (a!v > 0 && c!v > 0)                         -- assigned true
-              then CONF
-              else
-                if (a!v < 0 && c!v < 0)                       -- assigned false
-                then CONF
-                else
-                  if (a!v) == 0
-                  then
-                    if c!v > 0
-                    then Res (assign a (F v) al)
-                    else Res (assign a (T v) al)
-                  else NIX
+  Just w' -> if (a!v > 0 && c!v > 0) || (a!v < 0 && c!v < 0) -- assigned
+             then updatewatch2x al (c,w',v) a
+             else NIXU (c,w',v)
+  Nothing -> if (a!v > 0 && c!v > 0)                         -- assigned true
+             then CONF
+             else
+               if (a!v < 0 && c!v < 0)                       -- assigned false
+               then CONF
+               else
+                 if (a!v) == 0
+                 then
+                   if c!v > 0
+                   then Res (assign a (F v) al)
+                   else Res (assign a (T v) al)
+                 else NIX
 
 updatewatch2 al (c,w,v) a =
---   trace ("updatewatch2: ") $
   case new_watch2 (c,w,v) a of
   Just v' -> NIXU (c,w,v')
   Nothing -> if (a!w) == 0
@@ -310,7 +303,6 @@ updatewatch2 al (c,w,v) a =
              else NIX
 
 updatewatch2x al (c,w,v) a =
---   trace ("updatewatch2x: ") $
   case new_watch2 (c,w,v) a of
   Just v' -> NIXU (c,w,v')
   Nothing -> if (a!w) == 0
@@ -325,7 +317,6 @@ new_watch1 (c,w,v) a = new_watch1i (c,w,v) a 0
 
 new_watch1i :: Clause -> Assignment -> Int -> Maybe Int
 new_watch1i (c,w,v) a i =
---   trace ("newwatch1: ") $
   if i < Vector.length c
   then
     if c!i == 0
@@ -344,7 +335,6 @@ new_watch2 (c,w,v) a = new_watch2i (c,w,v) a 0
 
 new_watch2i :: Clause -> Assignment -> Int -> Maybe Int
 new_watch2i (c,w,v) a i =
---   trace ("newwatch2: ") $
   if i < Vector.length c
   then
     if c!i == 0
@@ -358,44 +348,8 @@ new_watch2i (c,w,v) a i =
         else Just i
   else Nothing  
   
--- resolve (c,w,v) a = resolvefirst c a 0
--- 
--- resolvefirst c a i =
---   if i < Vector.length c
---   then
---      if (c!i) == 0
---      then resolvefirst c a (i+1)
---      else
---        if (c!i) > 0
---        then
---          if (a!i) > 0
---          then resolvefirst c a (i+1)
---          else resolvesecond c a (i+1) (F i)
---        else -- c!i < 0
---          if (a!i) < 0
---          then resolvefirst c a (i+1)
---          else resolvesecond c a (i+1) (T i)
---   else CONF
--- 
--- resolvesecond c a i akku =
---   if i < Vector.length c
---   then
---      if (c!i) == 0
---      then resolvesecond c a (i+1) akku
---      else
---        if (c!i) > 0
---        then
---          if (a!i) > 0
---          then resolvesecond c a (i+1) akku
---          else NIX
---        else -- c!i < 0
---          if (a!i) < 0
---          then resolvesecond c a (i+1) akku
---          else NIX
---  else Res akku
 
-
-get_last_assigned_var:: Assignment -> Assignment -> SVar
+get_last_assigned_var :: Assignment -> Assignment -> SVar
 -- get last assigned variable in the list
 get_last_assigned_var c a  = get_last_assigned_var2 c a 0
 
@@ -405,7 +359,7 @@ get_last_assigned_var2 c a n =
     if (c!n) == 0
     then get_last_assigned_var2 c a (n+1)
     else
-       let val = a ! n in
+       let val = a!n in
        case val of
          0 -> get_last_assigned_var2 c a (n+1)
          _ -> get_last_assigned_var3 c a (n+1) (n, abs val)
@@ -417,32 +371,28 @@ get_last_assigned_var3 c a n (akku,akkuval) =
     if (c!n) == 0
     then get_last_assigned_var3 c a (n+1) (akku,akkuval)
     else
-       let val = a ! n in
+       let val = a!n in
        if abs val > akkuval
        then get_last_assigned_var3 c a (n+1) (n, abs val)
        else get_last_assigned_var3 c a (n+1) (akku,akkuval)
    else akku
 
 
-get_sigma:: Clause -> Assignment -> (SignedVar, Assignment)
+get_sigma :: Clause -> Assignment -> (SignedVar, Assignment)
 -- used in conflict_analysis
 get_sigma (c,w,v) a =
   let last_assigned_var = get_last_assigned_var c a in
---   trace ("lastvar: " Prelude.++ (show c) Prelude.++ (show a) Prelude.++ (show last_assigned_var)) $
   get_sigma2 c a last_assigned_var
 
 get_sigma2 c a i =
---   trace ("get_sigma: " Prelude.++ (show c) Prelude.++ (show a) Prelude.++ (show i)) $
   if i < Vector.length c
   then
   let prefix = unassign a i in
---     trace ("prefix: " Prelude.++ (show prefix) ) $
     if (c!i) > 0
     then
       let sigma = (T i)
-          temp = without c prefix
+          temp  = without c prefix
       in
---       trace ("temp: " Prelude.++ (show temp) ) $
       if only temp sigma
       then (sigma, prefix)
       else get_sigma2 c a (i+1)   -- try next sigma
@@ -450,9 +400,8 @@ get_sigma2 c a i =
       if (c!i) < 0
       then
         let sigma = (F i)
-            temp = without c prefix
+            temp  = without c prefix
         in
---         trace ("temp: " Prelude.++ (show temp) ) $
         if only temp sigma
         then (sigma,prefix)
         else get_sigma2 c a (i+1)  -- try next sigma
@@ -461,10 +410,10 @@ get_sigma2 c a i =
 
 
 
-filter_al:: Clause -> Assignment -> Int -> Assignment
+filter_al :: Clause -> Assignment -> Int -> Assignment
 -- unassigns all literal from c that have in a an alevel < l
 filter_al (c,w,v) a l = filter_al2 c a l 0
-filter_al2:: Assignment -> Assignment -> Int -> Int -> Assignment
+filter_al2 :: Assignment -> Assignment -> Int -> Int -> Assignment
 filter_al2 c a l i =
   if i < Vector.length c
   then
@@ -477,9 +426,9 @@ filter_al2 c a l i =
 
 
 
-is_included:: Clause -> Assignment -> Bool
+is_included :: Clause -> Assignment -> Bool
 is_included (c,w,v) a = is_included2 c a 0
-is_included2:: Assignment -> Assignment -> Int -> Bool
+is_included2 :: Assignment -> Assignment -> Int -> Bool
 is_included2 c a i =
   if i < Vector.length c
   then
@@ -499,5 +448,4 @@ is_included2 c a i =
         then is_included2 c a (i+1)
         else False
   else True
-
 

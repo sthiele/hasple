@@ -29,17 +29,17 @@ import Text.ParserCombinators.Parsec.Language (emptyDef)
 myLangDef = emptyDef{
 --                 P.commentStart = "{-"
 --               , P.commentEnd = "-}"
-              Token.commentLine = "%"
-              , Token.identStart = lower
-              , Token.identLetter = alphaNum
+                Token.commentLine     = "%"
+              , Token.identStart      = lower
+              , Token.identLetter     = alphaNum
 --               , P.opStart = oneOf "~&=:"
 --               , P.opLetter = oneOf "~&=:"
               , Token.reservedOpNames = [":-", "==", "!=", ".", ","]
-              , Token.reservedNames = ["not", "false", "true"]
-              , Token.caseSensitive = True
+              , Token.reservedNames   = ["not", "false", "true"]
+              , Token.caseSensitive   = True
               }
 
-lexer = Token.makeTokenParser myLangDef
+lexer       = Token.makeTokenParser myLangDef
 
 identifier  = Token.identifier lexer
 negationp   = Token.reserved lexer "not"
@@ -65,28 +65,30 @@ readAtom input =  parse parseAtom "atom" input
 
 parseAtom :: Parser Atom
 parseAtom =
-          do
-            p <- identifier
-            a <- parseArguments
-            return (Atom p a)
+  do
+    p <- identifier
+    a <- parseArguments
+    return (Atom p a)
             
 parseArguments :: Parser [Term]
 parseArguments = (parens (commaSep parseArg))
-                 <|>
-                 do return []
+  <|>
+  do return []
 
 parseArg =  choice [parseVar, parseIndent, parseConst]
 -- parseArg2 = choice [parseVar, identifier, integer]
 
-parseVar = do
-             firstChar <- upper
-             restChars <- many alphaNumUnderScore
-             whiteSpace
-             return (Variable (firstChar : restChars))
+parseVar = 
+  do
+    firstChar <- upper
+    restChars <- many alphaNumUnderScore
+    whiteSpace
+    return (Variable (firstChar : restChars))
                           
-parseIndent = do
-              p <- identifier
-              return (Identifier p)
+parseIndent = 
+  do
+    p <- identifier
+    return (Identifier p)
 
 parseConst =
   do
@@ -95,79 +97,87 @@ parseConst =
 
 
 -------------
-readLit input = case parse parseLit "lit" input of
-    Left err -> "No match: " ++ show err
+readLit input = 
+  case parse parseLit "lit" input of
+    Left err  -> "No match: " ++ show err
     Right val -> "Found value " ++ show val
 
 
 
 parseLit :: Parser Literal
-parseLit =  parsenAtom
-         <|> parsepAtom         
+parseLit =  
+ parsenAtom <|> parsepAtom         
 
 
 parsepAtom :: Parser Literal
-parsepAtom = do
-               atom <- parseAtom
-               return (PAtom atom)
+parsepAtom = 
+  do
+    atom <- parseAtom
+    return (PAtom atom)
                
 
 parsenAtom :: Parser Literal
-parsenAtom = do
-                negationp
-                atom <- parseAtom
-                return (NAtom atom )
+parsenAtom =
+  do
+    negationp
+    atom <- parseAtom
+    return (NAtom atom )
 
 
 --------------
 readrule input =  parse parseRule "rul" input
 
 parseRule :: Parser Rule
-parseRule = do
-              ifparser
-              lits <- parseBody2
-              return (Rule __conflict  lits)
-            <|>
-            do
-                head <- parseAtom
-                lits <- parseBody
-                return (Rule head lits)
+parseRule = 
+  do
+    ifparser
+    lits <- parseBody2
+    return (Rule __conflict  lits)
+  <|>
+  do
+      head <- parseAtom
+      lits <- parseBody
+      return (Rule head lits)
 
-parseBody = do
-              dotparser
-              return []
-            <|>
-            do
-              ifparser
-              ret <- parseLitList
-              dotparser
-              return ret
+parseBody = 
+  do
+    dotparser
+    return []
+  <|>
+  do
+    ifparser
+    ret <- parseLitList
+    dotparser
+    return ret
 
-parseBody2 = do
-              dotparser
-              return []
-            <|>
-            do
-              ret <- parseLitList
-              dotparser
-              return ret              
+parseBody2 = 
+  do
+   dotparser
+   return []
+  <|>
+  do
+    ret <- parseLitList
+    dotparser
+    return ret              
 
-parseLitList  :: Parser [Literal]
-parseLitList  = do
-                  stmts <- sepEndBy1 parseLit (commaparser)
-                  return $! stmts
+parseLitList :: Parser [Literal]
+parseLitList = 
+  do
+    stmts <- sepEndBy1 parseLit (commaparser)
+    return $! stmts
 
                    
                    
 -----------                   
 readProgram input =  parse parseProgram "prg" input
                 
-parseProgram::  Parser [Rule]
-parseProgram = do
-                  spaces
-                  x <- (many1 parseRule)
-                  eof
-                  return x
+parseProgram ::  Parser [Rule]
+parseProgram = 
+  do
+    spaces
+    x <- (many1 parseRule)
+    eof
+    return x
 
 
 

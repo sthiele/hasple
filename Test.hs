@@ -11,7 +11,7 @@ import LPParser -- for parsing tests
 import Data.List (sort)
 import Debug.Trace
 
-test_good:: [Char] -> [[Atom]]
+test_good :: [Char] -> [[Atom]]
 test_good x =
   do
     case readProgram x of
@@ -19,7 +19,7 @@ test_good x =
       Right prg -> sort (map sort (anssets (groundProgram prg)))
 
 
-test_old:: [Char] -> [[Atom]]
+test_old :: [Char] -> [[Atom]]
 test_old x =
   do
     case readProgram x of
@@ -27,46 +27,19 @@ test_old x =
       Right prg -> sort (map sort (cdnl_enum (groundProgram prg) 0))
 
 
-test_new:: [Char] -> [[Atom]]
+test_new :: [Char] -> [[Atom]]
 test_new x =
   do
     case readProgram x of
       Left  err -> []
       Right prg -> sort (map sort (gr_solve prg))
 
-test:: [Char] -> IO()
+test :: [Char] -> IO()
 test x =
   do
     case readProgram x of
       Left  err -> print $ "ParseError: " ++ (show err)
       Right prg -> putStrLn $ show (gr_solve prg)
-
-
--- ground_facts     = "f(a).\n"
---                 ++ "f(b).\n"
---                 ++ "f(c).\n"
--- --                 ++ "r(b).\n"
--- nonground_facts  = "x(X).\n"
--- --                 ++ "r(Y).\n"
--- ground_rules     = "f(b) :- f(a). \n"
--- --                 ++ "a(a1) :- q(a). \n"
--- --                 ++ "a(b1) :- q(b). \n"
---
--- nonground_rules  = "y(X) :- x(X). \n"
---                 ++ "q(X) :- f(X), not p(X), not r(X). \n"
---                 ++ "p(X) :- f(X), not q(X), not r(X). \n"
---                 ++ "r(X) :- f(X), not p(X), not q(X). \n"
---                 ++ "q2(X) :- f(X), not p2(X), not r2(X). \n"
---                 ++ "p2(X) :- f(X), not q2(X), not r2(X), not a(a1). \n"
---                 ++ "r2(X) :- f(X), not p2(X), not q2(X). \n"
---
--- ground_ics       = ":- r(a).\n"
---                 ++ ":- a(a1),a(b1).\n"
--- nonground_ics    = ":- r(X)."
---
--- myprg1 = ground_facts ++ nonground_facts ++ ground_rules ++ nonground_rules ++ ground_ics ++ nonground_ics
---
--- myprg2 = myprg1++"r(b).\n"
 
 
 mpr1 = "a :- not b, not c.\n"

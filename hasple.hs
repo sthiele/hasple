@@ -18,27 +18,24 @@
 import System.Environment
 import ASP
 import LPParser
--- import Grounder       -- for old style grounding->solving
--- import GoodSolver     -- for monolithic solving
--- import CDNLSolver     -- for monolithic solving
 import GrounderSolver -- for interleaved grounding/solving
 
-get_answersets:: [Rule] -> Int -> [[Atom]]
+get_answersets :: [Rule] -> Int -> [[Atom]]
 -- get_answersets prg i = anssets (groundProgram prg)    -- for old style grounding->solving
 get_answersets prg i = gr_solve prg                      -- for interleaved grounding/solving
 
-main:: IO ()
+main :: IO ()
 main =
   do
     args <- getArgs
     if args==[]
-       then putStrLn "No arguments given!"
-       else do
-         putStrLn ("Answer Set Solver in Haskell by Sven Thiele 2015.")
-         contents <- readFile (head args)
-         case readProgram contents of
-           Left  err -> putStrLn ("ParseError: " ++ show err)
-           Right val -> print_as (get_answersets val 0)
+    then putStrLn "No arguments given!"
+    else do
+      putStrLn ("Answer Set Solver in Haskell by Sven Thiele 2015.")
+      contents <- readFile (head args)
+      case readProgram contents of
+        Left  err -> putStrLn ("ParseError: " ++ show err)
+        Right val -> print_as (get_answersets val 0)
 
 
 print_as [] = putStr "No Answersets"
@@ -60,6 +57,6 @@ print_as3 (x:xs) =
     print_as3 xs
 
 
-show_lp:: [Rule] -> [Char]
+show_lp :: [Rule] -> [Char]
 show_lp [] = ""
 show_lp (x:xs) = (show x) ++ "\n" ++ (show_lp xs)

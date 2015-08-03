@@ -25,12 +25,12 @@ import ASP
 import Data.List (sort, nub, intersect, (\\) )
 
 
-subsets:: [a] -> [[a]]
+subsets :: [a] -> [[a]]
 subsets []  = [[]]
 subsets (x:xs) = subsets xs ++ map (x:) (subsets xs)
 
 
-facts:: [Rule] -> [Atom]
+facts :: [Rule] -> [Atom]
 -- return the facts of a programm
 facts p = [ (kopf r) |  r <- p,  (null (pbody r)), (null (nbody r)) ]
 
@@ -40,21 +40,21 @@ reducebasicprogram:: [Rule] -> [Atom] -> [Rule]
 reducebasicprogram p x = [ (basicRule (kopf r) ((pbody r)\\ x) ) | r <- p, (pbody r)/=[] ]
 
 
-cn:: [Rule] -> [Atom]
+cn :: [Rule] -> [Atom]
 -- return the consequences of a  basic logic programm
 cn [] = []
 
 cn p =
    if (reducebasicprogram p (facts p)) == p
-   then (facts p)
+   then facts p
    else nub ((facts p) ++ (cn (reducebasicprogram p (facts p))))
 
 
-reduct:: [Rule] -> [Atom] -> [Rule]
+reduct :: [Rule] -> [Atom] -> [Rule]
 -- return the reduct of a logic program with x
 reduct p x = [ (basicRule (kopf r) (pbody r)) |  r <- p,  (intersect (nbody r) x)==[] ]
 
 
-anssets:: [Rule] -> [[Atom]]
+anssets :: [Rule] -> [[Atom]]
 
 anssets p = filter (\i -> (sort (cn (reduct p i)))==(sort i)) (subsets (heads_p p))
