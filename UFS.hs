@@ -36,11 +36,13 @@ extend_scope p a spvars spc s =
   else extend_scope p a spvars spc (s++t)
 
 
-unfounded_set :: [Rule] -> SPC -> Assignment -> [SPVar] -> [Atom]
+unfounded_set :: [Rule] -> Assignment -> [SPVar] -> [Atom]
 -- returns an unfounded set for the program given a partial assignment
-unfounded_set p spc a spvars=
-  let g = pos_dep_graph p
-      s = get_scope p spc spvars a 
+unfounded_set p a spvars=
+  let 
+      spc = initspc p
+      g   = pos_dep_graph p
+      s   = get_scope p spc spvars a 
   in
   loop_s p spc a spvars s
 

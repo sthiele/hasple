@@ -31,25 +31,19 @@ import Data.Maybe
 import qualified Data.Map as Map
 import Debug.Trace
 
-data TSolver = TSolver { boocons          :: NoGoodStore -- list of clauses/boolean constraints
-                       , assignment_level :: Int         -- assignmenetlevel
-                       , assig            :: Assignment  -- an assignment
-                       , conf             :: Bool        -- is the state of the solver cons or incons
-                       } deriving (Show, Eq)
-
 
 choose :: TSolver -> TSolver
 choose s =
   if conf s
   then s
-  else TSolver (choose2 $ boocons s) (assignment_level s) (assig s) (conf s)
+  else set_boocons (choose2 $ boocons s) s
 
 
 
 canchoose :: NoGoodStore -> Bool
 -- returns true if not all nogoods have been tested
 canchoose (NoGoodStore png lng pnga lnga counter) =
-  if (counter+1) <  (length png) + (length lng) 
+  if (counter+1) < (length png) + (length lng) 
   then True
   else False
 
@@ -63,21 +57,21 @@ resolv :: TSolver -> TSolver
 resolv s =
     let al = (assignment_level s)
         ng = get_ng (boocons s)
-        x  = resolve al ng (assig s)
+        x  = resolve al ng (assignment s)
     in
     case x of
-       NIX         -> s
+      NIX         -> s
 
-       NIXU ng'    -> let ngs' = upgrade_ngs (boocons s) ng' in
-                      TSolver ngs' al (assig s) (conf s)
-                                                                                                                      
-       Res a'      -> let ngs' = rewind (boocons s) in
-                      TSolver ngs' (al+1) a' (conf s)      
- 
-       ResU a' ng' -> let ngs' =  up_rew_ngs (boocons s) ng' in
-                      TSolver ngs' (al+1) a' (conf s)
-                                                                                                                      
-       CONF        -> TSolver (boocons s) al (assig s) True     -- set conflict
+      NIXU ng'    -> let ngs' = upgrade_ngs (boocons s) ng' in
+                     set_boocons ngs' s
+                                                                                                                     
+      Res a'      -> let ngs' = rewind (boocons s) in
+                     set_boocons ngs' $ set_assignment_level (al+1) $ set_assignment a' s
+
+      ResU a' ng' -> let ngs' = up_rew_ngs (boocons s) ng' in
+                     set_boocons ngs' $ set_assignment_level (al+1) $ set_assignment a' s
+                                                                                                                     
+      CONF        -> set_conf True s   -- set conflict
 
 
 
@@ -123,6 +117,10 @@ get_ng (NoGoodStore png lng _ _ counter) =
     then lng!!(counter-length png)
     else error "NoGoodStore out of bounds"
 
+
+add_nogoods :: [Clause] -> NoGoodStore -> NoGoodStore
+add_nogoods ngs (NoGoodStore png lng pnga lnga c) =
+  (NoGoodStore png (lng++ngs) pnga lnga c) 
 
 
 rewind :: NoGoodStore -> NoGoodStore
@@ -205,7 +203,7 @@ transform (t,f) spvars =
       number_of_vars = length allvars
   in
   if number_of_vars == 1
-  then (a',head allvars,head allvars)
+  then (a', head allvars, head allvars)
   else 
     let w = head allvars
         v = head (tail allvars)
@@ -238,6 +236,7 @@ cdnl_enum prg s =
   cdnl_enum_loop prg 0 1 1 1 [] [(1,1)] ngs [] assi vars
 
 
+
 cdnl_enum_loop ::
   [Rule]                   -- the program
   -> Int                   -- s
@@ -254,6 +253,8 @@ cdnl_enum_loop ::
 
 cdnl_enum_loop prg s dl bl al dliteral alt png lng a spvars =
   let
+--    solver  = TSolver
+--    solver' = ngprop2 solver
     (maybeassig,al',png',lng') = ng_prop prg al png lng a spvars []
   in
   case maybeassig of
@@ -376,6 +377,26 @@ get_epsilon (ng:ngs) sigma prefix =
 
 -- -----------------------------------------------------------------------------
 
+data TSolver = TSolver { 
+                         program          :: [Rule]      -- the program
+                       , spvars           :: [SPVar]     --
+                       , boocons          :: NoGoodStore -- the store of boolean constraints
+                       , assignment       :: Assignment  -- an assignment
+                       , assignment_level :: Int         -- the assignment level
+                       , get_unfounded_set    :: [Atom]      -- unfounded atoms
+                       , conf             :: Bool        -- is the state of the solver in conflict
+                       } deriving (Show, Eq)
+
+set_program :: [Rule] -> TSolver -> TSolver
+set_program p           (TSolver _ spvars ngs a al u c) = (TSolver p spvars ngs a al u c)
+set_assignment a        (TSolver p spvars ngs _ al u c) = (TSolver p spvars ngs a al u c)
+set_assignment_level al (TSolver p spvars ngs a _ u c)  = (TSolver p spvars ngs a al u c)
+set_boocons ngs         (TSolver p spvars _ a al u c)   = (TSolver p spvars ngs a al u c)
+set_spvars spvars       (TSolver p _ ngs a al u c)      = (TSolver p spvars ngs a al u c)
+set_unfounded_set u     (TSolver p spvars ngs a al _ c) = (TSolver p spvars ngs a al u c)
+set_conf c              (TSolver p spvars ngs a al u _) = (TSolver p spvars ngs a al u c)
+
+
 -- Propagation
 
 data PropRes = ASSIGNMENT Assignment  -- result of propagation can either be a conflict or a new assignment
@@ -383,8 +404,53 @@ data PropRes = ASSIGNMENT Assignment  -- result of propagation can either be a c
              deriving (Show,Eq)
 
 
-tight :: [Rule] -> Bool  -- TODO implement tigness check
+tight :: [Rule] -> Bool  -- TODO implement tightness check
 tight p = False
+
+
+ng_prop2 :: TSolver -> TSolver
+ng_prop2 s =
+  let
+    -- ngs    = new_ngs png lng 
+    s'  = local_propagation s
+    prg = program s'
+    a   = assignment s'
+    al  = assignment_level s'
+    ngs = boocons s'
+    png = p_nogoods ngs
+    lng = l_nogoods ngs
+    u   = get_unfounded_set s'
+  in
+  if conf s'
+  then
+    let conf_ng = get_ng ngs in
+    s'
+  else
+    if tight prg
+    then s'
+    else
+      case ufs_check (prg, a, (spvars s'), u) of                  -- unfounded set check
+        [] -> s' 
+        u' -> let p = get_svar (ALit (head u')) (spvars s') in
+              if elemAss (T p) a
+              then
+                let cngs_of_loop = loop_nogoods prg u'
+                    ngs_of_loop  = transforms cngs_of_loop (spvars s')
+                    ngs' = add_nogoods ngs_of_loop ngs
+                in
+                set_boocons ngs' s'
+              else
+                if elemAss (F p) a
+                then
+                  let s'' =                     set_unfounded_set u' s' in
+                  ng_prop2 s''
+                else 
+                  let a'  = assign a (F p) al                    -- extend assignment  
+                      s'' = set_assignment a' $ set_unfounded_set u' s'
+                  in
+                  ng_prop2 s''
+
+
 
 ng_prop :: 
   [Rule]           -- program
@@ -398,9 +464,9 @@ ng_prop ::
 ng_prop prg al png lng a spvars u =
   let
     ngs    = new_ngs png lng 
-    s      = TSolver ngs al a False
+    s      = TSolver prg spvars ngs a al u False
     s'     = local_propagation s
-    a'     = assig s'
+    a'     = assignment s'
     al'    = assignment_level s'
     ngs'   = boocons s'
     png'   = p_nogoods ngs'
@@ -414,7 +480,7 @@ ng_prop prg al png lng a spvars u =
     if tight prg
     then (ASSIGNMENT a', al', png', lng')
     else
-      case ufs_check (prg, a', spvars, u) of
+      case ufs_check (prg, a', spvars, u) of                  -- unfounded set check
         [] -> (ASSIGNMENT a', al', png', lng') 
         u' -> let p = get_svar (ALit (head u')) spvars in
               if elemAss (T p) a'
@@ -424,7 +490,7 @@ ng_prop prg al png lng a spvars u =
                 in
                 (ASSIGNMENT a', al', png', ngs_of_loop++lng')
               else
-                let a'' = assign a' (F p) al in                  -- extend assignment
+                let a'' = assign a' (F p) al in               -- extend assignment
                 case elemAss (F p) a' of
                   True  -> ng_prop prg al' png' lng a'  spvars u'
                   False -> ng_prop prg al' png' lng a'' spvars u'
@@ -439,10 +505,7 @@ ufs_check ::
   ) -> [Atom]
 ufs_check (prg, a, spvars, u) =
   if null (u \\ (falseatoms a spvars))
-  then                                                     -- unfounded set check
-    let spc = initspc prg
-        u'  = unfounded_set prg spc a spvars 
-    in
-    u'
+  then                                                    
+    unfounded_set prg a spvars 
   else u \\ (falseatoms a spvars)
 
