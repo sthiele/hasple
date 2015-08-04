@@ -422,9 +422,7 @@ ng_prop2 s =
     u   = get_unfounded_set s'
   in
   if conf s'
-  then
-    let conf_ng = get_ng ngs in
-    s'
+  then  s'
   else
     if tight prg
     then s'
@@ -491,9 +489,9 @@ ng_prop prg al png lng a spvars u =
                 (ASSIGNMENT a', al', png', ngs_of_loop++lng')
               else
                 let a'' = assign a' (F p) al in               -- extend assignment
-                case elemAss (F p) a' of
-                  True  -> ng_prop prg al' png' lng a'  spvars u'
-                  False -> ng_prop prg al' png' lng a'' spvars u'
+                if elemAss (F p) a'
+                then ng_prop prg al' png' lng' a'  spvars u'
+                else ng_prop prg al' png' lng' a'' spvars u'
 
 
 
