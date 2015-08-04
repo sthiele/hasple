@@ -239,6 +239,55 @@ cdnl_enum prg s =
 
 
 
+
+conflict_handling :: TSolver -> Int -> Int -> [(Int,Int)] -> [(Int,SignedVar)]  -> TSolver
+-- should resolve the conflict learn a new maybe clause and backtrack the solver
+conflict_handling s bl dl alt dliteral =
+  let a = assignment s
+     -- bl  = blocked_literal s
+     -- dl  = decision_level s
+     -- alt = assignment_level_tracker s
+     -- dliteral' = dliteral_tracker s
+  in
+  if bl < dl
+  then                                                      -- learn a new nogood and backtrack
+    let ccl          = get_ng $ boocons s
+        png          = p_nogoods $ boocons s
+        lng          = l_nogoods $ boocons s
+        (learnednogood, sigma_uip, alx) = conflict_analysis alt (png++lng) ccl a
+        ngs'         = add_nogoods [learnednogood] $ boocons s 
+        dl'          = al2dl alt alx
+        al'          = dl2al alt dl'
+        a'           = assign (backtrack a al') (invert sigma_uip) al'
+        dliteral'    = dlbacktrack dliteral dl'
+        alt'         = albacktrack alt dl'
+   
+        solver       =
+                   --  set_decision_literal (dl'-1)          $
+                   --  set_dliteral_tracker dliteral'    $
+                   --  set_assignment_level_tracker alt' $
+                       set_assignment_level (al'+1) $ set_assignment a' $ set_boocons ngs' s
+       -- remaining_as = cdnl_enum_loop solver'' s (dl'-1) bl dliteral' alt'
+    in
+    solver
+  else                                                                             -- backtrack
+    let sigma_d      = get_dliteral dliteral dl
+        dl'          = dl-1
+        bl'          = dl'
+        al'          = dl2al alt dl'
+        a'           = assign (backtrack a al') (invert sigma_d) al'
+        alt'         = albacktrack alt dl'
+
+        solver       =
+                   --  set_decision_literal dl'          $
+                   --  set_blocked_level bl'             $
+                   --  set_assignment_level_tracker alt' $
+                       set_assignment_level al' $ set_assignment a' s
+      --  remaining_as = cdnl_enum_loop solver'' s dl' bl' dliteral alt'
+    in
+    solver
+
+
 cdnl_enum_loop ::
   TSolver                   -- the program
   -> Int                   -- s
@@ -247,10 +296,8 @@ cdnl_enum_loop ::
   -> [(Int,SignedVar)]     -- decision level tracker
   -> [(Int,Int)]           -- al2dl
   -> [[Atom]]              -- found answer sets
-
 cdnl_enum_loop solver s dl bl dliteral alt =
   let
---    solverp  = TSolver prg spvars ngs a al [] False
     prg     = program solver 
     solverp = set_unfounded_set [] $ set_conf False solver 
     solver' = nogood_propagation solverp
@@ -262,22 +309,23 @@ cdnl_enum_loop solver s dl bl dliteral alt =
   if conf solver'
   then -- conflict
     if dl == 1
-    then []                                                                     -- no more answer sets
-    else                                                                        -- conflict analysis and backtrack
-      if bl < dl
+    then []                                                -- no need for conflict handling -- no more answer sets
+    else                                                                                      -- conflict handling
+      if bl < dl                                                -- conflict analysis and backtrack
       then
-        let ccl       = get_ng $ boocons solver'
+        let ccl          = get_ng $ boocons solver'
             (learnednogood, sigma_uip, alx) = conflict_analysis alt (png'++lng') ccl a'
-            dl'       = al2dl alt alx
-            al''      = dl2al alt dl'
-            lng''     = learnednogood:lng'
-            a''       = assign (backtrack a' al'') (invert sigma_uip) al''
-            dliteral' = dlbacktrack dliteral dl'
-            alt'      = albacktrack alt dl'
-            ngs''     = add_nogoods [learnednogood] $ boocons solver' 
-            solver''  = set_assignment_level (al''+1) $ set_assignment a'' $ set_boocons ngs'' solver'
+            dl'          = al2dl alt alx
+            al''         = dl2al alt dl'
+            lng''        = learnednogood:lng'
+            a''          = assign (backtrack a' al'') (invert sigma_uip) al''
+            dliteral'    = dlbacktrack dliteral dl'
+            alt'         = albacktrack alt dl'
+            ngs''        = add_nogoods [learnednogood] $ boocons solver' 
+            solver''     = set_assignment_level (al''+1) $ set_assignment a'' $ set_boocons ngs'' solver'
+            remaining_as = cdnl_enum_loop solver'' s (dl'-1) bl dliteral' alt'
         in
-        cdnl_enum_loop solver'' s (dl'-1) bl dliteral' alt'
+        remaining_as
       else
         let sigma_d      = get_dliteral dliteral dl
             dl'          = dl-1
