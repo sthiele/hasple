@@ -283,13 +283,13 @@ conflict_handling s =
       dliteral = dliteral_tracker s
   in
   if bl < dl
-  then                                                                       -- learn a new nogood and backtrack
+  then                                                                         -- learn a new nogood and backtrack
     let ccl          = get_ng $ boocons s
         png          = p_nogoods $ boocons s
         lng          = l_nogoods $ boocons s
         (learnednogood, sigma_uip, alx) = conflict_analysis alt (png++lng) ccl a
         ngs'         = add_nogoods [learnednogood] $ boocons s 
-                                                                                                   -- backtrack
+                                                                                                      -- backtrack
         bt_dl        = al2dl alt alx
         bt_al        = dl2al alt bt_dl
         a'           = assign (backtrack a bt_al) (invert sigma_uip) bt_al
@@ -302,7 +302,7 @@ conflict_handling s =
                        set_assignment_level (bt_al+1) $ set_assignment a' $ set_boocons ngs' s
     in
     solver
-  else                                                                                              -- backtrack
+  else                                                                                                -- backtrack
     let sigma_d      = get_dliteral dliteral dl
         dl'          = dl-1
         bl'          = dl'
@@ -361,9 +361,10 @@ cdnl_enum_loop solver s =
             bl'          = dl'
             solver''     = set_decision_level dl'            $
                            set_blocked_level bl'             $
-                           set_dliteral_tracker dlt'          $
+                           set_dliteral_tracker dlt'         $
                            set_assignment_level_tracker alt' $
-                           set_assignment_level (cal+1)      $ set_assignment a''' solver'
+                           set_assignment_level (cal+1)      $ 
+                           set_assignment a''' solver'
             remaining_as = cdnl_enum_loop solver'' s2 
         in
         (nub (trueatoms a' (spvars solver'))):remaining_as
@@ -375,7 +376,8 @@ cdnl_enum_loop solver s =
           solver''     = set_decision_level (dl+1)         $
                          set_dliteral_tracker dlt'         $
                          set_assignment_level_tracker alt' $
-                         set_assignment_level (al'+1) $ set_assignment a'' solver'
+                         set_assignment_level (al'+1)      $
+                         set_assignment a'' solver'
           remaining_as = cdnl_enum_loop solver'' s
       in
       remaining_as
@@ -396,7 +398,7 @@ dl2al ((al1,dl1):rest) dl =
 albacktrack :: [(Int,Int)] -> Int -> [(Int,Int)]
 albacktrack alt l = [ (al,dl) | (al,dl) <- alt, dl < l ]
 
-type DLT = [(Int,SignedVar)]                                                    -- DecisionLevelTracker
+type DLT = [(Int,SignedVar)]                                                               -- DecisionLevelTracker
 
 get_dliteral :: DLT -> Int -> SignedVar
 
@@ -482,11 +484,13 @@ nogood_propagation s =
               else
                 if elemAss (F p) a
                 then
-                  let s'' =                                                   set_unfounded_set u' s' in
+                  let s'' = set_unfounded_set u' s' in
                   nogood_propagation s''
                 else 
                   let a'  = assign a (F p) al                    -- extend assignment  
-                      s'' = set_assignment_level (al+1) $ set_assignment a' $ set_unfounded_set u' s'
+                      s'' = set_assignment_level (al+1) $ 
+                            set_assignment a'           $ 
+                            set_unfounded_set u' s'
                   in
                   nogood_propagation s''
 
