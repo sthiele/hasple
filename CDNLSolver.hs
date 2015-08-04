@@ -82,7 +82,9 @@ local_propagation s =
   else 
     if canchoose (boocons s)
     then local_propagation $ resolv $ choose s
-    else s
+    else 
+      let ngs' = rewind $ boocons s in
+      set_boocons ngs' s
 
 
 
@@ -411,15 +413,16 @@ tight p = False
 ng_prop2 :: TSolver -> TSolver
 ng_prop2 s =
   let
-    -- ngs    = new_ngs png lng 
+    -- ngs    = new_ngs png lng
+    prg = program s 
+    spv = spvars s
+    u   = get_unfounded_set s 
     s'  = local_propagation s
-    prg = program s'
     a   = assignment s'
     al  = assignment_level s'
     ngs = boocons s'
     png = p_nogoods ngs
     lng = l_nogoods ngs
-    u   = get_unfounded_set s'
   in
   if conf s'
   then  s'
@@ -427,24 +430,24 @@ ng_prop2 s =
     if tight prg
     then s'
     else
-      case ufs_check (prg, a, (spvars s'), u) of                  -- unfounded set check
+      case ufs_check (prg, a, spv, u) of                  -- unfounded set check
         [] -> s' 
-        u' -> let p = get_svar (ALit (head u')) (spvars s') in
+        u' -> let p = get_svar (ALit (head u')) spv in
               if elemAss (T p) a
               then
                 let cngs_of_loop = loop_nogoods prg u'
-                    ngs_of_loop  = transforms cngs_of_loop (spvars s')
-                    ngs' = add_nogoods ngs_of_loop ngs
+                    ngs_of_loop  = transforms cngs_of_loop spv
+                    ngs'         = add_nogoods ngs_of_loop ngs
                 in
                 set_boocons ngs' s'
               else
                 if elemAss (F p) a
                 then
-                  let s'' =                     set_unfounded_set u' s' in
+                  let s'' =                                                   set_unfounded_set u' s' in
                   ng_prop2 s''
                 else 
                   let a'  = assign a (F p) al                    -- extend assignment  
-                      s'' = set_assignment a' $ set_unfounded_set u' s'
+                      s'' = set_assignment_level (al+1) $ set_assignment a' $ set_unfounded_set u' s'
                   in
                   ng_prop2 s''
 
@@ -463,35 +466,49 @@ ng_prop prg al png lng a spvars u =
   let
     ngs    = new_ngs png lng 
     s      = TSolver prg spvars ngs a al u False
-    s'     = local_propagation s
+    s'     = ng_prop2 s
     a'     = assignment s'
     al'    = assignment_level s'
-    ngs'   = boocons s'
-    png'   = p_nogoods ngs'
-    lng'   = l_nogoods ngs'
+    png'   = p_nogoods $ boocons s'
+    lng'   = l_nogoods $ boocons s'
+    conf_ng = get_ng $ boocons s'
   in
   if conf s'
-  then
-    let conf_ng = get_ng ngs' in
-    (Conflict conf_ng a', al', png', lng')                    -- return conflic nogood
-  else
-    if tight prg
-    then (ASSIGNMENT a', al', png', lng')
-    else
-      case ufs_check (prg, a', spvars, u) of                  -- unfounded set check
-        [] -> (ASSIGNMENT a', al', png', lng') 
-        u' -> let p = get_svar (ALit (head u')) spvars in
-              if elemAss (T p) a'
-              then
-                let cngs_of_loop = loop_nogoods prg u'
-                    ngs_of_loop  = transforms cngs_of_loop spvars
-                in
-                (ASSIGNMENT a', al', png', ngs_of_loop++lng')
-              else
-                let a'' = assign a' (F p) al in               -- extend assignment
-                if elemAss (F p) a'
-                then ng_prop prg al' png' lng' a'  spvars u'
-                else ng_prop prg al' png' lng' a'' spvars u'
+  then (Conflict conf_ng a', al', png', lng')
+  else (ASSIGNMENT a', al', png', lng')
+
+--  let
+--    s'     = local_propagation s
+--    a'     = assignment s'
+--    al'    = assignment_level s'
+--    ngs'   = boocons s'
+--    png'   = p_nogoods ngs'
+--    lng'   = l_nogoods ngs'
+--  in
+--  if conf s'
+--  then
+--    let conf_ng = get_ng ngs' in
+--    (Conflict conf_ng a', al', png', lng')                    -- return conflic nogood
+--  else
+--    if tight prg
+--    then (ASSIGNMENT a', al', png', lng')
+--    else
+--      case ufs_check (prg, a', spvars, u) of                  -- unfounded set check
+--        [] -> (ASSIGNMENT a', al', png', lng') 
+--        u' -> let p = get_svar (ALit (head u')) spvars in
+--              trace ("zell"++(show p)++(show (head u'))++(show a')) $
+--              if elemAss (T p) a'
+--              then
+--                let cngs_of_loop = loop_nogoods prg u'
+--                    ngs_of_loop  = transforms cngs_of_loop spvars
+--                in
+--                (ASSIGNMENT a', al', png', ngs_of_loop++lng')
+--              else
+--                let a'' = assign a' (F p) al' in               -- extend assignment
+--                if elemAss (F p) a'
+--                then 
+--                  ng_prop prg al' png' lng' a'  spvars u'
+--                else ng_prop prg al' png' lng' a'' spvars u'
 
 
 
