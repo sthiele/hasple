@@ -144,23 +144,25 @@ mpr13 = "f(c).\n"
      ++ "f:-q.\n"
 Right mp13 = readProgram mpr13
 
+
+t1 = (test_new mpr1)==(test_good mpr1)
+t2 = (test_new mpr2)==(test_good mpr2) 
+t3 = (test_new mpr3)==(test_good mpr3) 
+t4 = (test_new mpr4)==(test_good mpr4) 
+t5 = (test_new mpr5)==(test_good mpr5) 
+t6 = (test_new mpr6)==(test_good mpr6)
+t7 = (test_new mpr6a)==(test_good mpr6a) 
+t8 = (test_new mpr6b)==(test_good mpr6b) 
+t9 = (test_new mpr7)==(test_good mpr7)
+-- t10 = (test_new mpr8)==(test_good mpr8)   -- test takes too long
+-- t11 = (test_new mpr9)==(test_good mpr9)   -- test takes too long
+t12 = (test_new mpr10)==(test_good mpr10) 
+t13 = (test_new mpr11)==(test_good mpr11) 
+t14 = (test_new mpr12)==(test_good mpr12) 
+t15 = (test_new mpr13)==(test_good mpr13)
+
+
 unit_test =
-  let t1 = (test_new mpr1)==(test_good mpr1) 
-      t2 = (test_new mpr2)==(test_good mpr2) 
-      t3 = (test_new mpr3)==(test_good mpr3) 
-      t4 = (test_new mpr4)==(test_good mpr4) 
-      t5 = (test_new mpr5)==(test_good mpr5) 
-      t6 = (test_new mpr6)==(test_good mpr6)
-      t7 = (test_new mpr6a)==(test_good mpr6a) 
-      t8 = (test_new mpr6b)==(test_good mpr6b) 
-      t9 = (test_new mpr7)==(test_good mpr7)   -- infinite
---       t10 = (test_new mpr8)==(test_good mpr8)   -- test takes too long
---       t11 = (test_new mpr9)==(test_good mpr9)   -- test takes too long
-      t12 = (test_new mpr10)==(test_good mpr10) 
-      t13 = (test_new mpr11)==(test_good mpr11) 
-      t14 = (test_new mpr12)==(test_good mpr12) 
-      t15 = (test_new mpr13)==(test_good mpr13)
-  in
   trace ("test1:  " ++ (show t1)) $
   trace ("test2:  " ++ (show t2)) $
   trace ("test3:  " ++ (show t3)) $

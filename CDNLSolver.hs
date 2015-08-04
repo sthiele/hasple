@@ -42,10 +42,7 @@ choose s =
 
 canchoose :: NoGoodStore -> Bool
 -- returns true if not all nogoods have been tested
-canchoose (NoGoodStore png lng pnga lnga counter) =
-  if (counter+1) < (length png) + (length lng) 
-  then True
-  else False
+canchoose (NoGoodStore png lng pnga lnga counter) = (counter+1) < (length png) + (length lng) 
 
 choose2 :: NoGoodStore -> NoGoodStore
 -- is only called if canchoose return true
@@ -83,7 +80,7 @@ local_propagation s =
     if canchoose (boocons s)
     then local_propagation $ resolv $ choose s
     else 
-      let ngs' = rewind $ boocons s in
+      let ngs' = rewind $ boocons s in -- rewind for next use
       set_boocons ngs' s
 
 
@@ -231,88 +228,97 @@ cdnl_enum :: [Rule] -> Int -> [[Atom]]
 cdnl_enum prg s =
   let cngs = nub (nogoods_of_lp prg)
       vars = get_vars cngs
+      png  = transforms cngs vars
+      ngs  = new_ngs png []
       l    = length vars
-      assi = initialAssignment l
-      ngs  = transforms cngs vars
+      a = initialAssignment l
+
+      solver = TSolver prg vars ngs a 1 [] False
   in
-  cdnl_enum_loop prg 0 1 1 1 [] [(1,1)] ngs [] assi vars
+  cdnl_enum_loop solver 0 1 1  [] [(1,1)] 
 
 
 
 cdnl_enum_loop ::
-  [Rule]                   -- the program
+  TSolver                   -- the program
   -> Int                   -- s
   -> Int                   -- decision level
   -> Int                   -- blocked level
-  -> Int                   -- assignment level
   -> [(Int,SignedVar)]     -- decision level tracker
   -> [(Int,Int)]           -- al2dl
-  -> [Clause]              -- program nogoods
-  -> [Clause]              -- learned nogoods
-  -> Assignment
-  -> [SPVar]               -- maging SPVar 2 SVar(Int)
   -> [[Atom]]              -- found answer sets
 
-cdnl_enum_loop prg s dl bl al dliteral alt png lng a spvars =
+cdnl_enum_loop solver s dl bl dliteral alt =
   let
---    solver  = TSolver
---    solver' = ngprop2 solver
-    (maybeassig,al',png',lng') = ng_prop prg al png lng a spvars []
+--    solverp  = TSolver prg spvars ngs a al [] False
+    prg     = program solver 
+    solverp = set_unfounded_set [] $ set_conf False solver 
+    solver' = nogood_propagation solverp
+    a'      = assignment solver'
+    al'     = assignment_level solver'
+    png'    = p_nogoods $ boocons solver'
+    lng'    = l_nogoods $ boocons solver'
   in
-  case maybeassig of
-    Conflict ccl cass -> -- conflict
-                         if dl == 1
-                         then []                                                                     -- no more answer sets
-                         else                                                                        -- conflict analysis and backtrack
-                           if bl < dl
-                           then
-                             let (learnednogood, sigma_uip, alx) = conflict_analysis alt (png'++lng') ccl cass
-                                 dl'       = al2dl alt alx
-                                 al''      = dl2al alt dl'
-                                 lng''     = learnednogood:lng'
-                                 a'        = assign (backtrack cass al'') (invert sigma_uip) al''
-                                 dliteral' = dlbacktrack dliteral dl'
-                                 alt'      = albacktrack alt dl'
-                             in
-                             cdnl_enum_loop prg s (dl'-1) bl (al''+1) dliteral' alt' png' lng'' a' spvars
-                           else
-                             let sigma_d      = get_dliteral dliteral dl
-                                 dl'          = dl-1
-                                 bl'          = dl'
-                                 al''         = dl2al alt dl'
-                                 a'           = assign (backtrack cass al'') (invert sigma_d) al''
-                                 alt'         = albacktrack alt dl'
-                                 remaining_as = cdnl_enum_loop prg s dl' bl' al'' dliteral alt' png' lng' a' spvars
-                             in
-                             remaining_as
+  if conf solver'
+  then -- conflict
+    if dl == 1
+    then []                                                                     -- no more answer sets
+    else                                                                        -- conflict analysis and backtrack
+      if bl < dl
+      then
+        let ccl       = get_ng $ boocons solver'
+            (learnednogood, sigma_uip, alx) = conflict_analysis alt (png'++lng') ccl a'
+            dl'       = al2dl alt alx
+            al''      = dl2al alt dl'
+            lng''     = learnednogood:lng'
+            a''       = assign (backtrack a' al'') (invert sigma_uip) al''
+            dliteral' = dlbacktrack dliteral dl'
+            alt'      = albacktrack alt dl'
+            ngs''     = add_nogoods [learnednogood] $ boocons solver' 
+            solver''  = set_assignment_level (al''+1) $ set_assignment a'' $ set_boocons ngs'' solver'
+        in
+        cdnl_enum_loop solver'' s (dl'-1) bl dliteral' alt'
+      else
+        let sigma_d      = get_dliteral dliteral dl
+            dl'          = dl-1
+            bl'          = dl'
+            al''         = dl2al alt dl'
+            a''          = assign (backtrack a' al'') (invert sigma_d) al''
+            alt'         = albacktrack alt dl'
+            solver''     = set_assignment_level al'' $ set_assignment a'' solver'
+            remaining_as = cdnl_enum_loop solver'' s dl' bl' dliteral alt'
+        in
+        remaining_as
 
-    ASSIGNMENT a'     -> -- no conflict
-                         let selectable = get_unassigned a' in
-                         if null selectable
-                         then                                                                       -- if all atoms then answer set found
-                           let s2= s-1 in
-                           if dl==1 || s2==0
-                           then [nub (trueatoms a' spvars)]                                     -- last answer set
-                           else                                                                     -- backtrack for remaining answer sets
-                             let
-                                 sigma_d      = get_dliteral dliteral dl
-                                 dl'          = dl-1
-                                 bl'          = dl'
-                                 dliteral'    = dlbacktrack dliteral dl
-                                 cal          = dl2al alt dl
-                                 alt'         = albacktrack alt dl
-                                 a''          = backtrack a' cal
-                                 a'''         = assign a'' (invert sigma_d) cal                         -- invert last decision literal
-                                 remaining_as = cdnl_enum_loop prg s2 dl' bl' (cal+1) dliteral' alt' png' lng' a''' spvars
-                             in
-                             (nub (trueatoms a' spvars)):remaining_as
-                         else                                                                        -- select new lit
-                           let sigma_d   = head selectable
-                               dliteral' = (((dl+1),(T sigma_d)):dliteral)
-                               alt'      = ((al',dl+1):alt)
-                               a''       = assign a' (T sigma_d) (al')
-                           in
-                           cdnl_enum_loop prg s (dl+1) bl (al'+1) dliteral' alt' png' lng' a'' spvars
+    else -- no conflict
+      let selectable = get_unassigned a' in
+      if null selectable
+      then                                                                       -- if all atoms then answer set found
+        let s2= s-1 in
+        if dl==1 || s2==0
+        then [nub (trueatoms a' (spvars solver'))]                                     -- last answer set
+        else                                                                     -- backtrack for remaining answer sets
+          let
+              sigma_d      = get_dliteral dliteral dl
+              dl'          = dl-1
+              bl'          = dl'
+              dliteral'    = dlbacktrack dliteral dl
+              cal          = dl2al alt dl
+              alt'         = albacktrack alt dl
+              a''          = backtrack a' cal
+              a'''         = assign a'' (invert sigma_d) cal                         -- invert last decision literal
+              solver''     = set_assignment_level (cal+1) $ set_assignment a''' solver'
+              remaining_as = cdnl_enum_loop solver'' s2 dl' bl' dliteral' alt'
+          in
+          (nub (trueatoms a' (spvars solver'))):remaining_as
+      else                                                                        -- select new lit
+        let sigma_d   = head selectable
+            dliteral' = (((dl+1),(T sigma_d)):dliteral)
+            alt'      = ((al',dl+1):alt)
+            a''       = assign a' (T sigma_d) (al')
+            solver''  = set_assignment_level (al'+1) $ set_assignment a'' solver'
+        in
+        cdnl_enum_loop solver'' s (dl+1) bl dliteral' alt'
 
 
 al2dl :: [(Int,Int)] -> Int -> Int
@@ -410,10 +416,9 @@ tight :: [Rule] -> Bool  -- TODO implement tightness check
 tight p = False
 
 
-ng_prop2 :: TSolver -> TSolver
-ng_prop2 s =
+nogood_propagation :: TSolver -> TSolver
+nogood_propagation s =
   let
-    -- ngs    = new_ngs png lng
     prg = program s 
     spv = spvars s
     u   = get_unfounded_set s 
@@ -444,71 +449,12 @@ ng_prop2 s =
                 if elemAss (F p) a
                 then
                   let s'' =                                                   set_unfounded_set u' s' in
-                  ng_prop2 s''
+                  nogood_propagation s''
                 else 
                   let a'  = assign a (F p) al                    -- extend assignment  
                       s'' = set_assignment_level (al+1) $ set_assignment a' $ set_unfounded_set u' s'
                   in
-                  ng_prop2 s''
-
-
-
-ng_prop :: 
-  [Rule]           -- program
-  -> Int           -- assignment level
-  -> [Clause]      -- program nogoods
-  -> [Clause]      -- learned no goods
-  -> Assignment 
-  -> [SPVar]      
-  -> [Atom]        --
-  -> (PropRes,Int,[Clause],[Clause])
-ng_prop prg al png lng a spvars u =
-  let
-    ngs    = new_ngs png lng 
-    s      = TSolver prg spvars ngs a al u False
-    s'     = ng_prop2 s
-    a'     = assignment s'
-    al'    = assignment_level s'
-    png'   = p_nogoods $ boocons s'
-    lng'   = l_nogoods $ boocons s'
-    conf_ng = get_ng $ boocons s'
-  in
-  if conf s'
-  then (Conflict conf_ng a', al', png', lng')
-  else (ASSIGNMENT a', al', png', lng')
-
---  let
---    s'     = local_propagation s
---    a'     = assignment s'
---    al'    = assignment_level s'
---    ngs'   = boocons s'
---    png'   = p_nogoods ngs'
---    lng'   = l_nogoods ngs'
---  in
---  if conf s'
---  then
---    let conf_ng = get_ng ngs' in
---    (Conflict conf_ng a', al', png', lng')                    -- return conflic nogood
---  else
---    if tight prg
---    then (ASSIGNMENT a', al', png', lng')
---    else
---      case ufs_check (prg, a', spvars, u) of                  -- unfounded set check
---        [] -> (ASSIGNMENT a', al', png', lng') 
---        u' -> let p = get_svar (ALit (head u')) spvars in
---              trace ("zell"++(show p)++(show (head u'))++(show a')) $
---              if elemAss (T p) a'
---              then
---                let cngs_of_loop = loop_nogoods prg u'
---                    ngs_of_loop  = transforms cngs_of_loop spvars
---                in
---                (ASSIGNMENT a', al', png', ngs_of_loop++lng')
---              else
---                let a'' = assign a' (F p) al' in               -- extend assignment
---                if elemAss (F p) a'
---                then 
---                  ng_prop prg al' png' lng' a'  spvars u'
---                else ng_prop prg al' png' lng' a'' spvars u'
+                  nogood_propagation s''
 
 
 
