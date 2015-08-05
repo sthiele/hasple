@@ -32,60 +32,6 @@ import qualified Data.Map as Map
 import Debug.Trace
 
 
-choose :: TSolver -> TSolver
-choose s =
-  if conf s
-  then s
-  else set_boocons (choose2 $ boocons s) s
-
-
-
-canchoose :: NoGoodStore -> Bool
--- returns true if not all nogoods have been tested
-canchoose (NoGoodStore png lng pnga lnga counter) = (counter+1) < (length png) + (length lng) 
-
-choose2 :: NoGoodStore -> NoGoodStore
--- is only called if canchoose return true
-choose2 (NoGoodStore png lng pnga lnga counter) = (NoGoodStore png lng pnga lnga (counter+1))
-
-
-resolv :: TSolver -> TSolver
--- is only called if conf is false
-resolv s =
-    let al = (assignment_level s)
-        ng = get_ng (boocons s)
-        x  = resolve al ng (assignment s)
-    in
-    case x of
-      NIX         -> s
-
-      NIXU ng'    -> let ngs' = upgrade_ngs (boocons s) ng' in
-                     set_boocons ngs' s
-                                                                                                                     
-      Res a'      -> let ngs' = rewind (boocons s) in
-                     set_boocons ngs' $ set_assignment_level (al+1) $ set_assignment a' s
-
-      ResU a' ng' -> let ngs' = up_rew_ngs (boocons s) ng' in
-                     set_boocons ngs' $ set_assignment_level (al+1) $ set_assignment a' s
-                                                                                                                     
-      CONF        -> set_conf True s   -- set conflict
-
-
-
-local_propagation :: TSolver -> TSolver
-local_propagation s =
-  if conf s
-  then s
-  else 
-    if canchoose (boocons s)
-    then local_propagation $ resolv $ choose s
-    else 
-      let ngs' = rewind $ boocons s in -- rewind for next use
-      set_boocons ngs' s
-
-
-
-
 data NoGoodStore = NoGoodStore { program_nogoods :: [Clause] -- program nogoods
                                , learned_nogoods :: [Clause] -- learned nogoods
                                , png_akku        :: [Clause] -- program nogoods akku
@@ -136,7 +82,6 @@ rewind (NoGoodStore png lng pnga lnga counter) =
     NoGoodStore png' lng' [] [] (-1)
 
 
-
 upgrade_ngs :: NoGoodStore -> Clause -> NoGoodStore
 -- replace current nogood with new nogood reset nogood store
 upgrade_ngs (NoGoodStore png lng pnga lnga counter) ng =
@@ -168,6 +113,19 @@ up_rew_ngs (NoGoodStore png lng pnga lnga counter) ng =
     in
     (NoGoodStore png' lng' [] [] (-1))
 
+
+canchoose :: NoGoodStore -> Bool
+-- returns true if not all nogoods have been tested
+canchoose (NoGoodStore png lng pnga lnga counter) = (counter+1) < (length png) + (length lng) 
+
+choose2 :: NoGoodStore -> NoGoodStore
+-- is only called if canchoose return true
+choose2 (NoGoodStore png lng pnga lnga counter) = (NoGoodStore png lng pnga lnga (counter+1))
+
+
+--------------------------------
+-- transform
+--
 
 
 get_svar :: SPVar -> [SPVar] -> SVar
@@ -222,6 +180,38 @@ assign_falses a (v:vs) = assign_falses (assign a (F v) 1) vs
 
 -- Conflict Driven Nogood Learning - Enumeration
 
+
+al2dl :: [(Int,Int)] -> Int -> Int
+al2dl ((al1,dl1):rest) al =
+  if al<al1
+  then al2dl rest al
+  else dl1
+
+dl2al :: [(Int,Int)] -> Int -> Int
+dl2al ((al1,dl1):rest) dl =
+  if dl==dl1
+  then al1
+  else dl2al rest dl
+
+albacktrack :: [(Int,Int)] -> Int -> [(Int,Int)]
+albacktrack alt l = [ (al,dl) | (al,dl) <- alt, dl < l ]
+
+
+
+type DLT = [(Int,SignedVar)]                                                               -- DecisionLevelTracker
+
+get_dliteral :: DLT -> Int -> SignedVar
+
+get_dliteral ((dl1,sl1):xs) l
+  | dl1 == l = sl1
+  | otherwise = get_dliteral xs l
+
+dlbacktrack :: DLT -> Int -> DLT
+-- backtracks the decision levels
+dlbacktrack dlt l = [ (dl,sl) | (dl,sl) <- dlt, dl < l ]
+
+
+
 data TSolver = TSolver { 
                          program                  :: [Rule]      -- the program
                        , spvars                   :: [SPVar]     --
@@ -272,52 +262,6 @@ cdnl_enum prg s =
 
 
 
-
-conflict_handling :: TSolver -> TSolver
--- should resolve the conflict learn a new maybe clause and backtrack the solver
-conflict_handling s =
-  let a        = assignment s
-      bl       = blocked_level s
-      dl       = decision_level s
-      alt      = assignment_level_tracker s
-      dliteral = dliteral_tracker s
-  in
-  if bl < dl
-  then                                                                         -- learn a new nogood and backtrack
-    let ccl          = get_ng $ boocons s
-        png          = p_nogoods $ boocons s
-        lng          = l_nogoods $ boocons s
-        (learnednogood, sigma_uip, alx) = conflict_analysis alt (png++lng) ccl a
-        ngs'         = add_nogoods [learnednogood] $ boocons s 
-                                                                                                      -- backtrack
-        bt_dl        = al2dl alt alx
-        bt_al        = dl2al alt bt_dl
-        a'           = assign (backtrack a bt_al) (invert sigma_uip) bt_al
-        dliteral'    = dlbacktrack dliteral bt_dl
-        alt'         = albacktrack alt bt_dl
-   
-        solver       = set_decision_level (bt_dl-1)        $
-                       set_dliteral_tracker dliteral'    $
-                       set_assignment_level_tracker alt' $
-                       set_assignment_level (bt_al+1) $ set_assignment a' $ set_boocons ngs' s
-    in
-    solver
-  else                                                                                                -- backtrack
-    let sigma_d      = get_dliteral dliteral dl
-        dl'          = dl-1
-        bl'          = dl'
-        bt_al        = dl2al alt dl'
-        a'           = assign (backtrack a bt_al) (invert sigma_d) bt_al
-        alt'         = albacktrack alt dl'
-
-        solver       = set_decision_level dl'            $
-                       set_blocked_level bl'             $
-                       set_assignment_level_tracker alt' $
-                       set_assignment_level bt_al $ set_assignment a' s
-    in
-    solver
-
-
 cdnl_enum_loop ::
   TSolver                  -- the solver
   -> Int                   -- s
@@ -329,18 +273,17 @@ cdnl_enum_loop solver s =
     dl      = decision_level solver'
   in
   if conf solver'
-  then -- conflict
+  then                                                                                                 -- conflict
     if dl == 1
     then []                                                  -- no need for conflict handling, no more answer sets
     else                                                                                      -- conflict handling
       let solver'' = conflict_handling solver' in
       cdnl_enum_loop solver'' s
-
-  else -- no conflict
+  else                                                                                              -- no conflict
     let 
-      a'         = assignment solver'
-      al'        = assignment_level solver'
-      dlt        = dliteral_tracker solver'
+      a'         = assignment               solver'
+      al'        = assignment_level         solver'
+      dlt        = dliteral_tracker         solver'
       alt        = assignment_level_tracker solver'
       selectable = get_unassigned a' 
     in
@@ -350,21 +293,20 @@ cdnl_enum_loop solver s =
       if dl==1 || s2==0
       then [nub (trueatoms a' (spvars solver'))]                                                -- last answer set
       else                                                                  -- backtrack for remaining answer sets
-        let
-            sigma_d      = get_dliteral dlt dl
-            dlt'    = dlbacktrack dlt dl
+        let sigma_d      = get_dliteral dlt dl
+            dlt'         = dlbacktrack dlt dl
             cal          = dl2al alt dl
             alt'         = albacktrack alt dl
             a''          = backtrack a' cal
             a'''         = assign a'' (invert sigma_d) cal                         -- invert last decision literal
             dl'          = dl-1
             bl'          = dl'
-            solver''     = set_decision_level dl'            $
-                           set_blocked_level bl'             $
-                           set_dliteral_tracker dlt'         $
+            solver''     = set_decision_level            dl' $
+                           set_blocked_level             bl' $
+                           set_dliteral_tracker         dlt' $
                            set_assignment_level_tracker alt' $
-                           set_assignment_level (cal+1)      $ 
-                           set_assignment a''' solver'
+                           set_assignment_level      (cal+1) $ 
+                           set_assignment a'''       solver'
             remaining_as = cdnl_enum_loop solver'' s2 
         in
         (nub (trueatoms a' (spvars solver'))):remaining_as
@@ -373,54 +315,75 @@ cdnl_enum_loop solver s =
           dlt'         = ((dl+1),(T sigma_d)):dlt
           alt'         = (al',dl+1):alt
           a''          = assign a' (T sigma_d) al'
-          solver''     = set_decision_level (dl+1)         $
-                         set_dliteral_tracker dlt'         $
+          solver''     = set_decision_level         (dl+1) $
+                         set_dliteral_tracker         dlt' $
                          set_assignment_level_tracker alt' $
-                         set_assignment_level (al'+1)      $
-                         set_assignment a'' solver'
+                         set_assignment_level      (al'+1) $
+                         set_assignment a''        solver'
           remaining_as = cdnl_enum_loop solver'' s
       in
       remaining_as
 
 
-al2dl :: [(Int,Int)] -> Int -> Int
-al2dl ((al1,dl1):rest) al =
-  if al<al1
-  then al2dl rest al
-  else dl1
 
-dl2al :: [(Int,Int)] -> Int -> Int
-dl2al ((al1,dl1):rest) dl =
-  if dl==dl1
-  then al1
-  else dl2al rest dl
+conflict_handling :: TSolver -> TSolver
+-- should resolve the conflict learn a new maybe clause and backtrack the solver
+conflict_handling s =
+  let a   = assignment               s
+      bl  = blocked_level            s
+      dl  = decision_level           s
+      alt = assignment_level_tracker s
+      dlt = dliteral_tracker         s
+  in
+  if bl < dl
+  then                                                                         -- learn a new nogood and backtrack
+    let ccl     = get_ng    $ boocons s
+        png     = p_nogoods $ boocons s
+        lng     = l_nogoods $ boocons s
+        (learnednogood, sigma_uip, alx) = conflict_analysis alt (png++lng) ccl a
+        ngs'    = add_nogoods [learnednogood] $ boocons s 
+                                                                                                      -- backtrack
+        bt_dl   = al2dl alt alx
+        bt_al   = dl2al alt bt_dl
+        a'      = assign (backtrack a bt_al) (invert sigma_uip) bt_al
+        dlt'    = dlbacktrack dlt bt_dl
+        alt'    = albacktrack alt bt_dl
+   
+        solver  = set_decision_level      (bt_dl-1) $
+                  set_dliteral_tracker         dlt' $
+                  set_assignment_level_tracker alt' $
+                  set_assignment_level    (bt_al+1) $ 
+                  set_assignment                 a' $ 
+                  set_boocons ngs'                s
+    in
+    solver
+  else                                                                                                -- backtrack
+    let sigma_d = get_dliteral dlt dl
+        dl'     = dl-1
+        bl'     = dl'
+        bt_al   = dl2al alt dl'
+        a'      = assign (backtrack a bt_al) (invert sigma_d) bt_al
+        alt'    = albacktrack alt dl'
 
-albacktrack :: [(Int,Int)] -> Int -> [(Int,Int)]
-albacktrack alt l = [ (al,dl) | (al,dl) <- alt, dl < l ]
-
-type DLT = [(Int,SignedVar)]                                                               -- DecisionLevelTracker
-
-get_dliteral :: DLT -> Int -> SignedVar
-
-get_dliteral ((dl1,sl1):xs) l
-  | dl1 == l = sl1
-  | otherwise = get_dliteral xs l
-
-dlbacktrack :: DLT -> Int -> DLT
--- backtracks the decision levels
-dlbacktrack dlt l = [ (dl,sl) | (dl,sl) <- dlt, dl < l ]
+        solver  = set_decision_level            dl' $
+                  set_blocked_level             bl' $
+                  set_assignment_level_tracker alt' $
+                  set_assignment_level        bt_al $ 
+                  set_assignment a'               s
+    in
+    solver
 
 
 
 conflict_analysis :: [(Int,Int)] -> [Clause] -> Clause -> Assignment -> (Clause, SignedVar, Int)
-conflict_analysis alt nogoods nogood assig =
-  let (sigma, prefix) = get_sigma nogood assig
-      dl_sigma        = get_alevel assig sigma
+conflict_analysis alt nogoods nogood a =
+  let (sigma, prefix) = get_sigma nogood a
+      dl_sigma        = get_alevel a sigma
       reduced_nogood  = clauseWithoutSL nogood sigma
-      k               = get_max_alevel reduced_nogood assig
+      k               = get_max_alevel reduced_nogood a
       dl              = al2dl alt dl_sigma
       al              = dl2al alt dl
-      rhos            = filter_al nogood assig al in
+      rhos            = filter_al nogood a al in
   if only rhos sigma
   then (nogood, sigma, k)
   else
@@ -471,9 +434,9 @@ nogood_propagation s =
     if tight prg
     then s'
     else
-      case ufs_check (prg, a, spv, u) of                  -- unfounded set check
-        [] -> s' 
-        u' -> let p = get_svar (ALit (head u')) spv in
+      case ufs_check (prg, a, spv, u) of                                                    -- unfounded set check
+        [] -> s'                                                                             -- no unfounded atoms
+        u' -> let p = get_svar (ALit (head u')) spv in                                          -- unfounded atoms
               if elemAss (T p) a
               then
                 let cngs_of_loop = loop_nogoods prg u'
@@ -487,7 +450,7 @@ nogood_propagation s =
                   let s'' = set_unfounded_set u' s' in
                   nogood_propagation s''
                 else 
-                  let a'  = assign a (F p) al                    -- extend assignment  
+                  let a'  = assign a (F p) al                                                 -- extend assignment  
                       s'' = set_assignment_level (al+1) $ 
                             set_assignment a'           $ 
                             set_unfounded_set u' s'
@@ -502,9 +465,50 @@ ufs_check ::
   , [SPVar]
   , [Atom]     -- possibly unfounded set
   ) -> [Atom]
+-- returns a set unfounded atoms
 ufs_check (prg, a, spvars, u) =
   if null (u \\ (falseatoms a spvars))
   then                                                    
     unfounded_set prg a spvars 
   else u \\ (falseatoms a spvars)
+
+
+
+local_propagation :: TSolver -> TSolver
+local_propagation s =
+  if conf s
+  then s
+  else 
+    if canchoose (boocons s)
+    then local_propagation $ resolv $ choose s
+    else 
+      let ngs' = rewind $ boocons s in -- rewind for next use
+      set_boocons ngs' s
+
+
+
+choose :: TSolver -> TSolver
+choose s =
+  if conf s
+  then s
+  else set_boocons (choose2 $ boocons s) s
+
+
+
+resolv :: TSolver -> TSolver
+-- is only called if conf is false
+resolv s =
+    let al = (assignment_level s)
+        ng = get_ng (boocons s)
+        x  = resolve al ng (assignment s)
+    in
+    case x of
+      NIX         -> s
+      NIXU ng'    -> let ngs' = upgrade_ngs (boocons s) ng' in
+                     set_boocons ngs' s
+      Res a'      -> let ngs' = rewind (boocons s) in
+                     set_boocons ngs' $ set_assignment_level (al+1) $ set_assignment a' s
+      ResU a' ng' -> let ngs' = up_rew_ngs (boocons s) ng' in
+                     set_boocons ngs' $ set_assignment_level (al+1) $ set_assignment a' s
+      CONF        -> set_conf True s   -- set conflict
 
