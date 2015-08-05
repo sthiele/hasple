@@ -22,10 +22,10 @@ module NGS (
    p_nogoods,
    l_nogoods,
    can_choose,
-   choose2,
+   choose,
    get_ng,
-   up_rew_ngs,
-   upgrade_ngs,
+   up_rew,
+   upgrade,
    rewind,
 
 ) where
@@ -82,9 +82,9 @@ rewind (NoGoodStore png lng pnga lnga counter) =
     NoGoodStore png' lng' [] [] (-1)
 
 
-upgrade_ngs :: NoGoodStore -> Clause -> NoGoodStore
+upgrade :: NoGoodStore -> Clause -> NoGoodStore
 -- replace current nogood with new nogood reset nogood store
-upgrade_ngs (NoGoodStore png lng pnga lnga counter) ng =
+upgrade (NoGoodStore png lng pnga lnga counter) ng =
   if counter < length png
   then 
     let png'  = drop (counter+1) png
@@ -100,9 +100,9 @@ upgrade_ngs (NoGoodStore png lng pnga lnga counter) ng =
     NoGoodStore png' lng' pnga' lnga' (-1)
 
 
-up_rew_ngs :: NoGoodStore -> Clause -> NoGoodStore
+up_rew :: NoGoodStore -> Clause -> NoGoodStore
 -- upgrade and rewind
-up_rew_ngs (NoGoodStore png lng pnga lnga counter) ng =
+up_rew (NoGoodStore png lng pnga lnga counter) ng =
   if counter < length png
   then 
     let png' = ng: ((take counter png) ++ (drop (counter+1) png) ++ pnga) in
@@ -118,7 +118,7 @@ can_choose :: NoGoodStore -> Bool
 -- returns true if not all nogoods have been tested
 can_choose (NoGoodStore png lng pnga lnga counter) = (counter+1) < (length png) + (length lng) 
 
-choose2 :: NoGoodStore -> NoGoodStore
+choose :: NoGoodStore -> NoGoodStore
 -- is only called if canchoose return true
-choose2 (NoGoodStore png lng pnga lnga counter) = (NoGoodStore png lng pnga lnga (counter+1))
+choose (NoGoodStore png lng pnga lnga counter) = (NoGoodStore png lng pnga lnga (counter+1))
 

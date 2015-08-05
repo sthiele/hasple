@@ -23,7 +23,7 @@ import ASP
 import SPVar
 import Types
 import SPC
-import NGS
+import qualified NGS
 import UFS
 import Data.List (sort, nub, intersect, (\\), delete )
 import Data.Maybe
@@ -126,7 +126,7 @@ dlbacktrack dlt l = [ (dl,sl) | (dl,sl) <- dlt, dl < l ]
 data TSolver = TSolver { 
                          program                  :: [Rule]      -- the program
                        , spvars                   :: [SPVar]     --
-                       , boocons                  :: NoGoodStore -- the store of boolean constraints
+                       , boocons                  :: NGS.NoGoodStore -- the store of boolean constraints
                        , decision_level           :: Int         -- the decision level 
                        , blocked_level            :: Int         -- the blocked level
                        , assignment_level         :: Int         -- the assignment level
@@ -158,7 +158,7 @@ anssets prg  =
       cngs   = nub (nogoods_of_lp prg)
       vars   = get_vars cngs
       png    = transforms cngs vars
-      ngs    = new_ngs png []
+      ngs    = NGS.new_ngs png []
       l      = length vars
       dl     = 1
       bl     = 1
@@ -182,11 +182,10 @@ cdnl_enum solver s =
   let
     solverp = set_unfounded_set [] solver 
     solver' = nogood_propagation solverp
-    dl      = decision_level solver'
   in
   if conf solver'
   then                                                                                                 -- conflict
-    if dl == 1
+    if (decision_level solver') == 1
     then []                                                  -- no need for conflict handling, no more answer sets
     else                                                                                      -- conflict handling
       let solver'' = conflict_handling solver' in
@@ -201,29 +200,28 @@ cdnl_enum solver s =
     in
     if null selectable
     then                                                                     -- if all atoms then answer set found
-      let s2= s-1 in
-      if dl==1 || s2==0
+      if (decision_level solver')==1 || s==1
       then [nub (trueatoms a' (spvars solver'))]                                                -- last answer set
       else                                                                  -- backtrack for remaining answer sets
-        let sigma_d      = get_dliteral dlt dl
+        let dl           = decision_level solver'
+            sigma_d      = get_dliteral dlt dl
             dlt'         = dlbacktrack dlt dl
             cal          = dl2al alt dl
             alt'         = albacktrack alt dl
             a''          = backtrack a' cal
             a'''         = assign a'' (invert sigma_d) cal                         -- invert last decision literal
-            dl'          = dl-1
-            bl'          = dl'
-            solver''     = set_decision_level            dl' $
-                           set_blocked_level             bl' $
+            solver''     = set_decision_level         (dl-1) $
+                           set_blocked_level          (dl-1) $
                            set_dliteral_tracker         dlt' $
                            set_assignment_level_tracker alt' $
                            set_assignment_level      (cal+1) $ 
                            set_assignment a'''         solver'
-            remaining_as = cdnl_enum solver'' s2 
+            remaining_as = cdnl_enum solver'' (s-1)
         in
         (nub (trueatoms a' (spvars solver'))):remaining_as
     else                                                                                         -- select new lit
-      let sigma_d      = head selectable
+      let dl           = decision_level solver'
+          sigma_d      = head selectable
           dlt'         = ((dl+1),(T sigma_d)):dlt
           alt'         = (al',dl+1):alt
           a''          = assign a' (T sigma_d) al'
@@ -249,48 +247,49 @@ conflict_handling s =
   in
   if bl < dl
   then                                                                         -- learn a new nogood and backtrack
-    let ccl     = get_ng    $ boocons s
-        png     = p_nogoods $ boocons s
-        lng     = l_nogoods $ boocons s
-        (learnednogood, sigma_uip, alx) = conflict_analysis alt (png++lng) ccl a
-        ngs'    = add_nogoods [learnednogood] $ boocons s 
+    let ngs     = boocons s 
+        (learnednogood, sigma_uip, alx) = conflict_analysis alt ngs a
+        ngs'    = NGS.add_nogoods [learnednogood] ngs
                                                                                                       -- backtrack
         bt_dl   = al2dl alt alx
         bt_al   = dl2al alt bt_dl
         a'      = assign (backtrack a bt_al) (invert sigma_uip) bt_al
         dlt'    = dlbacktrack dlt bt_dl
         alt'    = albacktrack alt bt_dl
-   
-        solver  = set_decision_level      (bt_dl-1) $
-                  set_dliteral_tracker         dlt' $
-                  set_assignment_level_tracker alt' $
-                  set_assignment_level    (bt_al+1) $ 
-                  set_assignment                 a' $ 
-                  set_boocons                  ngs' $               
-                  set_conf                    False s 
-    in
-    solver
+    in 
+    set_decision_level      (bt_dl-1) $
+    set_dliteral_tracker         dlt' $
+    set_assignment_level_tracker alt' $
+    set_assignment_level    (bt_al+1) $ 
+    set_assignment                 a' $ 
+    set_boocons                  ngs' $               
+    set_conf                    False s 
   else                                                                                                -- backtrack
     let sigma_d = get_dliteral dlt dl
         dl'     = dl-1
-        bl'     = dl'
         bt_al   = dl2al alt dl'
         a'      = assign (backtrack a bt_al) (invert sigma_d) bt_al
         alt'    = albacktrack alt dl'
-
-        solver  = set_decision_level            dl' $
-                  set_blocked_level             bl' $
-                  set_assignment_level_tracker alt' $
-                  set_assignment_level        bt_al $ 
-                  set_assignment                 a' $              
-                  set_conf                    False s
     in
-    solver
+    set_decision_level            dl' $
+    set_blocked_level             dl' $
+    set_assignment_level_tracker alt' $
+    set_assignment_level        bt_al $ 
+    set_assignment                 a' $              
+    set_conf                    False s
+    
 
 
+conflict_analysis :: ALT -> NGS.NoGoodStore -> Assignment -> (Clause, SignedVar, Int)
+conflict_analysis alt ngs a =
+  let conflict_nogood = NGS.get_ng ngs
+      nogoods         = (NGS.p_nogoods ngs)++(NGS.l_nogoods ngs)
+  in
+  conflict_resolution alt nogoods conflict_nogood a
 
-conflict_analysis :: [(Int,Int)] -> [Clause] -> Clause -> Assignment -> (Clause, SignedVar, Int)
-conflict_analysis alt nogoods nogood a =
+
+conflict_resolution :: ALT -> [Clause] -> Clause -> Assignment -> (Clause, SignedVar, Int)
+conflict_resolution alt nogoods nogood a =
   let (sigma, prefix) = get_sigma nogood a
       dl_sigma        = get_alevel a sigma
       reduced_nogood  = clauseWithoutSL nogood sigma
@@ -306,8 +305,7 @@ conflict_analysis alt nogoods nogood a =
       reduced_eps = clauseWithoutSL eps (invert sigma)
       newnogood   = joinClauses reduced_nogood reduced_eps
     in
-    conflict_analysis alt nogoods newnogood prefix
-
+    conflict_resolution alt nogoods newnogood prefix
 
 
 get_epsilon :: [Clause] -> SignedVar -> Assignment -> Clause
@@ -339,8 +337,6 @@ nogood_propagation s =
     a   = assignment s'
     al  = assignment_level s'
     ngs = boocons s'
-    png = p_nogoods ngs
-    lng = l_nogoods ngs
   in
   if conf s'
   then  s'
@@ -355,7 +351,7 @@ nogood_propagation s =
               then
                 let cngs_of_loop = loop_nogoods prg u'
                     ngs_of_loop  = transforms cngs_of_loop spv
-                    ngs'         = add_nogoods ngs_of_loop ngs
+                    ngs'         = NGS.add_nogoods ngs_of_loop ngs
                 in
                 set_boocons ngs' s'
               else
@@ -393,10 +389,10 @@ local_propagation s =
   if conf s
   then s
   else 
-    if can_choose (boocons s)
+    if NGS.can_choose $ boocons s
     then local_propagation $ resolv $ choose s
     else 
-      let ngs' = rewind $ boocons s in -- rewind for next use
+      let ngs' = NGS.rewind $ boocons s in -- rewind for next use
       set_boocons ngs' s
 
 
@@ -405,7 +401,7 @@ choose :: TSolver -> TSolver
 choose s =
   if conf s
   then s
-  else set_boocons (choose2 $ boocons s) s
+  else set_boocons (NGS.choose $ boocons s) s
 
 
 
@@ -413,16 +409,16 @@ resolv :: TSolver -> TSolver
 -- is only called if conf is false
 resolv s =
     let al = (assignment_level s)
-        ng = get_ng (boocons s)
+        ng = NGS.get_ng (boocons s)
         x  = resolve al ng (assignment s)
     in
     case x of
       NIX         -> s
-      NIXU ng'    -> let ngs' = upgrade_ngs (boocons s) ng' in
+      NIXU ng'    -> let ngs' = NGS.upgrade (boocons s) ng' in
                      set_boocons ngs' s
-      Res a'      -> let ngs' = rewind (boocons s) in
+      Res a'      -> let ngs' = NGS.rewind (boocons s) in
                      set_boocons ngs' $ set_assignment_level (al+1) $ set_assignment a' s
-      ResU a' ng' -> let ngs' = up_rew_ngs (boocons s) ng' in
+      ResU a' ng' -> let ngs' = NGS.up_rew (boocons s) ng' in
                      set_boocons ngs' $ set_assignment_level (al+1) $ set_assignment a' s
-      CONF        -> set_conf True s   -- set conflict
+      CONF        -> set_conf True s                                                               -- set conflict
 
