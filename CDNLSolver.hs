@@ -16,7 +16,7 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module CDNLSolver (
-   cdnl_enum,
+   anssets
 ) where
 
 import ASP
@@ -89,13 +89,16 @@ assign_falses a (v:vs) = assign_falses (assign a (F v) 1) vs
 -- Conflict Driven Nogood Learning - Enumeration
 
 
-al2dl :: [(Int,Int)] -> Int -> Int
+type ALT = [(Int,Int)]                                                                   -- AssignmentLevelTracker
+-- maps assignment level to decision level
+
+al2dl :: ALT -> Int -> Int
 al2dl ((al1,dl1):rest) al =
   if al<al1
   then al2dl rest al
   else dl1
 
-dl2al :: [(Int,Int)] -> Int -> Int
+dl2al :: ALT -> Int -> Int
 dl2al ((al1,dl1):rest) dl =
   if dl==dl1
   then al1
@@ -105,8 +108,8 @@ albacktrack :: [(Int,Int)] -> Int -> [(Int,Int)]
 albacktrack alt l = [ (al,dl) | (al,dl) <- alt, dl < l ]
 
 
-
-type DLT = [(Int,SignedVar)]                                                               -- DecisionLevelTracker
+type DLT = [(Int,SignedVar)]                                                              -- DecisionLiteralTracker
+-- maps decision level to decision literal
 
 get_dliteral :: DLT -> Int -> SignedVar
 
@@ -128,8 +131,8 @@ data TSolver = TSolver {
                        , blocked_level            :: Int         -- the blocked level
                        , assignment_level         :: Int         -- the assignment level
                        , assignment               :: Assignment  -- an assignment
-                       , dliteral_tracker         :: [(Int,SignedVar)]
-                       , assignment_level_tracker :: [(Int,Int)]      
+                       , dliteral_tracker         :: DLT
+                       , assignment_level_tracker :: ALT
                        , get_unfounded_set        :: [Atom]      -- unfounded atoms
                        , conf                     :: Bool        -- is the state of the solver in conflict
                        } deriving (Show, Eq)
@@ -148,10 +151,11 @@ set_unfounded_set u              (TSolver p spvars ngs dl bl al a dlt alt _ c) =
 set_conf c                       (TSolver p spvars ngs dl bl al a dlt alt u _) = (TSolver p spvars ngs dl bl al a dlt alt u c) 
  
 
-cdnl_enum :: [Rule] -> Int -> [[Atom]]
-
-cdnl_enum prg s =
-  let cngs   = nub (nogoods_of_lp prg)
+anssets :: [Rule] -> [[Atom]]
+-- create a solver and initiate solving process
+anssets prg  =
+  let s      = 0
+      cngs   = nub (nogoods_of_lp prg)
       vars   = get_vars cngs
       png    = transforms cngs vars
       ngs    = new_ngs png []
@@ -166,17 +170,17 @@ cdnl_enum prg s =
       conf   = False
       solver = TSolver prg vars ngs dl bl al a dlt alt u conf
   in
-  cdnl_enum_loop solver 0  
+  cdnl_enum solver s
 
 
 
-cdnl_enum_loop ::
+cdnl_enum ::
   TSolver                  -- the solver
   -> Int                   -- s
   -> [[Atom]]              -- answer sets
-cdnl_enum_loop solver s =
+cdnl_enum solver s =
   let
-    solverp = set_unfounded_set [] $ set_conf False solver 
+    solverp = set_unfounded_set [] solver 
     solver' = nogood_propagation solverp
     dl      = decision_level solver'
   in
@@ -186,7 +190,7 @@ cdnl_enum_loop solver s =
     then []                                                  -- no need for conflict handling, no more answer sets
     else                                                                                      -- conflict handling
       let solver'' = conflict_handling solver' in
-      cdnl_enum_loop solver'' s
+      cdnl_enum solver'' s
   else                                                                                              -- no conflict
     let 
       a'         = assignment               solver'
@@ -214,8 +218,8 @@ cdnl_enum_loop solver s =
                            set_dliteral_tracker         dlt' $
                            set_assignment_level_tracker alt' $
                            set_assignment_level      (cal+1) $ 
-                           set_assignment a'''       solver'
-            remaining_as = cdnl_enum_loop solver'' s2 
+                           set_assignment a'''         solver'
+            remaining_as = cdnl_enum solver'' s2 
         in
         (nub (trueatoms a' (spvars solver'))):remaining_as
     else                                                                                         -- select new lit
@@ -227,8 +231,8 @@ cdnl_enum_loop solver s =
                          set_dliteral_tracker         dlt' $
                          set_assignment_level_tracker alt' $
                          set_assignment_level      (al'+1) $
-                         set_assignment a''        solver'
-          remaining_as = cdnl_enum_loop solver'' s
+                         set_assignment a''          solver'
+          remaining_as = cdnl_enum solver'' s
       in
       remaining_as
 
@@ -262,7 +266,8 @@ conflict_handling s =
                   set_assignment_level_tracker alt' $
                   set_assignment_level    (bt_al+1) $ 
                   set_assignment                 a' $ 
-                  set_boocons ngs'                s
+                  set_boocons                  ngs' $               
+                  set_conf                    False s 
     in
     solver
   else                                                                                                -- backtrack
@@ -277,7 +282,8 @@ conflict_handling s =
                   set_blocked_level             bl' $
                   set_assignment_level_tracker alt' $
                   set_assignment_level        bt_al $ 
-                  set_assignment a'               s
+                  set_assignment                 a' $              
+                  set_conf                    False s
     in
     solver
 

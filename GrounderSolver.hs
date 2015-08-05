@@ -20,16 +20,15 @@ module GrounderSolver (
 ) where
 
 import Grounder
--- import GoodSolver
-import CDNLSolver
+-- import qualified GoodSolver
+import qualified CDNLSolver
 import ASP
 import Data.List (sort, nub, intersect, (\\), delete )
 import Data.Maybe
 
 assi :: [Rule] -> [[Atom]]
 -- function used to compute answer sets
--- assi x = anssets x
-assi x = cdnl_enum x 0
+assi x = CDNLSolver.anssets x
 
 
 get_ics :: [Rule] -> [Rule]

@@ -16,45 +16,45 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module GoodSolver (
-   anssets,
-   reduct,
-   facts,
+   anssets
 ) where
 
 import ASP
 import Data.List (sort, nub, intersect, (\\) )
 
 
+anssets :: [Rule] -> [[Atom]]
+-- return the answer sets of the program
+anssets p = [ x | x <- (subsets $ heads_p p), (sort $ cn $ reduct p x)==(sort x) ]
+
+
 subsets :: [a] -> [[a]]
+-- returns all subsets
 subsets []  = [[]]
 subsets (x:xs) = subsets xs ++ map (x:) (subsets xs)
 
 
-facts :: [Rule] -> [Atom]
--- return the facts of a programm
-facts p = [ (kopf r) |  r <- p,  (null (pbody r)), (null (nbody r)) ]
-
-
-reducebasicprogram:: [Rule] -> [Atom] -> [Rule]
--- reduces a program by  aset of atoms
-reducebasicprogram p x = [ (basicRule (kopf r) ((pbody r)\\ x) ) | r <- p, (pbody r)/=[] ]
+reduct :: [Rule] -> [Atom] -> [Rule]
+-- return the reduct of a logic program with x
+reduct p x = [ (basicRule (kopf r) (pbody r)) |  r <- p,  null (intersect (nbody r) x) ]
 
 
 cn :: [Rule] -> [Atom]
--- return the consequences of a  basic logic programm
+-- return the consequences of a basic logic programm
 cn [] = []
 
 cn p =
-   if (reducebasicprogram p (facts p)) == p
-   then facts p
-   else nub ((facts p) ++ (cn (reducebasicprogram p (facts p))))
+  if (reducebasicprogram p (facts p)) == p
+  then facts p
+  else nub $ (facts p) ++ (cn $ reducebasicprogram p (facts p))
 
 
-reduct :: [Rule] -> [Atom] -> [Rule]
--- return the reduct of a logic program with x
-reduct p x = [ (basicRule (kopf r) (pbody r)) |  r <- p,  (intersect (nbody r) x)==[] ]
+facts :: [Rule] -> [Atom]
+-- return the facts of a programm
+facts p = [ (kopf r) |  r <- p,  null $ pbody r, null $ nbody r ]
 
 
-anssets :: [Rule] -> [[Atom]]
+reducebasicprogram:: [Rule] -> [Atom] -> [Rule]
+-- reduces a program by a set of atoms
+reducebasicprogram p x = [ (basicRule (kopf r) ((pbody r)\\ x) ) | r <- p, not $ null $ pbody r ]
 
-anssets p = filter (\i -> (sort (cn (reduct p i)))==(sort i)) (subsets (heads_p p))

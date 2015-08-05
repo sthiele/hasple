@@ -122,5 +122,3 @@ choose2 :: NoGoodStore -> NoGoodStore
 -- is only called if canchoose return true
 choose2 (NoGoodStore png lng pnga lnga counter) = (NoGoodStore png lng pnga lnga (counter+1))
 
-
-

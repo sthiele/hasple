@@ -4,8 +4,8 @@ module Test (
 )where
 import ASP
 import Grounder
-import CDNLSolver
-import GoodSolver
+import qualified GoodSolver
+import qualified CDNLSolver
 import GrounderSolver
 import LPParser -- for parsing tests
 import Data.List (sort)
@@ -16,7 +16,7 @@ test_good x =
   do
     case readProgram x of
       Left  err -> []
-      Right prg -> sort (map sort (anssets (groundProgram prg)))
+      Right prg -> sort (map sort (GoodSolver.anssets (groundProgram prg)))
 
 
 test_old :: [Char] -> [[Atom]]
@@ -24,7 +24,7 @@ test_old x =
   do
     case readProgram x of
       Left  err -> []
-      Right prg -> sort (map sort (cdnl_enum (groundProgram prg) 0))
+      Right prg -> sort (map sort (CDNLSolver.anssets (groundProgram prg)))
 
 
 test_new :: [Char] -> [[Atom]]
