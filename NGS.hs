@@ -31,9 +31,10 @@ module NGS (
 ) where
 
 import Types
+import Data.Vector as Vector
 
-data NoGoodStore = NoGoodStore { program_nogoods :: [Clause] -- program nogoods
-                               , learned_nogoods :: [Clause] -- learned nogoods
+data NoGoodStore = NoGoodStore { program_nogoods :: Vector Clause -- program nogoods
+                               , learned_nogoods :: Vector Clause -- learned nogoods
                                , png_akku        :: [Clause] -- program nogoods akku
                                , lng_akku        :: [Clause] -- learned nogoods akku
                                , counter         :: Int
@@ -41,43 +42,44 @@ data NoGoodStore = NoGoodStore { program_nogoods :: [Clause] -- program nogoods
 
 
 new_ngs :: [Clause] -> [Clause] -> NoGoodStore
-new_ngs png lng = NoGoodStore png lng [] [] (-1)
+new_ngs png lng = NoGoodStore (fromList png) (fromList lng) [] [] (-1)
 
 
 ngs_size :: NoGoodStore -> Int
-ngs_size (NoGoodStore png lng _ _ _) = (length png) + (length lng)
+ngs_size (NoGoodStore png lng _ _ _) = (Vector.length png) + (Vector.length lng)
 
 
-p_nogoods ngs = (program_nogoods ngs) ++ (png_akku ngs)
-l_nogoods ngs = (learned_nogoods ngs) ++ (lng_akku ngs)
+p_nogoods ngs = (toList (program_nogoods ngs)) Prelude.++ (png_akku ngs)
+l_nogoods ngs = (toList (learned_nogoods ngs)) Prelude.++ (lng_akku ngs)
 
 
 get_ng :: NoGoodStore -> Clause
 -- get current nogood
 get_ng (NoGoodStore png lng _ _ counter) =
-  if counter < length png
-  then png!!counter
+  let len_png = Vector.length png in
+  if counter < len_png
+  then png!counter
   else
-    if counter < (length png) + (length lng)
-    then lng!!(counter-length png)
+    if counter < (len_png) + (Vector.length lng)
+    then lng!(counter-len_png)
     else error "NoGoodStore out of bounds"
 
 
 add_nogoods :: [Clause] -> NoGoodStore -> NoGoodStore
 add_nogoods ngs (NoGoodStore png lng pnga lnga c) =
-  (NoGoodStore png (lng++ngs) pnga lnga c) 
+  (NoGoodStore png (lng Vector.++(fromList ngs)) pnga lnga c) 
 
 
 rewind :: NoGoodStore -> NoGoodStore
 -- basically reset the nogood store because some resolvent was found
 rewind (NoGoodStore png lng pnga lnga counter) =
-  if counter < length png
+  if counter < Vector.length png
   then 
-    let png' = png ++ pnga in
+    let png' = png Vector.++ (fromList pnga) in
     (NoGoodStore png' lng [] [] (-1))
   else
-    let png' = png ++ pnga
-        lng' = lng ++ lnga 
+    let png' = png Vector.++ (fromList pnga)
+        lng' = lng Vector.++ (fromList lnga) 
     in
     NoGoodStore png' lng' [] [] (-1)
 
@@ -85,17 +87,18 @@ rewind (NoGoodStore png lng pnga lnga counter) =
 upgrade :: NoGoodStore -> Clause -> NoGoodStore
 -- replace current nogood with new nogood reset nogood store
 upgrade (NoGoodStore png lng pnga lnga counter) ng =
-  if counter < length png
+  let len_png = Vector.length png in
+  if counter < len_png
   then 
-    let png'  = drop (counter+1) png
-        pnga' = (take counter png) ++ (ng:pnga) 
+    let png'  = Vector.drop (counter+1) png
+        pnga' = (toList (Vector.take counter png)) Prelude.++ (ng:pnga) 
     in
     (NoGoodStore png' lng pnga' lnga (-1))
   else
-    let png'  = []
-        pnga' = png++pnga
-        lng'  = drop (counter+1-length png) lng
-        lnga' = (take (counter-length png) lng)++(ng:lnga) 
+    let png'  = fromList []
+        pnga' = (toList png) Prelude.++  pnga
+        lng'  = Vector.drop (counter+1-len_png) lng
+        lnga' = (toList (Vector.take (counter-len_png) lng)) Prelude.++(ng:lnga) 
     in
     NoGoodStore png' lng' pnga' lnga' (-1)
 
@@ -103,20 +106,21 @@ upgrade (NoGoodStore png lng pnga lnga counter) ng =
 up_rew :: NoGoodStore -> Clause -> NoGoodStore
 -- upgrade and rewind
 up_rew (NoGoodStore png lng pnga lnga counter) ng =
-  if counter < length png
+  let len_png = Vector.length png in
+  if counter < len_png
   then 
-    let png' = ng: ((take counter png) ++ (drop (counter+1) png) ++ pnga) in
+    let png' = snoc ((Vector.take counter png) Vector.++ (Vector.drop (counter+1) png) Vector.++ (fromList pnga)) ng in
     (NoGoodStore png' lng [] [] (-1))
   else
-    let png' = png++pnga
-        lng' = ng:((take (counter-length png) lng) ++ (drop (counter+1-length png) lng) ++ lnga)
+    let png' = png Vector.++(fromList pnga)
+        lng' = snoc ((Vector.take (counter-len_png) lng) Vector.++ (Vector.drop (counter+1-len_png) lng) Vector.++ (fromList lnga)) ng
     in
     (NoGoodStore png' lng' [] [] (-1))
 
 
 can_choose :: NoGoodStore -> Bool
 -- returns true if not all nogoods have been tested
-can_choose (NoGoodStore png lng pnga lnga counter) = (counter+1) < (length png) + (length lng) 
+can_choose (NoGoodStore png lng pnga lnga counter) = (counter+1) < (Vector.length png) + (Vector.length lng) 
 
 choose :: NoGoodStore -> NoGoodStore
 -- is only called if canchoose return true
