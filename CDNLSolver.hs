@@ -353,7 +353,7 @@ nogood_propagation s =
     if tight prg
     then s'
     else
-      case ufs_check (prg, a, spv, u) of                                                    -- unfounded set check
+      case ufs_check prg a spv u of                                                         -- unfounded set check
         [] -> s'                                                                             -- no unfounded atoms
         u' -> let p = get_svar (ALit (head u')) spv in                                          -- unfounded atoms
               if elemAss (T p) a
@@ -379,13 +379,13 @@ nogood_propagation s =
 
 
 ufs_check ::
-  ( [Rule]     -- program
-  , Assignment 
-  , [SPVar]
-  , [Atom]     -- possibly unfounded set
-  ) -> [Atom]
+ [Rule]         -- program
+  -> Assignment 
+  -> [SPVar]
+  -> [Atom]     -- possibly unfounded set
+  -> [Atom]
 -- returns a set unfounded atoms
-ufs_check (prg, a, spvars, u) =
+ufs_check prg a spvars u =
   if null (u \\ (falseatoms a spvars))
   then                                                    
     unfounded_set prg a spvars 
@@ -408,9 +408,10 @@ local_propagation s =
 
 choose_next_ng :: TSolver -> TSolver
 choose_next_ng s =
-  if conf s
-  then s
-  else set_boocons (NGS.choose $ boocons s) s
+--  if conf s
+--  then s
+--  else 
+  set_boocons (NGS.choose $ boocons s) s
 
 
 

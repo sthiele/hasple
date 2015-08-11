@@ -98,8 +98,7 @@ backtrack2 a dl i =
   then
     if (abs (a!i)) < dl
     then backtrack2 a dl (i+1)
-    else
-      backtrack2 (unassign a i) dl (i+1)
+    else backtrack2 (unassign a i) dl (i+1)
   else a
 
 elemAss :: SignedVar -> Assignment -> Bool
@@ -110,25 +109,29 @@ isassigned :: SVar -> Assignment -> Bool
 isassigned l a = ((a ! l) /= 0)
 
 get_unassigned :: Assignment -> [SVar]
-get_unassigned a = if Vector.null a
-                   then []
-                   else toList (findIndices (==0) a)
+get_unassigned a = 
+  if Vector.null a
+  then []
+  else toList (findIndices (==0) a)
 
 get_assigned :: Assignment -> [SVar]
-get_assigned a = if Vector.null a
-                 then []
-                 else toList (findIndices (/=0) a)
+get_assigned a = 
+  if Vector.null a
+  then []
+  else toList (findIndices (/=0) a)
 
 
 get_tassigned :: Assignment -> [SVar]
-get_tassigned a = if Vector.null a
-                  then []
-                  else toList (findIndices (>0) a)
+get_tassigned a = 
+  if Vector.null a
+  then []
+  else toList (findIndices (>0) a)
 
 get_fassigned :: Assignment -> [SVar]
-get_fassigned a = if Vector.null a
-                  then []
-                  else toList (findIndices (<0) a)
+get_fassigned a = 
+  if Vector.null a
+  then []
+  else toList (findIndices (<0) a)
 
 
 get_lit :: [SPVar] -> Int -> SPVar
@@ -140,11 +143,11 @@ falselits :: Assignment -> [SPVar] -> [SPVar]
 falselits a spvars = Prelude.map (get_lit spvars) (get_fassigned a)
 
 trueatoms :: Assignment -> [SPVar] -> [Atom]
-trueatoms a spvars =  Prelude.concatMap atomsfromvar (Prelude.map (get_lit spvars) (get_tassigned a))
+trueatoms a spvars = Prelude.concatMap atomsfromvar (Prelude.map (get_lit spvars) (get_tassigned a))
 
 falseatoms :: Assignment -> [SPVar] -> [Atom]
 
-falseatoms a spvars =  Prelude.concatMap atomsfromvar (Prelude.map (get_lit spvars) (get_fassigned a))
+falseatoms a spvars = Prelude.concatMap atomsfromvar (Prelude.map (get_lit spvars) (get_fassigned a))
 
 
 nonfalseatoms :: Assignment -> [SPVar] -> [Atom]
