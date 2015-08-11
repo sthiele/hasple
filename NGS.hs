@@ -49,9 +49,6 @@ ngs_size (NoGoodStore png lng _ _ _) = (Vector.length png) + (Vector.length lng)
 
 
 get_nogoods ngs = (program_nogoods ngs) Vector.++ (png_akku ngs) Vector.++ (learned_nogoods ngs) Vector.++ (lng_akku ngs)
--- get_nogoods ngs = (program_nogoods ngs, png_akku ngs, learned_nogoods ngs, lng_akku ngs)
-
-
 
 
 get_ng :: NoGoodStore -> Clause

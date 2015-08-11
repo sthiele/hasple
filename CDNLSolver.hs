@@ -315,16 +315,17 @@ conflict_resolution ngs nogood a alt =
 get_epsilon :: NGS.NoGoodStore -> SignedVar -> Assignment -> Clause
 -- try to return an antecedent
 get_epsilon ngs sigma prefix = 
-  if NGS.can_choose ngs
-  then
+--  if NGS.can_choose ngs
+--  then
     let ngs' = NGS.choose ngs
         ng   = NGS.get_ng ngs'
         temp = clauseWithoutSL ng (invert sigma)
     in
-    if is_included temp prefix                                                                                                then ng
+    if is_included temp prefix
+    then ng
     else get_epsilon ngs' sigma prefix
-  else
-    error "no antecedent epsilon found"
+--  else
+--    error "no antecedent epsilon found"
 
 
 
