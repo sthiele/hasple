@@ -275,10 +275,10 @@ resolve al (c,w,v) a =
     else NIX
   
 updatewatch1 al (c,w,v) a =
-  case new_watch1 (c,w,v) a of
-  Just w' -> if (a!v > 0 && c!v > 0) || (a!v < 0 && c!v < 0) -- assigned
-             then updatewatch2x al (c,w',v) a
-             else NIXU (c,w',v)
+  case new_watch1 (c,0,v) a of
+  Just (c',w',v') -> if (a!v > 0 && c!v > 0) || (a!v < 0 && c!v < 0) -- assigned
+                     then updatewatch2x al (c',w',v') a
+                     else NIXU (c',w',v')
   Nothing -> if (a!v > 0 && c!v > 0)                         -- assigned true
              then CONF
              else
@@ -293,8 +293,8 @@ updatewatch1 al (c,w,v) a =
                  else NIX
 
 updatewatch2 al (c,w,v) a =
-  case new_watch2 (c,w,v) a of
-  Just v' -> NIXU (c,w,v')
+  case new_watch2 (c,w,0) a of
+  Just (c,w',v') -> NIXU (c,w,v')
   Nothing -> if (a!w) == 0
              then
                if c!w > 0
@@ -304,7 +304,7 @@ updatewatch2 al (c,w,v) a =
 
 updatewatch2x al (c,w,v) a =
   case new_watch2 (c,w,v) a of
-  Just v' -> NIXU (c,w,v')
+  Just (c',w',v') -> NIXU (c,w,v')
   Nothing -> if (a!w) == 0
              then
                if c!w > 0
@@ -312,40 +312,36 @@ updatewatch2x al (c,w,v) a =
                else ResU (assign a (T w) al) (c,w,v)
              else NIXU (c,w,v)
   
-new_watch1 :: Clause -> Assignment -> Maybe Int
-new_watch1 (c,w,v) a = new_watch1i (c,w,v) a 0
-
-new_watch1i :: Clause -> Assignment -> Int -> Maybe Int
-new_watch1i (c,w,v) a i =
+new_watch1 :: Clause -> Assignment -> Maybe Clause
+new_watch1 (c,i,v) a =
   if i < Vector.length c
   then
     if c!i == 0
-    then new_watch1i (c,w,v) a (i+1)
+    then new_watch1 (c,(i+1),v) a
     else
       if i == v
-      then new_watch1i (c,w,v) a (i+1)
+      then new_watch1 (c,(i+1),v) a
       else
         if (a!i > 0 && c!i > 0) ||  (a!i < 0 && c!i < 0)  -- assigned
-        then new_watch1i (c,w,v) a (i+1)
-        else Just i       
+        then new_watch1 (c,(i+1),v) a 
+        else Just (c,i,v)       
   else Nothing
 
-new_watch2 :: Clause -> Assignment -> Maybe Int
-new_watch2 (c,w,v) a = new_watch2i (c,w,v) a 0
 
-new_watch2i :: Clause -> Assignment -> Int -> Maybe Int
-new_watch2i (c,w,v) a i =
+
+new_watch2 :: Clause -> Assignment -> Maybe Clause
+new_watch2 (c,w,i) a =
   if i < Vector.length c
   then
     if c!i == 0
-    then new_watch2i (c,w,v) a (i+1)
+    then new_watch2 (c,w,(i+1)) a
     else
       if i == w
-      then new_watch2i (c,w,v) a (i+1)
+      then new_watch2 (c,w,(i+1)) a
       else
         if (a!i > 0 && c!i > 0) ||  (a!i < 0 && c!i < 0)   -- assigned
-        then new_watch2i (c,w,v) a (i+1)
-        else Just i
+        then new_watch2 (c,w,(i+1)) a
+        else Just (c,w,i)
   else Nothing  
   
 
