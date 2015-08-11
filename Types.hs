@@ -273,44 +273,46 @@ resolve al (c,w,v) a =
     if (a!v > 0 && c!v > 0) || (a!v < 0 && c!v < 0)           -- assigned
     then updatewatch2 al (c,w,v) a
     else NIX
-  
+ 
+
+updatewatch1 :: Int -> (Vector Int, Int, Int) -> Assignment -> RES 
 updatewatch1 al (c,w,v) a =
   case new_watch1 (c,0,v) a of
   Just (c',w',v') -> if (a!v > 0 && c!v > 0) || (a!v < 0 && c!v < 0) -- assigned
                      then updatewatch2x al (c',w',v') a
                      else NIXU (c',w',v')
-  Nothing -> if (a!v > 0 && c!v > 0)                         -- assigned true
-             then CONF
-             else
-               if (a!v < 0 && c!v < 0)                       -- assigned false
-               then CONF
-               else
-                 if (a!v) == 0
-                 then
-                   if c!v > 0
-                   then Res (assign a (F v) al)
-                   else Res (assign a (T v) al)
-                 else NIX
+  Nothing         -> if (a!v > 0 && c!v > 0)                         -- assigned true
+                     then CONF
+                     else
+                       if (a!v < 0 && c!v < 0)                       -- assigned false
+                       then CONF
+                       else
+                         if (a!v) == 0
+                         then
+                           if c!v > 0
+                           then Res (assign a (F v) al)
+                           else Res (assign a (T v) al)
+                         else NIX
 
 updatewatch2 al (c,w,v) a =
   case new_watch2 (c,w,0) a of
   Just (c,w',v') -> NIXU (c,w,v')
-  Nothing -> if (a!w) == 0
-             then
-               if c!w > 0
-               then Res (assign a (F w) al)
-               else Res (assign a (T w) al)
-             else NIX
+  Nothing        -> if (a!w) == 0
+                    then
+                      if c!w > 0
+                      then Res (assign a (F w) al)
+                      else Res (assign a (T w) al)
+                    else NIX
 
 updatewatch2x al (c,w,v) a =
-  case new_watch2 (c,w,v) a of
+  case new_watch2 (c,w,0) a of
   Just (c',w',v') -> NIXU (c,w,v')
-  Nothing -> if (a!w) == 0
-             then
-               if c!w > 0
-               then ResU (assign a (F w) al) (c,w,v)
-               else ResU (assign a (T w) al) (c,w,v)
-             else NIXU (c,w,v)
+  Nothing         -> if (a!w) == 0
+                     then
+                       if c!w > 0
+                       then ResU (assign a (F w) al) (c,w,v)
+                       else ResU (assign a (T w) al) (c,w,v)
+                     else NIXU (c,w,v)
   
 new_watch1 :: Clause -> Assignment -> Maybe Clause
 new_watch1 (c,i,v) a =

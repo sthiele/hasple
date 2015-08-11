@@ -26,6 +26,8 @@ import SPC
 import qualified NGS
 import UFS
 import Data.List (sort, nub, intersect, (\\), delete )
+import qualified Data.Vector as Vector
+
 import Data.Maybe
 -- import Data.List.Extra (nubOrd)
 -- use sort to order list nub (nubOrd) to remove duplicates from list -- maybe use Sets instead?
@@ -248,8 +250,7 @@ conflict_handling s =
   if bl < dl
   then                                                                         -- learn a new nogood and backtrack
     let ngs     = boocons s 
-        (learnednogood, sigma_uip, alx) = conflict_analysis alt ngs a
-        ngs'    = NGS.add_nogoods [learnednogood] ngs
+        (ngs', sigma_uip, alx) = conflict_analysis ngs a alt
                                                                                                       -- backtrack
         bt_dl   = al2dl alt alx
         bt_al   = dl2al alt bt_dl
@@ -280,16 +281,16 @@ conflict_handling s =
     
 
 
-conflict_analysis :: ALT -> NGS.NoGoodStore -> Assignment -> (Clause, SignedVar, Int)
-conflict_analysis alt ngs a =
+conflict_analysis :: NGS.NoGoodStore -> Assignment -> ALT -> (NGS.NoGoodStore, SignedVar, Int)
+conflict_analysis ngs a alt =
   let conflict_nogood = NGS.get_ng ngs
-      nogoods         = (NGS.p_nogoods ngs)++(NGS.l_nogoods ngs)
+      ngs'            = NGS.rewind ngs
   in
-  conflict_resolution alt nogoods conflict_nogood a
+  conflict_resolution ngs' conflict_nogood a alt
 
 
-conflict_resolution :: ALT -> [Clause] -> Clause -> Assignment -> (Clause, SignedVar, Int)
-conflict_resolution alt nogoods nogood a =
+conflict_resolution :: NGS.NoGoodStore -> Clause -> Assignment -> ALT -> (NGS.NoGoodStore, SignedVar, Int)
+conflict_resolution ngs nogood a alt =
   let (sigma, prefix) = get_sigma nogood a
       dl_sigma        = get_alevel a sigma
       reduced_nogood  = clauseWithoutSL nogood sigma
@@ -298,25 +299,32 @@ conflict_resolution alt nogoods nogood a =
       al              = dl2al alt dl
       rhos            = filter_al nogood a al in
   if only rhos sigma
-  then (nogood, sigma, k)
+  then 
+    let ngs' = NGS.add_nogoods [nogood] ngs in -- add learned nogood
+    (ngs', sigma, k)
   else
     let
-      eps         = get_epsilon nogoods sigma prefix
+      eps         = get_epsilon ngs sigma prefix
       reduced_eps = clauseWithoutSL eps (invert sigma)
       newnogood   = joinClauses reduced_nogood reduced_eps
     in
-    conflict_resolution alt nogoods newnogood prefix
+    conflict_resolution ngs newnogood prefix alt
 
 
-get_epsilon :: [Clause] -> SignedVar -> Assignment -> Clause
 
-get_epsilon [] l prefix =  error "no antecedent epsilon found"
-
-get_epsilon (ng:ngs) sigma prefix =
-  let temp = clauseWithoutSL ng (invert sigma) in
-  if is_included temp prefix
-  then ng
-  else get_epsilon ngs sigma prefix
+get_epsilon :: NGS.NoGoodStore -> SignedVar -> Assignment -> Clause
+-- try to return an antecedent
+get_epsilon ngs sigma prefix = 
+  if NGS.can_choose ngs
+  then
+    let ngs' = NGS.choose ngs
+        ng   = NGS.get_ng ngs'
+        temp = clauseWithoutSL ng (invert sigma)
+    in
+    if is_included temp prefix                                                                                                then ng
+    else get_epsilon ngs' sigma prefix
+  else
+    error "no antecedent epsilon found"
 
 
 
@@ -390,15 +398,15 @@ local_propagation s =
   then s
   else 
     if NGS.can_choose $ boocons s
-    then local_propagation $ resolv $ choose s
+    then local_propagation $ resolv $ choose_next_ng s
     else 
       let ngs' = NGS.rewind $ boocons s in -- rewind for next use
       set_boocons ngs' s
 
 
 
-choose :: TSolver -> TSolver
-choose s =
+choose_next_ng :: TSolver -> TSolver
+choose_next_ng s =
   if conf s
   then s
   else set_boocons (NGS.choose $ boocons s) s
