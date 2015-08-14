@@ -291,16 +291,26 @@ conflict_analysis ngs a alt =
 
 conflict_resolution :: NGS.NoGoodStore -> Clause -> Assignment -> ALT -> (NGS.NoGoodStore, SignedVar, Int)
 conflict_resolution ngs nogood a alt =
+  trace ("conflict_res: " Prelude.++ (show nogood) Prelude.++ (show a)) $    
   let (sigma, prefix) = get_sigma nogood a
       dl_sigma        = get_alevel a sigma
       reduced_nogood  = clauseWithoutSL nogood sigma
+  in
+  trace ("  reduced_ng: " Prelude.++ (show reduced_nogood)) $
+  let
       k               = get_max_alevel reduced_nogood a
       dl              = al2dl alt dl_sigma
-      al              = dl2al alt dl
-      rhos            = filter_al nogood a al in
+      al              = dl2al alt dl 
+  in
+  trace ("  rhos1: " Prelude.++ (show nogood) Prelude.++ (show a) Prelude.++ (show al)) $ 
+  let
+      rhos            = filter_al nogood a al 
+  in
+  trace ("  rhosr: " Prelude.++ (show rhos)) $ 
   if only rhos sigma
   then 
     let ngs' = NGS.add_nogoods [nogood] ngs in -- add learned nogood
+    trace ("k=alx: " Prelude.++ (show k)) 
     (ngs', sigma, k)
   else
     let

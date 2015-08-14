@@ -206,11 +206,16 @@ get_max_alevel :: Clause -> Assignment -> Int
 get_max_alevel (c,w,v) a = get_max_alevel2 c a 0 0
 
 get_max_alevel2 c a i akku =
+  trace ("get_max_a: " Prelude.++ (show c) Prelude.++ (show a) Prelude.++ (show i) Prelude.++ (show akku)) $
   if i < Vector.length c
   then
-    if (a!i) > akku
-    then get_max_alevel2 c a (i+1) (a!i)
-    else get_max_alevel2 c a (i+1) akku
+    if c!i /= 0
+    then
+      if (a!i) > akku
+      then get_max_alevel2 c a (i+1) (a!i)
+      else get_max_alevel2 c a (i+1) akku
+    else
+      get_max_alevel2 c a (i+1) akku
   else akku
 
 
