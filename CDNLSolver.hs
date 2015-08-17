@@ -40,18 +40,18 @@ import Debug.Trace
 --------------------------------
 -- little helper
 
-get_svar :: SPVar -> [SPVar] -> SVar
-get_svar l x = get_svar2 l x 0
+get_svar :: SPVar -> SymbolTable -> SVar
+get_svar l st = get_svar2 l st 0
 
-get_svar2 :: SPVar -> [SPVar] -> Int -> SVar
-get_svar2 s (f:ls) n =
-  if s==f
-  then n
-  else get_svar2 s ls (n+1)
+get_svar2 :: SPVar -> SymbolTable -> Int -> SVar
+get_svar2 s st i =
+  if st Vector.!i == s 
+  then i
+  else get_svar2 s st (i+1)
 
 
-transforms :: [CClause] -> [SPVar] -> [NGS.Clause]
-transforms cclauses spvars = map (NGS.fromCClause spvars) cclauses
+transforms :: [CClause] -> SymbolTable -> [NGS.Clause]
+transforms cclauses st = map (NGS.fromCClause st) cclauses
 
 
 -- -----------------------------------------------------------------------------
@@ -75,31 +75,31 @@ dlbacktrack dlt l = [ (dl,sl) | (dl,sl) <- dlt, dl < l ]
 
 
 data TSolver = TSolver { 
-                         program                  :: [Rule]      -- the program
-                       , spvars                   :: [SPVar]     --
+                         program                  :: [Rule]          -- the program
+                       , symboltable              :: SymbolTable     --
                        , boocons                  :: NGS.NogoodStore -- the store of boolean constraints
-                       , decision_level           :: Int         -- the decision level 
-                       , blocked_level            :: Int         -- the blocked level
-                       , assignment_level         :: Int         -- the assignment level
-                       , assignment               :: Assignment  -- an assignment
+                       , decision_level           :: Int             -- the decision level 
+                       , blocked_level            :: Int             -- the blocked level
+                       , assignment_level         :: Int             -- the assignment level
+                       , assignment               :: Assignment      -- an assignment
                        , dliteral_tracker         :: DLT
                        , assignment_level_tracker :: ALT
-                       , get_unfounded_set        :: [Atom]      -- unfounded atoms
-                       , conf                     :: Bool        -- is the state of the solver in conflict
+                       , get_unfounded_set        :: [Atom]          -- unfounded atoms
+                       , conf                     :: Bool            -- is the state of the solver in conflict
                        } deriving (Show, Eq)
 
 set_program :: [Rule] -> TSolver -> TSolver
-set_program p                    (TSolver _ spvars ngs dl bl al a dlt alt u c) = (TSolver p spvars ngs dl bl al a dlt alt u c) 
-set_spvars spvars                (TSolver p _      ngs dl bl al a dlt alt u c) = (TSolver p spvars ngs dl bl al a dlt alt u c) 
-set_boocons ngs                  (TSolver p spvars _   dl bl al a dlt alt u c) = (TSolver p spvars ngs dl bl al a dlt alt u c) 
-set_decision_level dl            (TSolver p spvars ngs _  bl al a dlt alt u c) = (TSolver p spvars ngs dl bl al a dlt alt u c) 
-set_blocked_level bl             (TSolver p spvars ngs dl _  al a dlt alt u c) = (TSolver p spvars ngs dl bl al a dlt alt u c) 
-set_assignment_level al          (TSolver p spvars ngs dl bl _  a dlt alt u c) = (TSolver p spvars ngs dl bl al a dlt alt u c) 
-set_assignment a                 (TSolver p spvars ngs dl bl al _ dlt alt u c) = (TSolver p spvars ngs dl bl al a dlt alt u c) 
-set_dliteral_tracker dlt         (TSolver p spvars ngs dl bl al a _   alt u c) = (TSolver p spvars ngs dl bl al a dlt alt u c) 
-set_assignment_level_tracker alt (TSolver p spvars ngs dl bl al a dlt _   u c) = (TSolver p spvars ngs dl bl al a dlt alt u c) 
-set_unfounded_set u              (TSolver p spvars ngs dl bl al a dlt alt _ c) = (TSolver p spvars ngs dl bl al a dlt alt u c) 
-set_conf c                       (TSolver p spvars ngs dl bl al a dlt alt u _) = (TSolver p spvars ngs dl bl al a dlt alt u c) 
+set_program p                    (TSolver _ st ngs dl bl al a dlt alt u c) = (TSolver p st ngs dl bl al a dlt alt u c) 
+set_symboltable st               (TSolver p _      ngs dl bl al a dlt alt u c) = (TSolver p st ngs dl bl al a dlt alt u c) 
+set_boocons ngs                  (TSolver p st _   dl bl al a dlt alt u c) = (TSolver p st ngs dl bl al a dlt alt u c) 
+set_decision_level dl            (TSolver p st ngs _  bl al a dlt alt u c) = (TSolver p st ngs dl bl al a dlt alt u c) 
+set_blocked_level bl             (TSolver p st ngs dl _  al a dlt alt u c) = (TSolver p st ngs dl bl al a dlt alt u c) 
+set_assignment_level al          (TSolver p st ngs dl bl _  a dlt alt u c) = (TSolver p st ngs dl bl al a dlt alt u c) 
+set_assignment a                 (TSolver p st ngs dl bl al _ dlt alt u c) = (TSolver p st ngs dl bl al a dlt alt u c) 
+set_dliteral_tracker dlt         (TSolver p st ngs dl bl al a _   alt u c) = (TSolver p st ngs dl bl al a dlt alt u c) 
+set_assignment_level_tracker alt (TSolver p st ngs dl bl al a dlt _   u c) = (TSolver p st ngs dl bl al a dlt alt u c) 
+set_unfounded_set u              (TSolver p st ngs dl bl al a dlt alt _ c) = (TSolver p st ngs dl bl al a dlt alt u c) 
+set_conf c                       (TSolver p st ngs dl bl al a dlt alt u _) = (TSolver p st ngs dl bl al a dlt alt u c) 
  
 
 anssets :: [Rule] -> [[Atom]]
@@ -107,10 +107,10 @@ anssets :: [Rule] -> [[Atom]]
 anssets prg  =
   let s      = 0
       cngs   = nub (nogoods_of_lp prg)
-      vars   = get_vars cngs
-      png    = transforms cngs vars
+      st     = Vector.fromList (get_vars cngs)
+      png    = transforms cngs st
       ngs    = NGS.new_ngs png []
-      l      = length vars
+      l      = length st
       dl     = 1
       bl     = 1
       al     = 1
@@ -119,7 +119,7 @@ anssets prg  =
       alt    = [(1,1)]
       u      = []
       conf   = False
-      solver = TSolver prg vars ngs dl bl al a dlt alt u conf
+      solver = TSolver prg st ngs dl bl al a dlt alt u conf
   in
   cdnl_enum solver s
 
@@ -152,7 +152,7 @@ cdnl_enum solver s =
     if null selectable
     then                                                                     -- if all atoms then answer set found
       if (decision_level solver')==1 || s==1
-      then [nub (trueatoms a' (spvars solver'))]                                                -- last answer set
+      then [nub (trueatoms a' (symboltable solver'))]                                                -- last answer set
       else                                                                  -- backtrack for remaining answer sets
         let dl           = decision_level solver'
             sigma_d      = get_dliteral dlt dl
@@ -169,7 +169,7 @@ cdnl_enum solver s =
                            set_assignment a'''         solver'
             remaining_as = cdnl_enum solver'' (s-1)
         in
-        (nub (trueatoms a' (spvars solver'))):remaining_as
+        (nub (trueatoms a' (symboltable solver'))):remaining_as
     else                                                                                         -- select new lit
       let dl           = decision_level solver'
           sigma_d      = head selectable
@@ -252,7 +252,7 @@ nogood_propagation :: TSolver -> TSolver
 nogood_propagation s =
   let
     prg = program s 
-    spv = spvars s
+    st  = symboltable s
     u   = get_unfounded_set s 
     s'  = local_propagation s
     a   = assignment s'
@@ -260,18 +260,18 @@ nogood_propagation s =
     ngs = boocons s'
   in
   if conf s'
-  then  s'
+  then s'
   else
     if tight prg
     then s'
     else
-      case ufs_check prg a spv u of                                                         -- unfounded set check
-        [] -> s'                                                                             -- no unfounded atoms
-        u' -> let p = get_svar (ALit (head u')) spv in                                          -- unfounded atoms
+      case ufs_check prg a st u of                                                           -- unfounded set check
+        [] -> s'                                                                              -- no unfounded atoms
+        u' -> let p = get_svar (ALit (head u')) st in                                            -- unfounded atoms
               if elemAss (T p) a
               then
                 let cngs_of_loop = loop_nogoods prg u'
-                    ngs_of_loop  = transforms cngs_of_loop spv
+                    ngs_of_loop  = transforms cngs_of_loop st
                     ngs'         = NGS.add_nogoods ngs_of_loop ngs
                     s''          = set_boocons ngs' s'
                 in
@@ -282,10 +282,10 @@ nogood_propagation s =
                   let s'' = set_unfounded_set u' s' in
                   nogood_propagation s''
                 else
-                  let a'  = assign a (F p) al                                                 -- extend assignment  
+                  let a'  = assign a (F p) al                                                  -- extend assignment
                       s'' = set_assignment_level (al+1) $ 
                             set_assignment a'           $ 
-                            set_unfounded_set u' s'
+                            set_unfounded_set u'       s'
                   in
                   nogood_propagation s''
 
@@ -294,15 +294,14 @@ nogood_propagation s =
 ufs_check ::
  [Rule]         -- program
   -> Assignment 
-  -> [SPVar]
+  -> SymbolTable
   -> [Atom]     -- possibly unfounded set
   -> [Atom]
 -- returns a set unfounded atoms
-ufs_check prg a spvars u =
-  if null (u \\ (falseatoms a spvars))
-  then                                                    
-    unfounded_set prg a spvars 
-  else u \\ (falseatoms a spvars)
+ufs_check prg a st u =
+  if null (u \\ (falseatoms a st))
+  then unfounded_set prg a st 
+  else u \\ (falseatoms a st)
 
 
 

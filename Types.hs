@@ -36,28 +36,15 @@ module Types (
    trueatoms,
    falseatoms,
    nonfalseatoms,
---   Clause,
---   conflict_resolution,
---   fromCClause,
---   joinClauses,
---   clauseWithoutSL,
---   get_max_alevel,
---   only,
---   RES(..),
---   resolve,
---   get_sigma,
---   filter_al,
---   is_included
+   SymbolTable
 ) where
 
--- {-# LANGUAGE MagicHash #-}
--- {-# LANGUAGE UnboxedTuples         #-}
 
 import ASP
 import SPVar
---import qualified NGS as NGS
 import Data.List (nub, delete)
-import Data.Vector.Unboxed as Vector
+import Data.Vector.Unboxed as UVec
+import Data.Vector as BVec
 import Debug.Trace
 
 type SVar = Int
@@ -75,94 +62,89 @@ invert (T l) = F l
 invert (F l) = T l
 
 
--- -----------------------------------------
+type SymbolTable = BVec.Vector SPVar
 
-type Assignment = Vector Int
+get_lit :: SymbolTable -> Int -> SPVar
+get_lit st i = st BVec.! i
+
+
+type Assignment = UVec.Vector Int
 
 initialAssignment :: Int -> Assignment
-initialAssignment l = fromList [ 0 | x <- [1..l]] 
+initialAssignment l = UVec.fromList [ 0 | x <- [1..l]] 
 
 assignment_size :: Assignment -> Int
-assignment_size a = Vector.length a
+assignment_size a = UVec.length a
 
 assign :: Assignment -> SignedVar -> Int -> Assignment
-assign a (T l) dl = a // [(l,dl)]
-assign a (F l) dl = a // [(l,-dl)]
+assign a (T l) dl = a  UVec.// [(l,dl)]
+assign a (F l) dl = a  UVec.// [(l,-dl)]
 
 get_alevel :: Assignment -> SignedVar -> Int
-get_alevel a (T l) = (a!l)
-get_alevel a (F l) = -(a!l)
+get_alevel a (T l) = (a UVec.!l)
+get_alevel a (F l) = -(a UVec.!l)
 
 
 unassign :: Assignment -> SVar -> Assignment
-unassign a l = a // [(l,0)]
+unassign a l = a  UVec.// [(l,0)]
   
 
 backtrack :: Assignment -> Int -> Assignment
 backtrack a dl = backtrack2 a dl 0
 
 backtrack2 a dl i =
-  if i < (Vector.length a)
+  if i < (UVec.length a)
   then
-    if (abs (a!i)) < dl
+    if (abs (a UVec.!i)) < dl
     then backtrack2 a dl (i+1)
     else backtrack2 (unassign a i) dl (i+1)
   else a
 
 elemAss :: SignedVar -> Assignment -> Bool
-elemAss (F l) a = (a ! l) < 0
-elemAss (T l) a = ((a ! l) > 0)
+elemAss (F l) a = (a  UVec.! l) < 0
+elemAss (T l) a = ((a  UVec.! l) > 0)
 
 isassigned :: SVar -> Assignment -> Bool
-isassigned l a = ((a ! l) /= 0)
+isassigned l a = ((a  UVec.! l) /= 0)
 
 get_unassigned :: Assignment -> [SVar]
 get_unassigned a = 
-  if Vector.null a
+  if UVec.null a
   then []
-  else toList (findIndices (==0) a)
+  else UVec.toList (UVec.findIndices (==0) a)
 
 get_assigned :: Assignment -> [SVar]
 get_assigned a = 
-  if Vector.null a
+  if UVec.null a
   then []
-  else toList (findIndices (/=0) a)
+  else UVec.toList (UVec.findIndices (/=0) a)
 
 
 get_tassigned :: Assignment -> [SVar]
 get_tassigned a = 
-  if Vector.null a
+  if UVec.null a
   then []
-  else toList (findIndices (>0) a)
+  else UVec.toList (UVec.findIndices (>0) a)
 
 get_fassigned :: Assignment -> [SVar]
 get_fassigned a = 
-  if Vector.null a
+  if UVec.null a
   then []
-  else toList (findIndices (<0) a)
+  else UVec.toList (UVec.findIndices (<0) a)
 
 
-get_lit :: [SPVar] -> Int -> SPVar
-get_lit spvars 0 = Prelude.head spvars
-get_lit (v:vs) n = get_lit vs (n-1)
+falselits :: Assignment -> SymbolTable -> [SPVar]
+falselits a st = Prelude.map (get_lit st) (get_fassigned a)
 
+trueatoms :: Assignment -> SymbolTable -> [Atom]
+trueatoms a st = Prelude.concatMap atomsfromvar (Prelude.map (get_lit st) (get_tassigned a))
 
-falselits :: Assignment -> [SPVar] -> [SPVar]
-falselits a spvars = Prelude.map (get_lit spvars) (get_fassigned a)
+falseatoms :: Assignment -> SymbolTable -> [Atom]
+falseatoms a st = Prelude.concatMap atomsfromvar (Prelude.map (get_lit st) (get_fassigned a))
 
-trueatoms :: Assignment -> [SPVar] -> [Atom]
-trueatoms a spvars = Prelude.concatMap atomsfromvar (Prelude.map (get_lit spvars) (get_tassigned a))
+nonfalseatoms :: Assignment -> SymbolTable -> [Atom]
+nonfalseatoms a st = Prelude.concatMap atomsfromvar (Prelude.map (get_lit st) (UVec.toList (UVec.findIndices (>=0) a)))
 
-falseatoms :: Assignment -> [SPVar] -> [Atom]
-
-falseatoms a spvars = Prelude.concatMap atomsfromvar (Prelude.map (get_lit spvars) (get_fassigned a))
-
-
-nonfalseatoms :: Assignment -> [SPVar] -> [Atom]
-nonfalseatoms a spvars = Prelude.concatMap atomsfromvar (Prelude.map (get_lit spvars) (toList (findIndices (>=0) a)))
-
-
--- -----------------------------------------
 assign_trues :: Assignment -> [SVar] -> Assignment
 assign_trues a [] = a
 assign_trues a (v:vs) = assign_trues (assign a (T v) 1) vs
@@ -170,7 +152,6 @@ assign_trues a (v:vs) = assign_trues (assign a (T v) 1) vs
 assign_falses :: Assignment -> [SVar] -> Assignment
 assign_falses a [] = a
 assign_falses a (v:vs) = assign_falses (assign a (F v) 1) vs
-
 
 
 

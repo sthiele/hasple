@@ -36,9 +36,8 @@ bodies2vars bs = [ BLit b | b <- bs ]
 
 
 atomsfromvar :: SPVar -> [Atom]
-
+-- 
 atomsfromvar (ALit a) = [a]
-
 atomsfromvar (BLit b) = [ a | PAtom a <- b]
 
 
@@ -56,16 +55,13 @@ type CClause = ([SPVar],[SPVar])
 
 
 get_vars :: [CClause] -> [SPVar]
-
 get_vars cs = nub (concatMap get_varsc cs)
 
 get_varsc :: CClause -> [SPVar]
-
 get_varsc (t,f) = nub (t ++ f)
 
 
 nogoods_of_lp :: [Rule] -> [CClause]
-
 nogoods_of_lp p =
   let a   = (atoms_p p)++[__conflict]
       b   = bodies_p p
@@ -79,7 +75,6 @@ nogoods_of_lp p =
 
 
 get_ng1 :: [Literal] -> CClause
-
 get_ng1 b =
   let pb = [ a | PAtom a <- b ]
       nb = [ a | NAtom a <- b ]
@@ -88,7 +83,6 @@ get_ng1 b =
 
 
 get_ng2 :: [Literal] -> [CClause]
-
 get_ng2 b =
   let
     pb       = [ a | PAtom a <- b ]
@@ -100,12 +94,10 @@ get_ng2 b =
 
 
 get_ng3 :: [Rule] -> Atom -> [CClause]
-
 get_ng3 p a = [ ([BLit b], [ALit a]) | b <- (bodies p a) ]
 
 
 get_ng4 :: [Rule] -> Atom -> CClause
-
 get_ng4 p a = ([ALit a], bodies2vars (bodies p a))
 
 

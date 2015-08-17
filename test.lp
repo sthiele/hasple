@@ -6,8 +6,9 @@ f(e).
 f(f).
 f(g).
 f(h).
+f(i).
 
-f(h2).
+
 
 q(X):- f(X), not p(X), not r(X).
 p(X) :-f(X), not q(X), not r(X).

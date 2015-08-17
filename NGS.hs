@@ -44,14 +44,14 @@ import Data.List (nub, delete)
 import Debug.Trace
 
 -- little helper
-get_svarx :: [SPVar] -> SPVar -> SVar
-get_svarx x l = get_svar2 l x 0
+get_svarx :: SymbolTable -> SPVar -> SVar
+get_svarx st l = get_svar2 l st 0
 
-get_svar2 :: SPVar -> [SPVar] -> Int -> SVar
-get_svar2 s (f:ls) n =
-  if s==f
-  then n
-  else get_svar2 s ls (n+1)
+get_svar2 :: SPVar -> SymbolTable -> Int -> SVar
+get_svar2 s st i =
+  if st BVec.!i == s
+  then i
+  else get_svar2 s st (i+1)
 
 
 
@@ -395,7 +395,7 @@ new_watch2 (Clause c v w) a i =
   else Nothing  
 
   
-fromCClause :: [SPVar] -> CClause -> Clause
+fromCClause :: SymbolTable -> CClause -> Clause
 fromCClause spvars (t,f) =
   let l        = Prelude.length spvars
       tsvars   = Prelude.map (get_svarx spvars) t
