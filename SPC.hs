@@ -28,10 +28,12 @@ import PDG
 import SPVar
 import qualified Data.Map as Map
 
-type SPC =   (Map.Map Atom SPVar)                                               -- SourcePointerCollection
+type SPC = (Map.Map Atom SPVar)                                               -- SourcePointerCollection
+
 emptyspc :: SPC
 -- returns an empyt SPC
 emptyspc = Map.empty
+
 
 initspc :: [Rule] -> SPC
 initspc p =
@@ -40,6 +42,7 @@ initspc p =
       spc   = Map.empty
   in
   init_sources spc g atoms
+
 
 init_sources :: SPC -> PDG -> [Atom] -> SPC
 init_sources spc g [] = spc
@@ -51,10 +54,10 @@ init_sources spc g (a:as) =
   else init_sources spc g as
 
   
-
 add_source ::  SPC -> Atom -> SPVar -> SPC
 -- add a new source for an atom a
 add_source spc a l = Map.insert a l spc
+
 
 source_pos :: Atom -> SPC -> [Atom]
 -- get the sources of a
@@ -63,9 +66,12 @@ source_pos a spc =
     Nothing       -> []
     Just (BLit b) -> [ a | PAtom a <- b ] -- maybe special case of __conflict
 
+
 source :: Atom -> SPC -> SPVar
 -- get the sources of a
 source a spc =
   case Map.lookup a spc of
     Nothing -> BLit []
     Just x  -> x
+
+

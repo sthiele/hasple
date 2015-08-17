@@ -26,6 +26,7 @@ import ASP
 import Data.List (sort, nub, intersect, (\\), delete )
 import Data.Maybe
 
+
 assi :: [Rule] -> [[Atom]]
 -- function used to compute answer sets
 assi x = CDNLSolver.anssets x
@@ -95,9 +96,9 @@ get_query_rules2 (r:rs) a =
                     in
                     nub (gr: grs)
     Nothing      -> get_query_rules2 rs a
-
     
 -- -----------------------------------------------------------------------------
+
 
 gr_solve :: [Rule] -> [[Atom]]
 -- gr_solve, returns the answer sets of a program
@@ -138,4 +139,5 @@ gr_solve_l (prg, cons, falses) =
 
 nt :: [Atom] -> [Atom] -> [Atom] -> [Atom]
 nt old a t = old ++ (a \\ t)
+
 

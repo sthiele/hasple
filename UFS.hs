@@ -16,7 +16,7 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module UFS (
-    unfounded_set,
+    ufs_check,
 ) where
 
 import ASP
@@ -26,6 +26,20 @@ import SPC
 import Types
 import Data.List (nub, intersect, (\\))
 -- import Debug.Trace
+
+
+ufs_check ::
+ [Rule]         -- program
+  -> Assignment 
+  -> SymbolTable
+  -> [Atom]     -- possibly unfounded set
+  -> [Atom]
+-- returns a set unfounded atoms
+ufs_check prg a st u =
+  if null (u \\ (falseatoms a st))
+  then unfounded_set prg a st 
+  else u \\ (falseatoms a st)
+
 
 
 get_scope :: [Rule] -> SPC -> SymbolTable -> Assignment -> [Atom]
@@ -65,7 +79,6 @@ unfounded_set p a spvars=
 
 
 loop_s :: [Rule] -> SPC -> Assignment -> SymbolTable ->[Atom] -> [Atom]
-
 loop_s _ _ _ _ [] = []                                             -- no unfounded_set
 
 loop_s prg spc a spvars s =
@@ -79,7 +92,6 @@ loop_s prg spc a spvars s =
 
 
 loop_u :: [Rule] -> SPC -> Assignment -> SymbolTable -> [Atom] -> [Atom] -> Atom -> (SPC, [Atom], [Atom], Bool)
-
 loop_u _ spc _ _ s [] p = (spc, s, [], False)
 
 loop_u prg spc a spvars s u p =

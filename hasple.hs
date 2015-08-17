@@ -20,9 +20,11 @@ import ASP
 import LPParser
 import GrounderSolver -- for interleaved grounding/solving
 
+
 get_answersets :: [Rule] -> Int -> [[Atom]]
 -- get_answersets prg i = anssets (groundProgram prg)    -- for old style grounding->solving
 get_answersets prg i = gr_solve prg                      -- for interleaved grounding/solving
+
 
 main :: IO ()
 main =
@@ -35,11 +37,12 @@ main =
       contents <- readFile (head args)
       case readProgram contents of
         Left  err -> putStrLn ("ParseError: " ++ show err)
-        Right val -> print_as (get_answersets val 0)
+        Right val -> let as = (get_answersets val 0) in
+                     print_as as
 
 
 print_as [] = putStr "No Answersets"
-print_as (x:xs) = print_as2 1 (x:xs)
+print_as l = print_as2 1 l
 
 print_as2 n [] = putStr "\n"
 print_as2 n (x:xs)  =
@@ -60,3 +63,5 @@ print_as3 (x:xs) =
 show_lp :: [Rule] -> [Char]
 show_lp [] = ""
 show_lp (x:xs) = (show x) ++ "\n" ++ (show_lp xs)
+
+

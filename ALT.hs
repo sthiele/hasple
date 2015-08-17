@@ -25,7 +25,6 @@ module ALT (
 import Debug.Trace
 
 
-
 type ALT = [(Int,Int)]                                                                   -- AssignmentLevelTracker
 -- maps assignment level to decision level
 

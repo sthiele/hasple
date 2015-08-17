@@ -42,7 +42,6 @@ reduct p x = [ (basicRule (kopf r) (pbody r)) |  r <- p,  null (intersect (nbody
 cn :: [Rule] -> [Atom]
 -- return the consequences of a basic logic programm
 cn [] = []
-
 cn p =
   if (reducebasicprogram p (facts p)) == p
   then facts p
@@ -57,4 +56,5 @@ facts p = [ (kopf r) |  r <- p,  null $ pbody r, null $ nbody r ]
 reducebasicprogram:: [Rule] -> [Atom] -> [Rule]
 -- reduces a program by a set of atoms
 reducebasicprogram p x = [ (basicRule (kopf r) ((pbody r)\\ x) ) | r <- p, not $ null $ pbody r ]
+
 

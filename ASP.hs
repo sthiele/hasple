@@ -117,3 +117,4 @@ atoms_p :: [Rule] -> [Atom]
 atoms_p rules =
   filter (\i -> i/=__conflict) (nub (map kopf rules)++ (concatMap pbody rules) ++ (concatMap nbody rules))
 
+

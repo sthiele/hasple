@@ -28,12 +28,12 @@ module Grounder (
 import ASP
 import Data.List (sort, nub, intersect, (\\), delete )
 import Data.Maybe
--- import Data.List.Extra (nubOrd)
--- use sort to order list nub (nubOrd) to remove duplicates from list -- maybe use Sets instead?
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 
+
 type AtomMap =  Map.Map (String, Int) (Set.Set [Term])
+
 emptyAtomMap :: AtomMap
 emptyAtomMap = Map.empty
 
@@ -43,6 +43,7 @@ insert_atom am key val =
   case Map.lookup key am of
     Nothing -> Map.insert key (Set.insert val Set.empty) am
     Just x  -> Map.insert key (Set.insert val x) am
+
 
 insert_atoms :: AtomMap -> [Atom] -> AtomMap
 -- insert a list of atoms into the atom map
@@ -92,6 +93,7 @@ match (x:xs) (y:ys) =
   else Nothing
 match _ _ = Nothing
 
+
 matchAtom :: Atom -> Atom -> Maybe [(Term,Term)]
 matchAtom (Atom p1 a1) (Atom p2 a2) =
   if p1==p2
@@ -119,6 +121,7 @@ getbindings  (Atom pred args) m =
       Nothing -> [[]]
       Just z  -> (getbindings2 args (Set.toList z))
 
+
 getbindings2 :: [Term] -> [[Term]] ->  [[(Term,Term)]]
 getbindings2 x [] = []
 getbindings2 x (y:ys) =
@@ -130,6 +133,7 @@ getbindings2 x (y:ys) =
 getbindingsAtoms :: [Atom] -> AtomMap -> [[(Term,Term)]]
 getbindingsAtoms [] m = [[]]
 getbindingsAtoms (x:xs) m = join2 (getbindings x m) (getbindingsAtoms xs m)
+
 
 join2 :: [[(Term,Term)]] -> [[(Term,Term)]] -> [[(Term,Term)]]
 -- join2 xs ys = [ z | x <- xs, y <- ys, (merge x y)==(Just z)]
@@ -219,6 +223,7 @@ instance Substitutable Rule where
   
   is_ground (Rule h b) = is_ground h && and (map is_ground b)
 
+
 groundRule :: AtomMap ->  Rule -> [Rule]
 groundRule am r =
   if (is_ground r)
@@ -228,6 +233,7 @@ groundRule am r =
         subsapps   = map applySubs listofsubs
     in
     map ($r) subsapps
+
       
 groundProgram:: [Rule] -> [Rule]
 groundProgram p =

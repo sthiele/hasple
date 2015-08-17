@@ -31,8 +31,6 @@ import qualified Data.Vector as Vector
 import qualified Data.Vector.Unboxed as UVector
 
 import Data.Maybe
--- import Data.List.Extra (nubOrd)
--- use sort to order list nub (nubOrd) to remove duplicates from list -- maybe use Sets instead?
 import qualified Data.Map as Map
 import Debug.Trace
 
@@ -124,7 +122,6 @@ anssets prg  =
   cdnl_enum solver s
 
 
-
 cdnl_enum ::
   TSolver                  -- the solver
   -> Int                   -- s
@@ -187,7 +184,6 @@ cdnl_enum solver s =
       remaining_as
 
 
-
 conflict_handling :: TSolver -> TSolver
 -- should resolve the conflict learn a new maybe clause and backtrack the solver
 conflict_handling s =
@@ -231,7 +227,6 @@ conflict_handling s =
     set_conf                    False s
     
 
-
 conflict_analysis :: NGS.NogoodStore -> Assignment -> ALT -> (NGS.NogoodStore, SignedVar, Int)
 conflict_analysis ngs a alt =
   let conflict_nogood = NGS.get_ng ngs
@@ -242,7 +237,6 @@ conflict_analysis ngs a alt =
 
 
 -- Propagation
-
 
 tight :: [Rule] -> Bool  -- TODO implement tightness check
 tight p = False
@@ -290,32 +284,19 @@ nogood_propagation s =
                   nogood_propagation s''
 
 
-
-ufs_check ::
- [Rule]         -- program
-  -> Assignment 
-  -> SymbolTable
-  -> [Atom]     -- possibly unfounded set
-  -> [Atom]
--- returns a set unfounded atoms
-ufs_check prg a st u =
-  if null (u \\ (falseatoms a st))
-  then unfounded_set prg a st 
-  else u \\ (falseatoms a st)
-
-
-
 local_propagation :: TSolver -> TSolver
 local_propagation s =
   if conf s
   then s
   else 
     if NGS.can_choose $ boocons s
-    then local_propagation $ resolv $ choose_next_ng s
+    then 
+      local_propagation $ 
+      resolve           $ 
+      choose_next_ng    s
     else 
       let ngs' = NGS.rewind $ boocons s in -- rewind for next use
       set_boocons ngs' s
-
 
 
 choose_next_ng :: TSolver -> TSolver
@@ -326,10 +307,9 @@ choose_next_ng s =
   set_boocons (NGS.choose $ boocons s) s
 
 
-
-resolv :: TSolver -> TSolver
+resolve :: TSolver -> TSolver
 -- is only called if conf is false
-resolv s =
+resolve s =
     let al = (assignment_level s)
         ng = NGS.get_ng (boocons s)
         x  = NGS.resolve al ng (assignment s)
@@ -344,4 +324,5 @@ resolv s =
       NGS.ResU a' ng' -> let ngs' = NGS.up_rew (boocons s) ng' in
                          set_boocons ngs' $ set_assignment_level (al+1) $ set_assignment a' s
       NGS.CONF        -> set_conf True s                                                               -- set conflict
+
 
