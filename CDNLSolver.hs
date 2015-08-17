@@ -23,10 +23,12 @@ import ASP
 import SPVar
 import Types
 import SPC
+import ALT
 import qualified NGS
 import UFS
 import Data.List (sort, nub, intersect, (\\), delete )
 import qualified Data.Vector as Vector
+import qualified Data.Vector.Unboxed as UVector
 
 import Data.Maybe
 -- import Data.List.Extra (nubOrd)
@@ -36,7 +38,7 @@ import Debug.Trace
 
 
 --------------------------------
--- transform
+-- little helper
 
 get_svar :: SPVar -> [SPVar] -> SVar
 get_svar l x = get_svar2 l x 0
@@ -48,66 +50,13 @@ get_svar2 s (f:ls) n =
   else get_svar2 s ls (n+1)
 
 
-get_svarx :: [SPVar] -> SPVar -> SVar
-get_svarx x l = get_svar2 l x 0
-
-
-transforms :: [CClause] -> [SPVar] -> [Clause]
-
-transforms [] _ = []
-
-transforms (c:cs) spvars = ((transform c spvars):(transforms cs spvars))
-
-
-transform :: CClause -> [SPVar] -> Clause
-transform (t,f) spvars =
-  let l              = length spvars
-      a              = initialAssignment l
-      tsvars         = map (get_svarx spvars) t
-      fsvars         = map (get_svarx spvars) f
-      a'             = assign_trues (assign_falses a fsvars) tsvars
-      allvars        = tsvars++fsvars
-      number_of_vars = length allvars
-  in
-  if number_of_vars == 1
-  then (a', head allvars, head allvars)
-  else 
-    let w = head allvars
-        v = head (tail allvars)
-    in
-    (a',w,v)
-
-assign_trues :: Assignment -> [SVar] -> Assignment
-assign_trues a [] = a
-assign_trues a (v:vs) = assign_trues (assign a (T v) 1) vs
-
-assign_falses :: Assignment -> [SVar] -> Assignment
-assign_falses a [] = a
-assign_falses a (v:vs) = assign_falses (assign a (F v) 1) vs
+transforms :: [CClause] -> [SPVar] -> [NGS.Clause]
+transforms cclauses spvars = map (NGS.fromCClause spvars) cclauses
 
 
 -- -----------------------------------------------------------------------------
 
 -- Conflict Driven Nogood Learning - Enumeration
-
-
-type ALT = [(Int,Int)]                                                                   -- AssignmentLevelTracker
--- maps assignment level to decision level
-
-al2dl :: ALT -> Int -> Int
-al2dl ((al1,dl1):rest) al =
-  if al<al1
-  then al2dl rest al
-  else dl1
-
-dl2al :: ALT -> Int -> Int
-dl2al ((al1,dl1):rest) dl =
-  if dl==dl1
-  then al1
-  else dl2al rest dl
-
-albacktrack :: [(Int,Int)] -> Int -> [(Int,Int)]
-albacktrack alt l = [ (al,dl) | (al,dl) <- alt, dl < l ]
 
 
 type DLT = [(Int,SignedVar)]                                                              -- DecisionLiteralTracker
@@ -128,7 +77,7 @@ dlbacktrack dlt l = [ (dl,sl) | (dl,sl) <- dlt, dl < l ]
 data TSolver = TSolver { 
                          program                  :: [Rule]      -- the program
                        , spvars                   :: [SPVar]     --
-                       , boocons                  :: NGS.NoGoodStore -- the store of boolean constraints
+                       , boocons                  :: NGS.NogoodStore -- the store of boolean constraints
                        , decision_level           :: Int         -- the decision level 
                        , blocked_level            :: Int         -- the blocked level
                        , assignment_level         :: Int         -- the assignment level
@@ -234,6 +183,7 @@ cdnl_enum solver s =
                          set_assignment a''          solver'
           remaining_as = cdnl_enum solver'' s
       in
+--      trace ("choose: " Prelude.++ (show sigma_d)) $
       remaining_as
 
 
@@ -251,7 +201,8 @@ conflict_handling s =
   then                                                                         -- learn a new nogood and backtrack
     let ngs     = boocons s 
         (ngs', sigma_uip, alx) = conflict_analysis ngs a alt
-                                                                                                      -- backtrack
+    in
+    let                                                                                               -- backtrack
         bt_dl   = al2dl alt alx
         bt_al   = dl2al alt bt_dl
         a'      = assign (backtrack a bt_al) (invert sigma_uip) bt_al
@@ -281,61 +232,12 @@ conflict_handling s =
     
 
 
-conflict_analysis :: NGS.NoGoodStore -> Assignment -> ALT -> (NGS.NoGoodStore, SignedVar, Int)
+conflict_analysis :: NGS.NogoodStore -> Assignment -> ALT -> (NGS.NogoodStore, SignedVar, Int)
 conflict_analysis ngs a alt =
   let conflict_nogood = NGS.get_ng ngs
       ngs'            = NGS.rewind ngs
   in
-  conflict_resolution ngs' conflict_nogood a alt
-
-
-conflict_resolution :: NGS.NoGoodStore -> Clause -> Assignment -> ALT -> (NGS.NoGoodStore, SignedVar, Int)
-conflict_resolution ngs nogood a alt =
-  trace ("conflict_res: " Prelude.++ (show nogood) Prelude.++ (show a)) $    
-  let (sigma, prefix) = get_sigma nogood a
-      dl_sigma        = get_alevel a sigma
-      reduced_nogood  = clauseWithoutSL nogood sigma
-  in
-  trace ("  reduced_ng: " Prelude.++ (show reduced_nogood)) $
-  let
-      k               = get_max_alevel reduced_nogood a
-      dl              = al2dl alt dl_sigma
-      al              = dl2al alt dl 
-  in
-  trace ("  rhos1: " Prelude.++ (show nogood) Prelude.++ (show a) Prelude.++ (show al)) $ 
-  let
-      rhos            = filter_al nogood a al 
-  in
-  trace ("  rhosr: " Prelude.++ (show rhos)) $ 
-  if only rhos sigma
-  then 
-    let ngs' = NGS.add_nogoods [nogood] ngs in -- add learned nogood
-    trace ("k=alx: " Prelude.++ (show k)) 
-    (ngs', sigma, k)
-  else
-    let
-      eps         = get_epsilon ngs sigma prefix
-      reduced_eps = clauseWithoutSL eps (invert sigma)
-      newnogood   = joinClauses reduced_nogood reduced_eps
-    in
-    conflict_resolution ngs newnogood prefix alt
-
-
-
-get_epsilon :: NGS.NoGoodStore -> SignedVar -> Assignment -> Clause
--- try to return an antecedent
-get_epsilon ngs sigma prefix = 
---  if NGS.can_choose ngs
---  then
-    let ngs' = NGS.choose ngs
-        ng   = NGS.get_ng ngs'
-        temp = clauseWithoutSL ng (invert sigma)
-    in
-    if is_included temp prefix
-    then ng
-    else get_epsilon ngs' sigma prefix
---  else
---    error "no antecedent epsilon found"
+  NGS.conflict_resolution ngs' conflict_nogood a alt
 
 
 
@@ -371,14 +273,15 @@ nogood_propagation s =
                 let cngs_of_loop = loop_nogoods prg u'
                     ngs_of_loop  = transforms cngs_of_loop spv
                     ngs'         = NGS.add_nogoods ngs_of_loop ngs
+                    s''          = set_boocons ngs' s'
                 in
-                set_boocons ngs' s'
+                nogood_propagation s''
               else
                 if elemAss (F p) a
                 then
                   let s'' = set_unfounded_set u' s' in
                   nogood_propagation s''
-                else 
+                else
                   let a'  = assign a (F p) al                                                 -- extend assignment  
                       s'' = set_assignment_level (al+1) $ 
                             set_assignment a'           $ 
@@ -430,15 +333,16 @@ resolv :: TSolver -> TSolver
 resolv s =
     let al = (assignment_level s)
         ng = NGS.get_ng (boocons s)
-        x  = resolve al ng (assignment s)
+        x  = NGS.resolve al ng (assignment s)
     in
+--    trace ("res: " ++ (show x)) $
     case x of
-      NIX         -> s
-      NIXU ng'    -> let ngs' = NGS.upgrade (boocons s) ng' in
-                     set_boocons ngs' s
-      Res a'      -> let ngs' = NGS.rewind (boocons s) in
-                     set_boocons ngs' $ set_assignment_level (al+1) $ set_assignment a' s
-      ResU a' ng' -> let ngs' = NGS.up_rew (boocons s) ng' in
-                     set_boocons ngs' $ set_assignment_level (al+1) $ set_assignment a' s
-      CONF        -> set_conf True s                                                               -- set conflict
+      NGS.NIX         -> s
+      NGS.NIXU ng'    -> let ngs' = NGS.upgrade (boocons s) ng' in
+                         set_boocons ngs' s
+      NGS.Res a'      -> let ngs' = NGS.rewind (boocons s) in
+                         set_boocons ngs' $ set_assignment_level (al+1) $ set_assignment a' s
+      NGS.ResU a' ng' -> let ngs' = NGS.up_rew (boocons s) ng' in
+                         set_boocons ngs' $ set_assignment_level (al+1) $ set_assignment a' s
+      NGS.CONF        -> set_conf True s                                                               -- set conflict
 

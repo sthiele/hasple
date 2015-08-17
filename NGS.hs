@@ -16,7 +16,8 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module NGS (
-   NoGoodStore,
+   NogoodStore,
+   Store,
    new_ngs,
    add_nogoods,
    get_nogoods,
@@ -26,101 +27,582 @@ module NGS (
    up_rew,
    upgrade,
    rewind,
-
+   Clause,
+   fromCClause,
+   conflict_resolution,
+   RES(..),
+   resolve,
 ) where
 
+import SPVar
 import Types
-import Data.Vector as Vector
+import ALT
+import Data.Vector as BVec 
+-- (snoc , (++), length, drop, take) as BVec
+import Data.Vector.Unboxed as UVec
+import Data.List (nub, delete)
+import Debug.Trace
 
-data NoGoodStore = NoGoodStore { program_nogoods :: Vector Clause -- program nogoods
-                               , learned_nogoods :: Vector Clause -- learned nogoods
-                               , png_akku        :: Vector Clause -- program nogoods akku
-                               , lng_akku        :: Vector Clause -- learned nogoods akku
-                               , counter         :: Int
+-- little helper
+get_svarx :: [SPVar] -> SPVar -> SVar
+get_svarx x l = get_svar2 l x 0
+
+get_svar2 :: SPVar -> [SPVar] -> Int -> SVar
+get_svar2 s (f:ls) n =
+  if s==f
+  then n
+  else get_svar2 s ls (n+1)
+
+
+
+data Store a = Store { program_nogoods :: BVec.Vector a -- program nogoods
+                     , learned_nogoods :: BVec.Vector a -- learned nogoods
+                     , png_akku        :: BVec.Vector a -- program nogoods akku
+                     , lng_akku        :: BVec.Vector a -- learned nogoods akku
+                     , counter         :: Int
 } deriving (Show, Eq)
 
 
-new_ngs :: [Clause] -> [Clause] -> NoGoodStore
-new_ngs png lng = NoGoodStore (fromList png) (fromList lng) (fromList []) (fromList []) (-1)
+new_ngs :: [a] -> [a] -> Store a
+new_ngs png lng = Store (BVec.fromList png) (BVec.fromList lng) (BVec.fromList []) (BVec.fromList []) (-1)
 
 
-ngs_size :: NoGoodStore -> Int
-ngs_size (NoGoodStore png lng _ _ _) = (Vector.length png) + (Vector.length lng)
+ngs_size :: Store a -> Int
+ngs_size (Store png lng _ _ _) = (BVec.length png) + (BVec.length lng)
 
 
-get_nogoods ngs = (program_nogoods ngs) Vector.++ (png_akku ngs) Vector.++ (learned_nogoods ngs) Vector.++ (lng_akku ngs)
+get_nogoods ngs = (program_nogoods ngs) BVec.++ (png_akku ngs) BVec.++ (learned_nogoods ngs) BVec.++ (lng_akku ngs)
 
 
-get_ng :: NoGoodStore -> Clause
+get_ng :: Store a -> a
 -- get current nogood
-get_ng (NoGoodStore png lng _ _ counter) =
-  let len_png = Vector.length png in
+get_ng (Store png lng _ _ counter) =
+  let len_png = BVec.length png in
   if counter < len_png
-  then png!counter
+  then png BVec.!counter
   else
-    if counter < (len_png) + (Vector.length lng)
-    then lng!(counter-len_png)
-    else error "NoGoodStore out of bounds"
+    if counter < (len_png) + (BVec.length lng)
+    then lng BVec.! (counter-len_png)
+    else error "Store a out of bounds"
 
 
-add_nogoods :: [Clause] -> NoGoodStore -> NoGoodStore
-add_nogoods ngs (NoGoodStore png lng pnga lnga c) =
-  (NoGoodStore png (lng Vector.++(fromList ngs)) pnga lnga c) 
+add_nogoods :: [a] -> Store a -> Store a
+add_nogoods ngs (Store png lng pnga lnga c) =
+  (Store png (lng BVec.++ (BVec.fromList ngs)) pnga lnga c) 
 
 
-rewind :: NoGoodStore -> NoGoodStore
+rewind :: Store a -> Store a
 -- basically reset the nogood store because some resolvent was found
-rewind (NoGoodStore png lng pnga lnga counter) =
-  if counter < Vector.length png
+rewind (Store png lng pnga lnga counter) =
+  if counter < BVec.length png
   then 
-    let png' = png Vector.++ pnga in
-    (NoGoodStore png' lng (fromList []) (fromList []) (-1))
+    let png' = png BVec.++ pnga in
+    (Store png' lng (BVec.fromList []) (BVec.fromList []) (-1))
   else
-    let png' = png Vector.++ pnga
-        lng' = lng Vector.++ lnga
+    let png' = png BVec.++ pnga
+        lng' = lng BVec.++ lnga
     in
-    NoGoodStore png' lng' (fromList []) (fromList []) (-1)
+    Store png' lng' (BVec.fromList []) (BVec.fromList []) (-1)
 
 
-upgrade :: NoGoodStore -> Clause -> NoGoodStore
+upgrade :: Store a -> a -> Store a
 -- replace current nogood with new nogood reset nogood store
-upgrade (NoGoodStore png lng pnga lnga counter) ng =
-  let len_png = Vector.length png in
+upgrade (Store png lng pnga lnga counter) ng =
+  let len_png = BVec.length png in
   if counter < len_png
   then 
-    let png'  = Vector.drop (counter+1) png
-        pnga' = (Vector.take counter png) Vector.++ (cons ng pnga) 
+    let png'  = BVec.drop (counter+1) png
+        pnga' = (BVec.take counter png) BVec.++ (BVec.cons ng pnga) 
     in
-    (NoGoodStore png' lng pnga' lnga (-1))
+    (Store png' lng pnga' lnga (-1))
   else
-    let png'  = fromList []
-        pnga' = png Vector.++  pnga
-        lng'  = Vector.drop (counter+1-len_png) lng
-        lnga' = (Vector.take (counter-len_png) lng) Vector.++(cons ng lnga) 
+    let png'  = BVec.fromList []
+        pnga' = png BVec.++  pnga
+        lng'  = BVec.drop (counter+1-len_png) lng
+        lnga' = (BVec.take (counter-len_png) lng) BVec.++(BVec.cons ng lnga) 
     in
-    NoGoodStore png' lng' pnga' lnga' (-1)
+    Store png' lng' pnga' lnga' (-1)
 
 
-up_rew :: NoGoodStore -> Clause -> NoGoodStore
+up_rew :: Store a -> a -> Store a
 -- upgrade and rewind
-up_rew (NoGoodStore png lng pnga lnga counter) ng =
-  let len_png = Vector.length png in
+up_rew (Store png lng pnga lnga counter) ng =
+  let len_png = BVec.length png in
   if counter < len_png
   then 
-    let png' = snoc ((Vector.take counter png) Vector.++ (Vector.drop (counter+1) png) Vector.++ pnga) ng in
-    (NoGoodStore png' lng (fromList []) (fromList []) (-1))
+    let png' = BVec.snoc ((BVec.take counter png) BVec.++ (BVec.drop (counter+1) png) BVec.++ pnga) ng in
+    (Store png' lng (BVec.fromList []) (BVec.fromList []) (-1))
   else
-    let png' = png Vector.++ pnga
-        lng' = snoc ((Vector.take (counter-len_png) lng) Vector.++ (Vector.drop (counter+1-len_png) lng) Vector.++ lnga) ng
+    let png' = png BVec.++ pnga
+        lng' = BVec.snoc ((BVec.take (counter-len_png) lng) BVec.++ (BVec.drop (counter+1-len_png) lng) BVec.++ lnga) ng
     in
-    (NoGoodStore png' lng' (fromList []) (fromList []) (-1))
+    (Store png' lng' (BVec.fromList []) (BVec.fromList []) (-1))
 
 
-can_choose :: NoGoodStore -> Bool
+can_choose :: Store a -> Bool
 -- returns true if not all nogoods have been tested
-can_choose (NoGoodStore png lng pnga lnga counter) = (counter+1) < (Vector.length png) + (Vector.length lng) 
+can_choose (Store png lng pnga lnga counter) = (counter+1) < (BVec.length png) + (BVec.length lng) 
 
-choose :: NoGoodStore -> NoGoodStore
+choose :: Store a -> Store a
 -- is only called if canchoose return true
-choose (NoGoodStore png lng pnga lnga counter) = (NoGoodStore png lng pnga lnga (counter+1))
+choose (Store png lng pnga lnga counter) = (Store png lng pnga lnga (counter+1))
+
+
+type NogoodStore = Store Clause
+
+
+data RES = Res Assignment
+         | ResU Assignment Clause
+         | NIX
+         | NIXU Clause         
+         | CONF
+         deriving Show
+
+
+-- class Nogood s where
+--   conflict_resolution :: NogoodStore -> s -> Assignment -> ALT -> (NogoodStore,SignedVar,Int)
+--   reduceNogood :: s -> SignedVar -> s
+--   is_satisfied :: s -> Assignment -> Bool
+--   resolve :: Int -> Clause -> Assignment -> RES
+
+-- 
+-- 
+type Clause = ((UVec.Vector Int), Int, Int)
+-- 
+-- instance Nogood Clause where
+
+conflict_resolution :: NogoodStore -> Clause -> Assignment -> ALT -> (NogoodStore, SignedVar,Int)
+conflict_resolution ngs nogood a alt =
+--  trace ("conflict_res1: " Prelude.++ (show nogood) Prelude.++ (show a)) $
+--  trace ("ALT: " Prelude.++ (show alt)) $
+  let (ngs', sigma) = conflict_resolution2 ngs nogood a alt
+      reduced_nogood  = reduceNogood nogood sigma
+      k    = get_max_alevel reduced_nogood a
+  in
+  (ngs', sigma, k)
+
+conflict_resolution2 :: NogoodStore -> Clause -> Assignment -> ALT -> (NogoodStore, SignedVar)
+conflict_resolution2 ngs nogood a alt =
+--  trace ("conflict_res2: " Prelude.++ (show nogood) Prelude.++ (show a)) $
+  let poopi           = assfromClause nogood (assignment_size a)
+      (sigma, prefix) = get_implicationLiteral poopi a
+      reduced_nogood  = reduceNogood nogood sigma
+      alevel_sigma    = get_alevel a sigma 
+      dl              = al2dl alt alevel_sigma
+      al              = dl2al alt dl 
+  in
+--  trace ("sigma: " Prelude.++ (show sigma)) $
+--  trace ("prefix: " Prelude.++ (show prefix)) $
+--  trace ("alevel_sigma: " Prelude.++ (show alevel_sigma)) $
+--  trace ("dl: " Prelude.++ (show dl)) $
+--  trace ("al: " Prelude.++ (show al)) $
+  let rhos            = filter_al nogood a al in
+--  trace ("  rhos: " Prelude.++ (show rhos)) $
+  if only rhos sigma
+  then
+    let ngs' = add_nogoods [nogood] ngs                                     -- add learned nogood
+    in (ngs', sigma)
+  else
+    let epsilon     = get_antecedent ngs sigma prefix 
+        reduced_eps = reduceNogood epsilon (invert sigma) 
+        newnogood   = joinClauses reduced_nogood reduced_eps
+    in
+--    trace ("9: new_nogood:" Prelude.++ (show newnogood)) $
+    conflict_resolution2 ngs newnogood prefix alt
+
+reduceNogood :: Clause -> SignedVar -> Clause
+-- delete literal from the clause
+reduceNogood (c,w,v) (T l) =
+--  trace ("reduceNogood: " Prelude.++ (show c) Prelude.++ (show (T l))) $
+  let r  = UVec.toList c
+      r' = UVec.fromList [ x | x<-r, x/=(l+1) ]
+  in
+  (r',0, (UVec.length r')-1)
+
+reduceNogood (c,w,v) (F l) =
+--  trace ("reduceNogood: " Prelude.++ (show c) Prelude.++ (show (F l))) $
+  let r  = UVec.toList c
+      r' = UVec.fromList [ x | x<-r, x/=(-(l+1)) ]
+  in
+  (r',0, (UVec.length r')-1)
+
+is_satisfied :: Clause -> Assignment -> Bool
+-- return true if the clause is satisfied by the assignment
+is_satisfied c a = 
+  let c' = assfromClause c (assignment_size a) in 
+  is_sat2 c' a 0
+
+is_sat2 :: Assignment -> Assignment -> Int -> Bool
+is_sat2 c a i =
+  if i < assignment_size c
+  then
+    if (a UVec.! i) > 0
+    then
+      if (c UVec.! i) < 0
+      then False
+      else is_sat2 c a (i+1)
+    else
+      if (a UVec.!i) < 0
+      then
+        if (c UVec.!i) > 0
+        then False
+        else is_sat2 c a (i+1)
+      else -- (a!i) == 0
+        if (c UVec.! i) == 0
+        then is_sat2 c a (i+1)
+        else False
+  else True
+
+
+
+resolve :: Int -> Clause -> Assignment -> RES
+
+resolve_old al (c,v,w) a =
+  if v == w -- unit clause
+  then 
+    if (a UVec.! v > 0 && c UVec.! v > 0) || (a UVec.! v < 0 && c UVec.! v < 0)
+    then CONF
+    else
+      if c UVec.! v > 0 && a UVec.!v==0
+      then Res (assign a (F v) al)
+      else
+        if c UVec.!v < 0 && a UVec.!v==0
+        then Res (assign a (T v) al)
+        else NIX
+  else
+    if (a UVec.!v > 0 && c UVec.!v > 0) || (a UVec.!v < 0 && c UVec.!v < 0)            -- assigned
+    then updatewatch1 al (c,v,w) a
+    else
+      if (a UVec.!w > 0 && c UVec.!w > 0) || (a UVec.!w < 0 && c UVec.!w < 0)           -- assigned
+      then updatewatch2 al (c,v,w) a
+      else NIX
+ 
+resolve al (c,v,w) a =
+--  trace ("resolve: " Prelude.++ (show c) Prelude.++ (show v) Prelude.++ (show w) ) $
+--  trace ("a: " Prelude.++ (show a)) $
+  if v == w -- unit clause
+  then
+    let v' = (c UVec.!v) in 
+    if v' > 0 
+    then
+      if (a UVec.!(v'-1) > 0)
+      then CONF
+      else
+        if a UVec.!(v'-1)==0
+        then Res (assign a (F (v'-1)) al)
+        else NIX
+    else
+      if (a UVec.!((abs v')-1) < 0)
+      then CONF
+      else
+        if a UVec.!((abs v')-1)==0
+        then Res (assign a (T (abs (v')-1)) al)
+        else NIX
+
+  else  -- non-unit clause
+    let v' = c UVec.!v in
+    if v' > 0
+    then
+      if (a UVec.!(v'-1) < 0)            -- assigned
+      then NIX
+      else
+        let w' = c UVec.!w in
+        if (a UVec.!((abs w')-1) > 0 && w' < 0) || (a UVec.!((abs w')-1) < 0 && w' > 0)           -- assigned
+        then NIX
+        else 
+          if a UVec.!(v'-1)==0
+          then 
+            if a UVec.!((abs w')-1)==0
+            then NIX
+            else updatewatch2 al (c,v,w) a
+          else updatewatch1 al (c,v,w) a
+    else
+      if (a UVec.!((abs v')-1) > 0)             -- assigned
+      then NIX
+      else
+        let w' = c UVec.!w in
+        if (a UVec.!((abs w')-1) > 0 && w' < 0) || (a UVec.!((abs w')-1) < 0 && w' > 0)           -- assigned
+        then NIX
+        else 
+          if a UVec.!((abs v')-1)==0
+          then 
+            if a UVec.!((abs w')-1)==0
+            then NIX
+            else updatewatch2 al (c,v,w) a
+          else updatewatch1 al (c,v,w) a
+ 
+
+
+updatewatch1 :: Int -> Clause -> Assignment -> RES 
+updatewatch1 al (c,v,w) a =
+--  trace ("update watch1 ")$
+  case new_watch1 (c,0,w) a 0 of
+  Just cl -> let w' = c UVec.!w in
+             if (a UVec.!((abs w')-1) > 0 && w' > 0) || (a UVec.!((abs w')-1) < 0 && w' < 0) -- assigned
+             then updatewatch2x al cl a
+             else NIXU cl
+  Nothing -> let w'=c UVec.!w in
+             if (a UVec.!((abs w')-1) > 0 && w' > 0)                         -- assigned true
+             then CONF
+             else
+               if (a UVec.!((abs w')-1) < 0 && w' < 0)                       -- assigned false
+               then CONF
+               else
+                 if a UVec.!((abs w')-1) == 0
+                 then
+                   if w' > 0
+                   then Res (assign a (F (w'-1)) al)
+                   else Res (assign a (T ((abs w')-1)) al)
+                 else NIX
+
+updatewatch2 al (c,v,w) a =
+--  trace ("update watch2 ")$
+  case new_watch2 (c,v,0) a 0 of
+  Just cl -> NIXU cl
+  Nothing -> let v'=c UVec.!v in
+             if a UVec.!((abs v')-1) == 0
+             then
+               if v' > 0
+               then Res (assign a (F (v'-1)) al)
+               else Res (assign a (T ((abs v')-1)) al)
+             else NIX
+
+updatewatch2x al (c,v,w) a =
+  case new_watch2 (c,v,0) a 0 of
+  Just cl -> NIXU cl
+  Nothing -> let v'=c UVec.!v in
+             if a UVec.!((abs v')-1) == 0
+             then
+               if v' > 0
+               then ResU (assign a (F (v'-1)) al) (c,v,w)
+               else ResU (assign a (T ((abs v')-1)) al) (c,v,w)
+             else NIXU (c,v,w)
+  
+new_watch1 :: Clause -> Assignment -> Int -> Maybe Clause
+new_watch1 (c,v,w) a i=
+--  trace ("new_watch1 " Prelude.++ (show i)) $
+  if i < UVec.length c
+  then
+    let i' = c UVec.!i in
+    if i==w
+    then new_watch1 (c,v,w) a (i+1)
+    else
+      if (a UVec.!((abs i')-1) > 0 && i' >= 0) || (a UVec.!((abs i')-1) < 0 && i' < 0)  -- assigned
+      then new_watch1 (c,v,w) a (i+1)
+      else Just (c,i,w)       
+  else Nothing
+
+
+new_watch2 :: Clause -> Assignment -> Int -> Maybe Clause
+new_watch2 (c,v,w) a i =
+--  trace ("new_watch2: " Prelude.++ (show i)) $
+  if i < UVec.length c
+  then
+    let i' = c UVec.!i in
+    if i==v
+    then new_watch2 (c,v,w) a (i+1)
+    else
+      if (a UVec.!((abs i')-1) > 0 && i' > 0) || (a UVec.!((abs i')-1) < 0 && i' < 0)   -- assigned
+      then new_watch2 (c,v,w) a (i+1)
+      else Just (c,v,i)
+  else Nothing  
+
+  
+fromCClause :: [SPVar] -> CClause -> Clause
+fromCClause spvars (t,f) =
+  let l        = Prelude.length spvars
+      tsvars   = Prelude.map (get_svarx spvars) t
+      fsvars   = Prelude.map (get_svarx spvars) f
+      tsvars'  = Prelude.map (+1) tsvars
+      fsvars'  = Prelude.map (+1) fsvars
+      fsvars'' = Prelude.map (*(-1)) fsvars'
+      b        = UVec.fromList (tsvars' Prelude.++ fsvars'')
+  in
+--  trace ("fromCClause: " Prelude.++ (show (t,f)) Prelude.++ (show b)) $
+  (b,0,(UVec.length b) -1)
+
+
+assfromClause :: Clause -> Int -> Assignment
+assfromClause c i = assfromClause2 c (initialAssignment i) 0
+
+assfromClause2 :: Clause -> Assignment -> Int -> Assignment
+assfromClause2 (c,v,w) a i =
+  if i < UVec.length c
+  then
+    let i' = c UVec.!i in
+    if i' > 0
+    then
+      let a' = assign a (T (i'-1)) 1 in
+      assfromClause2 (c,v,w) a' (i+1)
+    else
+      let a' = assign a (F (abs (i')-1)) 1 in
+      assfromClause2 (c,v,w) a' (i+1)
+  else a
+
+
+get_implicationLiteral :: Assignment -> Assignment -> (SignedVar, Assignment)
+-- used in conflict_analysis
+-- return a implication literal (sigma) from c and a prefix of the assignment a
+-- s.t c\prefix = sigma
+get_implicationLiteral c a =
+--  trace ("get_implicationLiteral: " Prelude.++ (show c) Prelude.++ (show a)) $
+  let last_assigned_var = get_last_assigned_var a 
+      prefix            = unassign a last_assigned_var
+  in
+--  trace ("  test: " Prelude.++ (show last_assigned_var)) $
+  if (c UVec.!last_assigned_var) /= 0
+  then 
+    let temp = without c prefix in
+--    trace ("   wo: " Prelude.++ (show temp)) $
+    if (c UVec.!last_assigned_var) > 0
+    then
+      let sigma =  (T last_assigned_var) in
+      if only temp sigma
+      then (sigma, prefix)
+      else get_implicationLiteral c prefix
+    else
+      let sigma =  (F last_assigned_var) in
+      if only temp sigma 
+      then (sigma, prefix)
+      else get_implicationLiteral c prefix
+   else get_implicationLiteral c prefix
+ 
+
+
+get_last_assigned_var :: Assignment -> SVar
+-- get last assigned variable in the assignment
+get_last_assigned_var a = get_last_assigned_var2 a 0
+
+get_last_assigned_var2 a i =
+  if i < (UVec.length a)
+  then
+    let val = a UVec.! i in
+    case val of
+      0 -> get_last_assigned_var2 a (i+1)
+      _ -> get_last_assigned_var3 a (i+1) (i, abs val)
+  else error "no more assigned variables"
+
+get_last_assigned_var3  a i (akku,akkuval) =
+  if i < (UVec.length a)
+  then
+    let val = a UVec.!i in
+    if abs val > akkuval
+    then get_last_assigned_var3 a (i+1) (i, abs val)
+    else get_last_assigned_var3 a (i+1) (akku,akkuval)
+   else akku
+
+
+get_antecedent :: NogoodStore -> SignedVar -> Assignment -> Clause
+-- given an implication literal (sigma) and a prefix return an antecedent (epsilon)
+-- s.t. epsilon\prefix = (invert sigma)
+get_antecedent ngs sigma prefix =
+--    trace ("get_eps: " Prelude.++ (show sigma) Prelude.++ (show prefix)) $ 
+  if NGS.can_choose ngs
+  then
+    let ngs' = choose ngs
+        ng   = get_ng ngs'
+        temp = reduceNogood ng (invert sigma)
+    in
+    if is_satisfied temp prefix
+    then ng
+    else get_antecedent ngs' sigma prefix
+  else error "no antecedent epsilon found"
+
+
+joinClauses :: Clause -> Clause -> Clause
+joinClauses (c1,w1,v1) (c2,w2,v2) =
+  let c = UVec.fromList $ nub ((UVec.toList c1) Prelude.++ (UVec.toList c2)) in
+  (c,0,(UVec.length c) -1)
+
+
+
+without :: Assignment -> Assignment -> Assignment
+without c a = without2 c a 0
+without2 c a i =
+  if i < UVec.length c
+  then
+    if (c UVec.! i) > 0
+    then
+      if (a UVec.! i) > 0
+      then without2 (c UVec.// [(i,0)]) a (i+1)
+        else without2 c a (i+1)
+    else
+      if (c UVec.! i) < 0
+      then
+        if (a UVec.! i) < 0
+        then without2 (c UVec.// [(i,0)]) a (i+1)
+        else without2 c a (i+1)
+      else without2 c a (i+1)
+  else c
+
+
+get_max_alevel :: Clause -> Assignment -> Int
+-- determin k in conflict_analysis
+get_max_alevel (c,w,v) a = get_max_alevel2 c a 0 0
+
+get_max_alevel2 c a i akku =
+--  trace ("get_max_alevel: " Prelude.++ (show c) Prelude.++ (show a) Prelude.++ (show i) Prelude.++ (show akku)) $
+  if i < UVec.length c
+  then
+    let i' = c UVec.! i in
+    if a UVec.! ((abs i')-1) > akku
+    then get_max_alevel2 c a (i+1) (a UVec.! ((abs i')-1))
+    else get_max_alevel2 c a (i+1) akku
+  else akku
+
+
+only :: Assignment -> SignedVar -> Bool
+-- returns True if the Signed Literal is the only in the Clause
+only c (T l) =
+--  trace ("only1 " Prelude.++ (show c) Prelude.++ (show (T l)))  $
+  if (c UVec.! l) == 1
+  then only2 c l 0
+  else False
+
+only c (F l) =
+--  trace "only1b"  $
+  if (c UVec.! l) == (-1)
+  then only2 c l 0
+  else False
+
+
+only2 c l i =
+  if i < UVec.length c
+  then
+    if (c UVec.! i) == 0
+    then only2 c l (i+1)
+    else
+      if l==i
+      then  only3 c (i+1)
+      else False
+  else True
+
+only3 c i =
+  if i < UVec.length c
+  then
+    if (c UVec.! i) == 0
+    then only3 c (i+1)
+    else False
+  else True
+
+
+filter_al :: Clause -> Assignment -> Int -> Assignment
+-- unassigns all literal from c that have in a an alevel < l
+filter_al (c,w,v) a l =
+--  trace ("filter1: " Prelude.++ (show c) Prelude.++ (show a)) $ 
+  let c' = assfromClause (c,w,v) (assignment_size a) in
+  filter_al2 c' a l 0
+
+filter_al2 :: Assignment -> Assignment -> Int -> Int -> Assignment
+filter_al2 c a l i =
+--  trace ("filter2: " Prelude.++ (show c) Prelude.++ (show a)) $ 
+  if i < assignment_size c
+  then
+     if (abs (a UVec.!i)) < l
+     then
+       let c' = c UVec.// [(i,0)] in
+       filter_al2 c' a l (i+1)
+     else filter_al2 c a l (i+1)
+  else c
+
 

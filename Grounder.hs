@@ -172,8 +172,8 @@ instance Substitutable Term where
   applySubs m (Identifier x) = (Identifier x)
   applySubs m (Variable x) =
               case lookup (Variable x) m of
-                Just y -> y
-                Nothing -> (Variable x)
+                Just y  -> y
+                Nothing -> Variable x
 
   applySubs m (Addition x y) =
     let xsubs = applySubs m x
@@ -193,9 +193,7 @@ instance Substitutable Term where
     in
     (Multiplication xsubs ysubs)
 
-  applySubs m (Negation x) =
-    let xsubs = applySubs m x in
-    (Negation xsubs)
+  applySubs m (Negation x) = Negation $ applySubs m x 
 
   is_ground (Constant x) = True
   is_ground (Identifier x) = True

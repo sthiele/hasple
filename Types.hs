@@ -22,7 +22,10 @@ module Types (
    invert,
    Assignment,
    initialAssignment,
+   assignment_size,
    assign,
+   assign_trues,
+   assign_falses,
    unassign,
    backtrack,
    get_alevel,
@@ -33,16 +36,18 @@ module Types (
    trueatoms,
    falseatoms,
    nonfalseatoms,
-   Clause,
-   joinClauses,
-   clauseWithoutSL,
-   get_max_alevel,
-   only,
-   RES(..),
-   resolve,
-   get_sigma,
-   filter_al,
-   is_included
+--   Clause,
+--   conflict_resolution,
+--   fromCClause,
+--   joinClauses,
+--   clauseWithoutSL,
+--   get_max_alevel,
+--   only,
+--   RES(..),
+--   resolve,
+--   get_sigma,
+--   filter_al,
+--   is_included
 ) where
 
 -- {-# LANGUAGE MagicHash #-}
@@ -50,6 +55,7 @@ module Types (
 
 import ASP
 import SPVar
+--import qualified NGS as NGS
 import Data.List (nub, delete)
 import Data.Vector.Unboxed as Vector
 import Debug.Trace
@@ -76,6 +82,8 @@ type Assignment = Vector Int
 initialAssignment :: Int -> Assignment
 initialAssignment l = fromList [ 0 | x <- [1..l]] 
 
+assignment_size :: Assignment -> Int
+assignment_size a = Vector.length a
 
 assign :: Assignment -> SignedVar -> Int -> Assignment
 assign a (T l) dl = a // [(l,dl)]
@@ -155,357 +163,14 @@ nonfalseatoms a spvars = Prelude.concatMap atomsfromvar (Prelude.map (get_lit sp
 
 
 -- -----------------------------------------
+assign_trues :: Assignment -> [SVar] -> Assignment
+assign_trues a [] = a
+assign_trues a (v:vs) = assign_trues (assign a (T v) 1) vs
 
-type Clause = ((Vector Int), Int, Int)
-
-joinClauses :: Clause -> Clause -> Clause
-joinClauses c1 c2 = joinClauses2 c1 c2 0
-joinClauses2 (c1,w1,v1) (c2,w2,v2) i =
-  if i < Vector.length c1
-  then
-    if (c2!i) /= 0
-    then joinClauses2 ((c1 // [(i,(c2!i))]),w1,v1) (c2,w2,v2) (i+1)
-    else joinClauses2 (c1,w1,v1) (c2,w2,v2) (i+1)
-  else (c1,w1,v1)
-
-
-without :: Assignment -> Assignment -> Assignment
-without c a = without2 c a 0
-without2 c a i =
-  if i < Vector.length c
-  then
-    if (c!i) > 0
-    then
-      if (a!i) > 0
-      then without2 (c // [(i,0)]) a (i+1)
-        else without2 c a (i+1)
-    else
-      if (c!i) < 0
-      then
-        if (a!i) < 0
-        then without2 (c // [(i,0)]) a (i+1)
-        else without2 c a (i+1)
-      else without2 c a (i+1)
-  else c
+assign_falses :: Assignment -> [SVar] -> Assignment
+assign_falses a [] = a
+assign_falses a (v:vs) = assign_falses (assign a (F v) 1) vs
 
 
 
-clauseWithoutSL :: Clause -> SignedVar -> Clause
-clauseWithoutSL (c,w,v) (T l) =
-  if (c ! l) > 0
-  then (unassign c l,w,v)
-  else (c,w,v)
-clauseWithoutSL (c,w,v) (F l) =
-  if (c ! l) < 0
-  then (unassign c l,w,v)
-  else (c,w,v)
-
-
-get_max_alevel :: Clause -> Assignment -> Int
--- determin k in conflict_analysis
-get_max_alevel (c,w,v) a = get_max_alevel2 c a 0 0
-
-get_max_alevel2 c a i akku =
-  trace ("get_max_a: " Prelude.++ (show c) Prelude.++ (show a) Prelude.++ (show i) Prelude.++ (show akku)) $
-  if i < Vector.length c
-  then
-    if c!i /= 0
-    then
-      if (a!i) > akku
-      then get_max_alevel2 c a (i+1) (a!i)
-      else get_max_alevel2 c a (i+1) akku
-    else
-      get_max_alevel2 c a (i+1) akku
-  else akku
-
-
-only :: Assignment -> SignedVar -> Bool
--- returns True if the Signed Literal is the only in the assignment
-only c (T l) =
-  if (c!l) == 1
-  then only2 c l 0
-  else False
-
-only c (F l) =
-  if (c!l) == (-1)
-  then only2 c l 0
-  else False
-
-
-only2 c l i =
-  if i < Vector.length c
-  then
-    if (c!i) == 0
-    then only2 c l (i+1)
-    else
-      if l==i
-      then  only3 c (i+1)
-      else False
-  else True
-
-only3 c i =
-  if i < Vector.length c
-  then
-    if (c!i) == 0
-    then only3 c (i+1)
-    else False
-  else True
-
-
-
-data RES = Res Assignment
-         | ResU Assignment Clause
-         | NIX
-         | NIXU Clause         
-         | CONF
-
-
-resolve :: Int -> Clause -> Assignment -> RES
-
-resolve_old al (c,v,w) a =
-  if v == w -- unit clause
-  then 
-    if (a!v > 0 && c!v > 0) || (a!v < 0 && c!v < 0)
-    then CONF
-    else
-      if c!v > 0 && a!v==0
-      then Res (assign a (F v) al)
-      else
-        if c!v < 0 && a!v==0
-        then Res (assign a (T v) al)
-        else NIX
-  else
-    if (a!v > 0 && c!v > 0) || (a!v < 0 && c!v < 0)            -- assigned
-    then updatewatch1 al (c,v,w) a
-    else
-      if (a!w > 0 && c!w > 0) || (a!w < 0 && c!w < 0)           -- assigned
-      then updatewatch2 al (c,v,w) a
-      else NIX
- 
-resolve al (c,v,w) a =
-  if v == w -- unit clause
-  then 
-    if (a!v > 0 && c!v > 0) || (a!v < 0 && c!v < 0)
-    then CONF
-    else
-      if c!v > 0 && a!v==0
-      then Res (assign a (F v) al)
-      else
-        if c!v < 0 && a!v==0
-        then Res (assign a (T v) al)
-        else NIX
-  else
-    if (a!v > 0 && c!v < 0) || (a!v < 0 && c!v > 0)            -- assigned
-    then NIX
-    else
-      if (a!w > 0 && c!w < 0) || (a!w < 0 && c!w > 0)           -- assigned
-      then NIX
-      else 
-        if a!v==0
-        then 
-          if a!w==0
-          then NIX
-          else updatewatch2 al (c,v,w) a
-        else updatewatch1 al (c,v,w) a
- 
-resolve_alt al (c,v,w) a =
-  if v == w -- unit clause
-  then
-    if c!v>0
-    then 
-      if a!v > 0
-      then CONF
-      else
-        if a!v==0
-        then Res (assign a (F v) al)
-        else NIX
-    else 
-      if a!v < 0
-      then CONF
-      else
-        if a!v==0
-        then Res (assign a (T v) al)
-        else NIX
-  else
-    if (c!v>0)
-    then
-      if (a!v > 0)             -- assigned
-      then updatewatch1 al (c,v,w) a
-      else
-        if (a!w > 0 && c!w > 0) || (a!w < 0 && c!w < 0)           -- assigned
-        then updatewatch2 al (c,v,w) a
-        else NIX
-    else
-      if (a!v > 0)            -- assigned
-      then updatewatch1 al (c,v,w) a
-      else
-        if (a!w > 0 && c!w > 0) || (a!w < 0 && c!w < 0)           -- assigned
-        then updatewatch2 al (c,v,w) a
-        else NIX
- 
-
-updatewatch1 :: Int -> Clause -> Assignment -> RES 
-updatewatch1 al (c,v,w) a =
-  case new_watch1 (c,0,w) a of
-  Just cl -> if (a!w > 0 && c!w > 0) || (a!w < 0 && c!w < 0) -- assigned
-             then updatewatch2x al cl a
-             else NIXU cl
-  Nothing -> if (a!w > 0 && c!w > 0)                         -- assigned true
-             then CONF
-             else
-               if (a!w < 0 && c!w < 0)                       -- assigned false
-               then CONF
-               else
-                 if (a!w) == 0
-                 then
-                   if c!w > 0
-                   then Res (assign a (F w) al)
-                   else Res (assign a (T w) al)
-                 else NIX
-
-updatewatch2 al (c,v,w) a =
-  case new_watch2 (c,v,0) a of
-  Just cl -> NIXU cl
-  Nothing -> if (a!v) == 0
-             then
-               if c!v > 0
-               then Res (assign a (F v) al)
-               else Res (assign a (T v) al)
-             else NIX
-
-updatewatch2x al (c,v,w) a =
-  case new_watch2 (c,v,0) a of
-  Just cl -> NIXU cl
-  Nothing -> if (a!v) == 0
-             then
-               if c!v > 0
-               then ResU (assign a (F v) al) (c,v,w)
-               else ResU (assign a (T v) al) (c,v,w)
-             else NIXU (c,v,w)
-  
-new_watch1 :: Clause -> Assignment -> Maybe Clause
-new_watch1 (c,i,w) a =
-  if i < Vector.length c
-  then
-    if c!i==0 || i==w
-    then new_watch1 (c,(i+1),w) a
-    else
-      if (a!i > 0 && c!i > 0) || (a!i < 0 && c!i < 0)  -- assigned
-      then new_watch1 (c,(i+1),w) a 
-      else Just (c,i,w)       
-  else Nothing
-
-
-new_watch2 :: Clause -> Assignment -> Maybe Clause
-new_watch2 (c,v,i) a =
-  if i < Vector.length c
-  then
-    if c!i==0 || i==v
-    then new_watch2 (c,v,(i+1)) a
-    else
-      if (a!i > 0 && c!i > 0) || (a!i < 0 && c!i < 0)   -- assigned
-      then new_watch2 (c,v,(i+1)) a
-      else Just (c,v,i)
-  else Nothing  
-  
-
-get_last_assigned_var :: Assignment -> Assignment -> SVar
--- get last assigned variable in the list
-get_last_assigned_var c a  = get_last_assigned_var2 c a 0
-
-get_last_assigned_var2 c a n =
-  if n < (Vector.length c)
-  then
-    if (c!n) == 0
-    then get_last_assigned_var2 c a (n+1)
-    else
-       let val = a!n in
-       case val of
-         0 -> get_last_assigned_var2 c a (n+1)
-         _ -> get_last_assigned_var3 c a (n+1) (n, abs val)
-  else error "no more assigned variables"
-
-get_last_assigned_var3 c a n (akku,akkuval) =
-  if n < (Vector.length c)
-  then
-    if (c!n) == 0
-    then get_last_assigned_var3 c a (n+1) (akku,akkuval)
-    else
-       let val = a!n in
-       if abs val > akkuval
-       then get_last_assigned_var3 c a (n+1) (n, abs val)
-       else get_last_assigned_var3 c a (n+1) (akku,akkuval)
-   else akku
-
-
-get_sigma :: Clause -> Assignment -> (SignedVar, Assignment)
--- used in conflict_analysis
-get_sigma (c,w,v) a =
-  let last_assigned_var = get_last_assigned_var c a in
-  get_sigma2 c a last_assigned_var
-
-get_sigma2 c a i =
-  if i < Vector.length c
-  then
-  let prefix = unassign a i in
-    if (c!i) > 0
-    then
-      let sigma = (T i)
-          temp  = without c prefix
-      in
-      if only temp sigma
-      then (sigma, prefix)
-      else get_sigma2 c a (i+1)   -- try next sigma
-    else
-      if (c!i) < 0
-      then
-        let sigma = (F i)
-            temp  = without c prefix
-        in
-        if only temp sigma
-        then (sigma,prefix)
-        else get_sigma2 c a (i+1)  -- try next sigma
-      else get_sigma2 c a (i+1)    -- try next sigma
-  else error "no sigma found"
-
-
-
-filter_al :: Clause -> Assignment -> Int -> Assignment
--- unassigns all literal from c that have in a an alevel < l
-filter_al (c,w,v) a l = filter_al2 c a l 0
-filter_al2 :: Assignment -> Assignment -> Int -> Int -> Assignment
-filter_al2 c a l i =
-  if i < Vector.length c
-  then
-     if (abs (a!i)) < l
-     then
-       let c' = c // [(i,0)] in
-       filter_al2 c' a l (i+1)
-     else filter_al2 c a l (i+1)
-  else c
-
-
-
-is_included :: Clause -> Assignment -> Bool
-is_included (c,w,v) a = is_included2 c a 0
-is_included2 :: Assignment -> Assignment -> Int -> Bool
-is_included2 c a i =
-  if i < Vector.length c
-  then
-    if (a!i) > 0
-    then
-      if (c!i) < 0
-      then False
-      else is_included2 c a (i+1)
-    else
-      if (a!i) < 0
-      then
-        if (c!i) > 0
-        then False
-        else is_included2 c a (i+1)
-      else -- (a!i) == 0
-        if (c!i) == 0
-        then is_included2 c a (i+1)
-        else False
-  else True
 
