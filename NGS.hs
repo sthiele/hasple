@@ -159,27 +159,112 @@ data RES = Res Assignment
          deriving Show
 
 
--- class Nogood s where
---   conflict_resolution :: NogoodStore -> s -> Assignment -> ALT -> (NogoodStore,SignedVar,Int)
---   reduceNogood :: s -> SignedVar -> s
---   is_satisfied :: s -> Assignment -> Bool
---   resolve :: Int -> Clause -> Assignment -> RES
+class (Eq s) => Nogood s where
+  resolve :: Int -> s -> Assignment -> RES
+  conflict_resolution :: NogoodStore -> s -> Assignment -> ALT -> (NogoodStore,SignedVar,Int)
+  reduceNogood :: s -> SignedVar -> s
+  is_satisfied :: s -> Assignment -> Bool
 
 -- 
 -- 
-type Clause = ((UVec.Vector Int), Int, Int)
--- 
--- instance Nogood Clause where
+data Clause = Clause (UVec.Vector Int) Int Int
+              deriving (Show,Eq)
+ 
+instance Nogood Clause where
 
-conflict_resolution :: NogoodStore -> Clause -> Assignment -> ALT -> (NogoodStore, SignedVar,Int)
-conflict_resolution ngs nogood a alt =
---  trace ("conflict_res1: " Prelude.++ (show nogood) Prelude.++ (show a)) $
---  trace ("ALT: " Prelude.++ (show alt)) $
-  let (ngs', sigma) = conflict_resolution2 ngs nogood a alt
-      reduced_nogood  = reduceNogood nogood sigma
-      k    = get_max_alevel reduced_nogood a
+--  resolve :: Int -> Clause -> Assignment -> RES
+  resolve al (Clause c v w) a =
+  --  trace ("resolve: " Prelude.++ (show c) Prelude.++ (show v) Prelude.++ (show w) ) $
+  --  trace ("a: " Prelude.++ (show a)) $
+    if v == w -- unit clause
+    then
+      let v' = (c UVec.!v) in 
+      if v' > 0 
+      then
+        if (a UVec.!(v'-1) > 0)
+        then CONF
+        else
+          if a UVec.!(v'-1)==0
+          then Res (assign a (F (v'-1)) al)
+          else NIX
+      else
+        if (a UVec.!((abs v')-1) < 0)
+        then CONF
+        else
+          if a UVec.!((abs v')-1)==0
+          then Res (assign a (T (abs (v')-1)) al)
+          else NIX
+  
+    else  -- non-unit clause
+      let v' = c UVec.!v in
+      if v' > 0
+      then
+        if (a UVec.!(v'-1) < 0)            -- assigned
+        then NIX
+        else
+          let w' = c UVec.!w in
+          if (a UVec.!((abs w')-1) > 0 && w' < 0) || (a UVec.!((abs w')-1) < 0 && w' > 0)           -- assigned
+          then NIX
+          else 
+            if a UVec.!(v'-1)==0
+            then 
+              if a UVec.!((abs w')-1)==0
+              then NIX
+              else updatewatch2 al (Clause c v w) a
+            else updatewatch1 al (Clause c v w) a
+      else
+        if (a UVec.!((abs v')-1) > 0)             -- assigned
+        then NIX
+        else
+          let w' = c UVec.!w in
+          if (a UVec.!((abs w')-1) > 0 && w' < 0) || (a UVec.!((abs w')-1) < 0 && w' > 0)           -- assigned
+          then NIX
+          else 
+            if a UVec.!((abs v')-1)==0
+            then 
+              if a UVec.!((abs w')-1)==0
+              then NIX
+              else updatewatch2 al (Clause c v w) a
+            else updatewatch1 al (Clause c v w) a
+ 
+
+  reduceNogood c l = reduceClause c l 
+
+--  conflict_resolution :: NogoodStore -> Clause -> Assignment -> ALT -> (NogoodStore, SignedVar,Int)
+  conflict_resolution ngs nogood a alt =
+  --  trace ("conflict_res1: " Prelude.++ (show nogood) Prelude.++ (show a)) $
+  --  trace ("ALT: " Prelude.++ (show alt)) $
+    let (ngs', sigma) = conflict_resolution2 ngs nogood a alt
+        reduced_nogood  = reduceNogood nogood sigma
+        k    = get_max_alevel reduced_nogood a
+    in
+    (ngs', sigma, k)
+
+
+  -- return true if the clause is satisfied by the assignment
+  is_satisfied c a = 
+    let c' = assfromClause c (assignment_size a) in 
+    is_sat2 c' a 0
+
+
+
+reduceClause :: Clause -> SignedVar -> Clause
+-- delete literal from the clause
+reduceClause (Clause c w v) (T l) =
+--  trace ("reduceNogood: " Prelude.++ (show c) Prelude.++ (show (T l))) $
+  let r  = UVec.toList c
+      r' = UVec.fromList [ x | x<-r, x/=(l+1) ]
   in
-  (ngs', sigma, k)
+  (Clause r' 0 ((UVec.length r')-1))
+
+reduceClause (Clause c w v) (F l) =
+--  trace ("reduceNogood: " Prelude.++ (show c) Prelude.++ (show (F l))) $
+  let r  = UVec.toList c
+      r' = UVec.fromList [ x | x<-r, x/=(-(l+1)) ]
+  in
+  (Clause r' 0 ((UVec.length r')-1))
+
+
 
 conflict_resolution2 :: NogoodStore -> Clause -> Assignment -> ALT -> (NogoodStore, SignedVar)
 conflict_resolution2 ngs nogood a alt =
@@ -210,27 +295,7 @@ conflict_resolution2 ngs nogood a alt =
 --    trace ("9: new_nogood:" Prelude.++ (show newnogood)) $
     conflict_resolution2 ngs newnogood prefix alt
 
-reduceNogood :: Clause -> SignedVar -> Clause
--- delete literal from the clause
-reduceNogood (c,w,v) (T l) =
---  trace ("reduceNogood: " Prelude.++ (show c) Prelude.++ (show (T l))) $
-  let r  = UVec.toList c
-      r' = UVec.fromList [ x | x<-r, x/=(l+1) ]
-  in
-  (r',0, (UVec.length r')-1)
 
-reduceNogood (c,w,v) (F l) =
---  trace ("reduceNogood: " Prelude.++ (show c) Prelude.++ (show (F l))) $
-  let r  = UVec.toList c
-      r' = UVec.fromList [ x | x<-r, x/=(-(l+1)) ]
-  in
-  (r',0, (UVec.length r')-1)
-
-is_satisfied :: Clause -> Assignment -> Bool
--- return true if the clause is satisfied by the assignment
-is_satisfied c a = 
-  let c' = assfromClause c (assignment_size a) in 
-  is_sat2 c' a 0
 
 is_sat2 :: Assignment -> Assignment -> Int -> Bool
 is_sat2 c a i =
@@ -255,88 +320,10 @@ is_sat2 c a i =
 
 
 
-resolve :: Int -> Clause -> Assignment -> RES
-
-resolve_old al (c,v,w) a =
-  if v == w -- unit clause
-  then 
-    if (a UVec.! v > 0 && c UVec.! v > 0) || (a UVec.! v < 0 && c UVec.! v < 0)
-    then CONF
-    else
-      if c UVec.! v > 0 && a UVec.!v==0
-      then Res (assign a (F v) al)
-      else
-        if c UVec.!v < 0 && a UVec.!v==0
-        then Res (assign a (T v) al)
-        else NIX
-  else
-    if (a UVec.!v > 0 && c UVec.!v > 0) || (a UVec.!v < 0 && c UVec.!v < 0)            -- assigned
-    then updatewatch1 al (c,v,w) a
-    else
-      if (a UVec.!w > 0 && c UVec.!w > 0) || (a UVec.!w < 0 && c UVec.!w < 0)           -- assigned
-      then updatewatch2 al (c,v,w) a
-      else NIX
- 
-resolve al (c,v,w) a =
---  trace ("resolve: " Prelude.++ (show c) Prelude.++ (show v) Prelude.++ (show w) ) $
---  trace ("a: " Prelude.++ (show a)) $
-  if v == w -- unit clause
-  then
-    let v' = (c UVec.!v) in 
-    if v' > 0 
-    then
-      if (a UVec.!(v'-1) > 0)
-      then CONF
-      else
-        if a UVec.!(v'-1)==0
-        then Res (assign a (F (v'-1)) al)
-        else NIX
-    else
-      if (a UVec.!((abs v')-1) < 0)
-      then CONF
-      else
-        if a UVec.!((abs v')-1)==0
-        then Res (assign a (T (abs (v')-1)) al)
-        else NIX
-
-  else  -- non-unit clause
-    let v' = c UVec.!v in
-    if v' > 0
-    then
-      if (a UVec.!(v'-1) < 0)            -- assigned
-      then NIX
-      else
-        let w' = c UVec.!w in
-        if (a UVec.!((abs w')-1) > 0 && w' < 0) || (a UVec.!((abs w')-1) < 0 && w' > 0)           -- assigned
-        then NIX
-        else 
-          if a UVec.!(v'-1)==0
-          then 
-            if a UVec.!((abs w')-1)==0
-            then NIX
-            else updatewatch2 al (c,v,w) a
-          else updatewatch1 al (c,v,w) a
-    else
-      if (a UVec.!((abs v')-1) > 0)             -- assigned
-      then NIX
-      else
-        let w' = c UVec.!w in
-        if (a UVec.!((abs w')-1) > 0 && w' < 0) || (a UVec.!((abs w')-1) < 0 && w' > 0)           -- assigned
-        then NIX
-        else 
-          if a UVec.!((abs v')-1)==0
-          then 
-            if a UVec.!((abs w')-1)==0
-            then NIX
-            else updatewatch2 al (c,v,w) a
-          else updatewatch1 al (c,v,w) a
- 
-
-
 updatewatch1 :: Int -> Clause -> Assignment -> RES 
-updatewatch1 al (c,v,w) a =
+updatewatch1 al (Clause c v w) a =
 --  trace ("update watch1 ")$
-  case new_watch1 (c,0,w) a 0 of
+  case new_watch1 (Clause c 0 w) a 0 of
   Just cl -> let w' = c UVec.!w in
              if (a UVec.!((abs w')-1) > 0 && w' > 0) || (a UVec.!((abs w')-1) < 0 && w' < 0) -- assigned
              then updatewatch2x al cl a
@@ -355,9 +342,9 @@ updatewatch1 al (c,v,w) a =
                    else Res (assign a (T ((abs w')-1)) al)
                  else NIX
 
-updatewatch2 al (c,v,w) a =
+updatewatch2 al (Clause c v w) a =
 --  trace ("update watch2 ")$
-  case new_watch2 (c,v,0) a 0 of
+  case new_watch2 (Clause c v 0) a 0 of
   Just cl -> NIXU cl
   Nothing -> let v'=c UVec.!v in
              if a UVec.!((abs v')-1) == 0
@@ -367,44 +354,44 @@ updatewatch2 al (c,v,w) a =
                else Res (assign a (T ((abs v')-1)) al)
              else NIX
 
-updatewatch2x al (c,v,w) a =
-  case new_watch2 (c,v,0) a 0 of
+updatewatch2x al (Clause c v w) a =
+  case new_watch2 (Clause c v 0) a 0 of
   Just cl -> NIXU cl
   Nothing -> let v'=c UVec.!v in
              if a UVec.!((abs v')-1) == 0
              then
                if v' > 0
-               then ResU (assign a (F (v'-1)) al) (c,v,w)
-               else ResU (assign a (T ((abs v')-1)) al) (c,v,w)
-             else NIXU (c,v,w)
+               then ResU (assign a (F (v'-1)) al) (Clause c v w)
+               else ResU (assign a (T ((abs v')-1)) al) (Clause c v w)
+             else NIXU (Clause c v w)
   
 new_watch1 :: Clause -> Assignment -> Int -> Maybe Clause
-new_watch1 (c,v,w) a i=
+new_watch1 (Clause c v w) a i=
 --  trace ("new_watch1 " Prelude.++ (show i)) $
   if i < UVec.length c
   then
     let i' = c UVec.!i in
     if i==w
-    then new_watch1 (c,v,w) a (i+1)
+    then new_watch1 (Clause c v w) a (i+1)
     else
       if (a UVec.!((abs i')-1) > 0 && i' >= 0) || (a UVec.!((abs i')-1) < 0 && i' < 0)  -- assigned
-      then new_watch1 (c,v,w) a (i+1)
-      else Just (c,i,w)       
+      then new_watch1 (Clause c v w) a (i+1)
+      else Just (Clause c i w)       
   else Nothing
 
 
 new_watch2 :: Clause -> Assignment -> Int -> Maybe Clause
-new_watch2 (c,v,w) a i =
+new_watch2 (Clause c v w) a i =
 --  trace ("new_watch2: " Prelude.++ (show i)) $
   if i < UVec.length c
   then
     let i' = c UVec.!i in
     if i==v
-    then new_watch2 (c,v,w) a (i+1)
+    then new_watch2 (Clause c v w) a (i+1)
     else
       if (a UVec.!((abs i')-1) > 0 && i' > 0) || (a UVec.!((abs i')-1) < 0 && i' < 0)   -- assigned
-      then new_watch2 (c,v,w) a (i+1)
-      else Just (c,v,i)
+      then new_watch2 (Clause c v w) a (i+1)
+      else Just (Clause c v i)
   else Nothing  
 
   
@@ -419,24 +406,24 @@ fromCClause spvars (t,f) =
       b        = UVec.fromList (tsvars' Prelude.++ fsvars'')
   in
 --  trace ("fromCClause: " Prelude.++ (show (t,f)) Prelude.++ (show b)) $
-  (b,0,(UVec.length b) -1)
+  (Clause b 0 ((UVec.length b) -1))
 
 
 assfromClause :: Clause -> Int -> Assignment
 assfromClause c i = assfromClause2 c (initialAssignment i) 0
 
 assfromClause2 :: Clause -> Assignment -> Int -> Assignment
-assfromClause2 (c,v,w) a i =
+assfromClause2 (Clause c v w) a i =
   if i < UVec.length c
   then
     let i' = c UVec.!i in
     if i' > 0
     then
       let a' = assign a (T (i'-1)) 1 in
-      assfromClause2 (c,v,w) a' (i+1)
+      assfromClause2 (Clause c v w) a' (i+1)
     else
       let a' = assign a (F (abs (i')-1)) 1 in
-      assfromClause2 (c,v,w) a' (i+1)
+      assfromClause2 (Clause c v w) a' (i+1)
   else a
 
 
@@ -510,9 +497,9 @@ get_antecedent ngs sigma prefix =
 
 
 joinClauses :: Clause -> Clause -> Clause
-joinClauses (c1,w1,v1) (c2,w2,v2) =
+joinClauses (Clause c1 w1 v1) (Clause c2 w2 v2) =
   let c = UVec.fromList $ nub ((UVec.toList c1) Prelude.++ (UVec.toList c2)) in
-  (c,0,(UVec.length c) -1)
+  (Clause c 0 ((UVec.length c) -1))
 
 
 
@@ -538,7 +525,7 @@ without2 c a i =
 
 get_max_alevel :: Clause -> Assignment -> Int
 -- determin k in conflict_analysis
-get_max_alevel (c,w,v) a = get_max_alevel2 c a 0 0
+get_max_alevel (Clause c w v) a = get_max_alevel2 c a 0 0
 
 get_max_alevel2 c a i akku =
 --  trace ("get_max_alevel: " Prelude.++ (show c) Prelude.++ (show a) Prelude.++ (show i) Prelude.++ (show akku)) $
@@ -588,9 +575,9 @@ only3 c i =
 
 filter_al :: Clause -> Assignment -> Int -> Assignment
 -- unassigns all literal from c that have in a an alevel < l
-filter_al (c,w,v) a l =
+filter_al c a l =
 --  trace ("filter1: " Prelude.++ (show c) Prelude.++ (show a)) $ 
-  let c' = assfromClause (c,w,v) (assignment_size a) in
+  let c' = assfromClause c (assignment_size a) in
   filter_al2 c' a l 0
 
 filter_al2 :: Assignment -> Assignment -> Int -> Int -> Assignment
