@@ -76,3 +76,5 @@ cyclic:: Atom -> PDG -> Bool
 cyclic a g =
   let scc_a = scc a g in
   not (null scc_a)
+
+

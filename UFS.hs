@@ -28,75 +28,44 @@ import Data.List (nub, intersect, (\\))
 -- import Debug.Trace
 
 
-ufs_check ::
- [Rule]         -- program
-  -> Assignment 
-  -> SymbolTable
-  -> [Atom]     -- possibly unfounded set
-  -> [Atom]
--- returns a set unfounded atoms
+ufs_check :: [Rule] -> Assignment -> SymbolTable -> [Atom] -> [Atom]
+-- checks the current unfounded set (u) and if neccessary recomputes a set of unfounded atoms
 ufs_check prg a st u =
   if null (u \\ (falseatoms a st))
   then unfounded_set prg a st 
   else u \\ (falseatoms a st)
 
 
-
-get_scope :: [Rule] -> SPC -> SymbolTable -> Assignment -> [Atom]
-get_scope p spc spvars assig =
-  let s = collect_nonfalse_cyclic_atoms assig spvars p spc in
-  extend_scope p assig spvars spc s 
-
-  
-collect_nonfalse_cyclic_atoms :: Assignment -> SymbolTable -> [Rule] -> SPC -> [Atom]
--- return the atoms which have a positive cyclic dependency on themself and are not assigned as False
-collect_nonfalse_cyclic_atoms a spvars p spc =
-  let non_false_atoms = nonfalseatoms a spvars  in
-  [ atom | atom <- non_false_atoms, elem (source atom spc) (BLit [PAtom __conflict]:falselits a spvars) ]
-
-
-extend_scope :: [Rule] -> Assignment -> SymbolTable -> SPC -> [Atom]  -> [Atom]
--- extend the scope s with atoms that depend on s until a fixpoint is reached
-extend_scope p a spvars spc s =
-  let
-    temp = (nonfalseatoms a spvars) \\ s                    -- remaining nonfalse atoms not in s
-    t    = [ atom | atom <- temp, (intersect (source_pos atom spc) (intersect (scc atom (pos_dep_graph p)) s)) /= [] ]
-  in
-  if null t
-  then s
-  else extend_scope p a spvars spc (s++t)
-
-
 unfounded_set :: [Rule] -> Assignment -> SymbolTable -> [Atom]
 -- returns an unfounded set for the program given a partial assignment
-unfounded_set p a spvars=
+unfounded_set p a st =
   let 
-      spc = initspc p
-      g   = pos_dep_graph p
-      s   = get_scope p spc spvars a 
+    spc = fromProgram p
+    g   = pos_dep_graph p
+    s   = get_scope p spc st a 
   in
-  loop_s p spc a spvars s
+  loop_s p spc a st s
 
 
 loop_s :: [Rule] -> SPC -> Assignment -> SymbolTable ->[Atom] -> [Atom]
 loop_s _ _ _ _ [] = []                                             -- no unfounded_set
 
-loop_s prg spc a spvars s =
+loop_s prg spc a st s =
   let u                  = head s
       eb                 = bodies2vars (external_bodies prg [u])
-      (spc',s',u',found) = loop_u prg spc a spvars s [u] u
+      (spc',s',u',found) = loop_u prg spc a st s [u] u
   in
   if found
   then u'
-  else loop_s prg spc' a spvars s'
+  else loop_s prg spc' a st s'
 
 
 loop_u :: [Rule] -> SPC -> Assignment -> SymbolTable -> [Atom] -> [Atom] -> Atom -> (SPC, [Atom], [Atom], Bool)
 loop_u _ spc _ _ s [] p = (spc, s, [], False)
 
-loop_u prg spc a spvars s u p =
+loop_u prg spc a st s u p =
   let eb = bodies2vars (external_bodies prg u)
-      af = falselits a spvars
+      af = falselits a st
   in
   if (intersect eb af)==eb
   then (spc, s, u, True)                                                        -- unfounded set found
@@ -112,10 +81,10 @@ loop_u prg spc a spvars s u p =
           u'             = u \\ remove
           s'             = s \\ remove
       in
-      loop_u prg spc' a spvars s' u' p
+      loop_u prg spc' a st s' u' p
     else
       let u' = u ++ (intersect pb (intersect scc_p s)) in
-      loop_u prg spc a spvars s u' p
+      loop_u prg spc a st s u' p
 
 
 shrink_u :: [Rule] -> SPC -> [Atom] ->  SPVar -> (SPC, [Atom])
@@ -128,4 +97,30 @@ shrink_u prg spc (q:qs) l =
     let (spcn,remove) = shrink_u prg spc qs l in
     (add_source spcn q l, (q:remove))
   else shrink_u prg spc qs l
+
+
+get_scope :: [Rule] -> SPC -> SymbolTable -> Assignment -> [Atom]
+get_scope p spc st a =
+  let s = collect_nonfalse_cyclic_atoms a st p spc in
+  extend_scope p a st spc s 
+
+  
+collect_nonfalse_cyclic_atoms :: Assignment -> SymbolTable -> [Rule] -> SPC -> [Atom]
+-- return the atoms which have a positive cyclic dependency on themself and are not assigned as False
+collect_nonfalse_cyclic_atoms a st p spc =
+  let non_false_atoms = nonfalseatoms a st in
+  [ atom | atom <- non_false_atoms, elem (source atom spc) (BLit [PAtom __conflict]:falselits a st) ]
+
+
+extend_scope :: [Rule] -> Assignment -> SymbolTable -> SPC -> [Atom]  -> [Atom]
+-- extend the scope s with atoms that depend on s until a fixpoint is reached
+extend_scope p a st spc s =
+  let
+    temp = (nonfalseatoms a st) \\ s                    -- remaining nonfalse atoms not in s
+    t    = [ atom | atom <- temp, (intersect (source_pos atom spc) (intersect (scc atom (pos_dep_graph p)) s)) /= [] ]
+  in
+  if null t
+  then s
+  else extend_scope p a st spc (s++t)
+
 

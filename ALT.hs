@@ -16,31 +16,49 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module ALT (
-  ALT,
+  DLT,
   al2dl,
   dl2al,
-  albacktrack
+  albacktrack,
+  get_dliteral,
+  dlbacktrack,
 ) where
 
-import Debug.Trace
+import Types
 
 
-type ALT = [(Int,Int)]                                                                   -- AssignmentLevelTracker
--- maps assignment level to decision level
+type DLT = [(Int, Int, SignedVar)]                                                   -- DLT
+-- maps decision level to decision literal
 
-al2dl :: ALT -> Int -> Int
-al2dl ((al1,dl1):rest) al =
+get_dliteral :: DLT  -> Int -> SignedVar
+
+get_dliteral ((al1,dl1,sl1):xs) l
+  | dl1 == l = sl1
+  | otherwise = get_dliteral xs l
+
+dlbacktrack :: DLT  -> Int -> DLT 
+-- backtracks the decision levels
+dlbacktrack ((al1,dl1,sl1):xs) l =
+  if dl1 < l
+  then ((al1,dl1,sl1):xs)
+  else dlbacktrack xs l
+
+
+al2dl :: DLT -> Int -> Int
+al2dl ((al1,dl1,sl1):rest) al =
   if al<al1
   then al2dl rest al
   else dl1
-
-dl2al :: ALT -> Int -> Int
-dl2al ((al1,dl1):rest) dl =
+-- 
+dl2al :: DLT -> Int -> Int
+dl2al ((al1,dl1,sl1):rest) dl =
   if dl==dl1
   then al1
   else dl2al rest dl
 
-albacktrack :: ALT -> Int -> ALT
-albacktrack alt l = [ (al,dl) | (al,dl) <- alt, dl < l ]
-
+albacktrack :: DLT -> Int -> DLT 
+albacktrack ((al1,dl1,sl1):xs) l =
+  if dl1 < l
+  then ((al1,dl1,sl1):xs)
+  else albacktrack xs l
 

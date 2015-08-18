@@ -57,21 +57,6 @@ transforms cclauses st = map (NGS.fromCClause st) cclauses
 -- Conflict Driven Nogood Learning - Enumeration
 
 
-type DLT = [(Int,SignedVar)]                                                              -- DecisionLiteralTracker
--- maps decision level to decision literal
-
-get_dliteral :: DLT -> Int -> SignedVar
-
-get_dliteral ((dl1,sl1):xs) l
-  | dl1 == l = sl1
-  | otherwise = get_dliteral xs l
-
-dlbacktrack :: DLT -> Int -> DLT
--- backtracks the decision levels
-dlbacktrack dlt l = [ (dl,sl) | (dl,sl) <- dlt, dl < l ]
-
-
-
 data TSolver = TSolver { 
                          program                  :: [Rule]          -- the program
                        , symboltable              :: SymbolTable     --
@@ -80,24 +65,22 @@ data TSolver = TSolver {
                        , blocked_level            :: Int             -- the blocked level
                        , assignment_level         :: Int             -- the assignment level
                        , assignment               :: Assignment      -- an assignment
-                       , dliteral_tracker         :: DLT
-                       , assignment_level_tracker :: ALT
+                       , dltracker                :: DLT
                        , get_unfounded_set        :: [Atom]          -- unfounded atoms
                        , conf                     :: Bool            -- is the state of the solver in conflict
                        } deriving (Show, Eq)
 
 set_program :: [Rule] -> TSolver -> TSolver
-set_program p                    (TSolver _ st ngs dl bl al a dlt alt u c) = (TSolver p st ngs dl bl al a dlt alt u c) 
-set_symboltable st               (TSolver p _      ngs dl bl al a dlt alt u c) = (TSolver p st ngs dl bl al a dlt alt u c) 
-set_boocons ngs                  (TSolver p st _   dl bl al a dlt alt u c) = (TSolver p st ngs dl bl al a dlt alt u c) 
-set_decision_level dl            (TSolver p st ngs _  bl al a dlt alt u c) = (TSolver p st ngs dl bl al a dlt alt u c) 
-set_blocked_level bl             (TSolver p st ngs dl _  al a dlt alt u c) = (TSolver p st ngs dl bl al a dlt alt u c) 
-set_assignment_level al          (TSolver p st ngs dl bl _  a dlt alt u c) = (TSolver p st ngs dl bl al a dlt alt u c) 
-set_assignment a                 (TSolver p st ngs dl bl al _ dlt alt u c) = (TSolver p st ngs dl bl al a dlt alt u c) 
-set_dliteral_tracker dlt         (TSolver p st ngs dl bl al a _   alt u c) = (TSolver p st ngs dl bl al a dlt alt u c) 
-set_assignment_level_tracker alt (TSolver p st ngs dl bl al a dlt _   u c) = (TSolver p st ngs dl bl al a dlt alt u c) 
-set_unfounded_set u              (TSolver p st ngs dl bl al a dlt alt _ c) = (TSolver p st ngs dl bl al a dlt alt u c) 
-set_conf c                       (TSolver p st ngs dl bl al a dlt alt u _) = (TSolver p st ngs dl bl al a dlt alt u c) 
+set_program p                    (TSolver _ st ngs dl bl al a tr u c) = (TSolver p st ngs dl bl al a tr u c) 
+set_symboltable st               (TSolver p _  ngs dl bl al a tr u c) = (TSolver p st ngs dl bl al a tr u c) 
+set_boocons ngs                  (TSolver p st _   dl bl al a tr u c) = (TSolver p st ngs dl bl al a tr u c) 
+set_decision_level dl            (TSolver p st ngs _  bl al a tr u c) = (TSolver p st ngs dl bl al a tr u c) 
+set_blocked_level bl             (TSolver p st ngs dl _  al a tr u c) = (TSolver p st ngs dl bl al a tr u c) 
+set_assignment_level al          (TSolver p st ngs dl bl _  a tr u c) = (TSolver p st ngs dl bl al a tr u c) 
+set_assignment a                 (TSolver p st ngs dl bl al _ tr u c) = (TSolver p st ngs dl bl al a tr u c) 
+set_dltracker tr                 (TSolver p st ngs dl bl al a _  u c) = (TSolver p st ngs dl bl al a tr u c) 
+set_unfounded_set u              (TSolver p st ngs dl bl al a tr _ c) = (TSolver p st ngs dl bl al a tr u c) 
+set_conf c                       (TSolver p st ngs dl bl al a tr u _) = (TSolver p st ngs dl bl al a tr u c) 
  
 
 anssets :: [Rule] -> [[Atom]]
@@ -108,24 +91,20 @@ anssets prg  =
       st     = Vector.fromList (get_vars cngs)
       png    = transforms cngs st
       ngs    = NGS.new_ngs png []
-      l      = length st
+      l      = Vector.length st
       dl     = 1
       bl     = 1
       al     = 1
       a      = initialAssignment l
-      dlt    = []
-      alt    = [(1,1)]
+      tr     = []
       u      = []
       conf   = False
-      solver = TSolver prg st ngs dl bl al a dlt alt u conf
+      solver = TSolver prg st ngs dl bl al a tr u conf
   in
   cdnl_enum solver s
 
 
-cdnl_enum ::
-  TSolver                  -- the solver
-  -> Int                   -- s
-  -> [[Atom]]              -- answer sets
+cdnl_enum :: TSolver -> Int -> [[Atom]]
 cdnl_enum solver s =
   let
     solverp = set_unfounded_set [] solver 
@@ -140,10 +119,9 @@ cdnl_enum solver s =
       cdnl_enum solver'' s
   else                                                                                              -- no conflict
     let 
-      a'         = assignment               solver'
-      al'        = assignment_level         solver'
-      dlt        = dliteral_tracker         solver'
-      alt        = assignment_level_tracker solver'
+      a'         = assignment       solver'
+      al'        = assignment_level solver'
+      tr         = dltracker        solver'
       selectable = get_unassigned a' 
     in
     if null selectable
@@ -152,16 +130,14 @@ cdnl_enum solver s =
       then [nub (trueatoms a' (symboltable solver'))]                                                -- last answer set
       else                                                                  -- backtrack for remaining answer sets
         let dl           = decision_level solver'
-            sigma_d      = get_dliteral dlt dl
-            dlt'         = dlbacktrack dlt dl
-            cal          = dl2al alt dl
-            alt'         = albacktrack alt dl
+            sigma_d      = get_dliteral tr dl
+            cal          = dl2al tr dl
+            tr'          = dlbacktrack tr dl
             a''          = backtrack a' cal
             a'''         = assign a'' (invert sigma_d) cal                         -- invert last decision literal
             solver''     = set_decision_level         (dl-1) $
                            set_blocked_level          (dl-1) $
-                           set_dliteral_tracker         dlt' $
-                           set_assignment_level_tracker alt' $
+                           set_dltracker                tr'  $
                            set_assignment_level      (cal+1) $ 
                            set_assignment a'''         solver'
             remaining_as = cdnl_enum solver'' (s-1)
@@ -170,12 +146,10 @@ cdnl_enum solver s =
     else                                                                                         -- select new lit
       let dl           = decision_level solver'
           sigma_d      = head selectable
-          dlt'         = ((dl+1),(T sigma_d)):dlt
-          alt'         = (al',dl+1):alt
+          tr'          = (al',dl+1,(T sigma_d)):tr
           a''          = assign a' (T sigma_d) al'
           solver''     = set_decision_level         (dl+1) $
-                         set_dliteral_tracker         dlt' $
-                         set_assignment_level_tracker alt' $
+                         set_dltracker                 tr' $
                          set_assignment_level      (al'+1) $
                          set_assignment a''          solver'
           remaining_as = cdnl_enum solver'' s
@@ -187,47 +161,45 @@ cdnl_enum solver s =
 conflict_handling :: TSolver -> TSolver
 -- should resolve the conflict learn a new maybe clause and backtrack the solver
 conflict_handling s =
-  let a   = assignment               s
-      bl  = blocked_level            s
-      dl  = decision_level           s
-      alt = assignment_level_tracker s
-      dlt = dliteral_tracker         s
+  let a   = assignment     s
+      bl  = blocked_level  s
+      dl  = decision_level s
+      tr  = dltracker      s
   in
   if bl < dl
   then                                                                         -- learn a new nogood and backtrack
-    let ngs     = boocons s 
-        (ngs', sigma_uip, alx) = conflict_analysis ngs a alt
+    let ngs                    = boocons s 
+        (ngs', sigma_uip, alx) = conflict_analysis ngs a tr
     in
     let                                                                                               -- backtrack
-        bt_dl   = al2dl alt alx
-        bt_al   = dl2al alt bt_dl
+        bt_dl   = al2dl tr alx
+        bt_al   = dl2al tr bt_dl
         a'      = assign (backtrack a bt_al) (invert sigma_uip) bt_al
-        dlt'    = dlbacktrack dlt bt_dl
-        alt'    = albacktrack alt bt_dl
+        tr'     = dlbacktrack tr bt_dl
     in 
     set_decision_level      (bt_dl-1) $
-    set_dliteral_tracker         dlt' $
-    set_assignment_level_tracker alt' $
+    set_dltracker                 tr' $
     set_assignment_level    (bt_al+1) $ 
     set_assignment                 a' $ 
     set_boocons                  ngs' $               
     set_conf                    False s 
   else                                                                                                -- backtrack
-    let sigma_d = get_dliteral dlt dl
+    let 
+        sigma_d = get_dliteral tr dl
         dl'     = dl-1
-        bt_al   = dl2al alt dl'
+        bt_al   = dl2al tr dl'
         a'      = assign (backtrack a bt_al) (invert sigma_d) bt_al
-        alt'    = albacktrack alt dl'
+        tr'     = albacktrack tr dl'
     in
     set_decision_level            dl' $
     set_blocked_level             dl' $
-    set_assignment_level_tracker alt' $
+    set_dltracker                 tr' $
     set_assignment_level        bt_al $ 
     set_assignment                 a' $              
     set_conf                    False s
     
 
-conflict_analysis :: NGS.NogoodStore -> Assignment -> ALT -> (NGS.NogoodStore, SignedVar, Int)
+conflict_analysis :: NGS.NogoodStore -> Assignment -> DLT -> (NGS.NogoodStore, SignedVar, Int)
 conflict_analysis ngs a alt =
   let conflict_nogood = NGS.get_ng ngs
       ngs'            = NGS.rewind ngs
@@ -239,10 +211,12 @@ conflict_analysis ngs a alt =
 -- Propagation
 
 tight :: [Rule] -> Bool  -- TODO implement tightness check
+-- return true if the program is tight
 tight p = False
 
 
 nogood_propagation :: TSolver -> TSolver
+-- propagate nogoods
 nogood_propagation s =
   let
     prg = program s 
@@ -285,6 +259,7 @@ nogood_propagation s =
 
 
 local_propagation :: TSolver -> TSolver
+-- itterate over the nogoods and try to resolve them until nothing new can be infered or a conflict is found
 local_propagation s =
   if conf s
   then s
@@ -300,15 +275,11 @@ local_propagation s =
 
 
 choose_next_ng :: TSolver -> TSolver
-choose_next_ng s =
---  if conf s
---  then s
---  else 
-  set_boocons (NGS.choose $ boocons s) s
+choose_next_ng s = set_boocons (NGS.choose $ boocons s) s
 
 
 resolve :: TSolver -> TSolver
--- is only called if conf is false
+-- resolve the current no good
 resolve s =
     let al = (assignment_level s)
         ng = NGS.get_ng (boocons s)

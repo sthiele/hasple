@@ -38,7 +38,6 @@ import SPVar
 import Types
 import ALT
 import Data.Vector as BVec 
--- (snoc , (++), length, drop, take) as BVec
 import Data.Vector.Unboxed as UVec
 import Data.List (nub, delete)
 import Debug.Trace
@@ -64,10 +63,12 @@ data Store a = Store { program_nogoods :: BVec.Vector a -- program nogoods
 
 
 new_ngs :: [a] -> [a] -> Store a
+-- create a new store
 new_ngs png lng = Store (BVec.fromList png) (BVec.fromList lng) (BVec.fromList []) (BVec.fromList []) (-1)
 
 
 ngs_size :: Store a -> Int
+-- return the size of the store
 ngs_size (Store png lng _ _ _) = (BVec.length png) + (BVec.length lng)
 
 
@@ -161,7 +162,7 @@ data RES = Res Assignment
 
 class (Eq s) => Nogood s where
   resolve :: Int -> s -> Assignment -> RES
-  conflict_resolution :: NogoodStore -> s -> Assignment -> ALT -> (NogoodStore,SignedVar,Int)
+  conflict_resolution :: NogoodStore -> s -> Assignment -> DLT -> (NogoodStore,SignedVar,Int)
   reduceNogood :: s -> SignedVar -> s
   is_satisfied :: s -> Assignment -> Bool
 
@@ -230,10 +231,10 @@ instance Nogood Clause where
 
   reduceNogood c l = reduceClause c l 
 
---  conflict_resolution :: NogoodStore -> Clause -> Assignment -> ALT -> (NogoodStore, SignedVar,Int)
+--  conflict_resolution :: NogoodStore -> Clause -> Assignment -> DLT -> (NogoodStore, SignedVar,Int)
   conflict_resolution ngs nogood a alt =
   --  trace ("conflict_res1: " Prelude.++ (show nogood) Prelude.++ (show a)) $
-  --  trace ("ALT: " Prelude.++ (show alt)) $
+  --  trace ("DLT: " Prelude.++ (show alt)) $
     let (ngs', sigma) = conflict_resolution2 ngs nogood a alt
         reduced_nogood  = reduceNogood nogood sigma
         k    = get_max_alevel reduced_nogood a
@@ -266,7 +267,7 @@ reduceClause (Clause c w v) (F l) =
 
 
 
-conflict_resolution2 :: NogoodStore -> Clause -> Assignment -> ALT -> (NogoodStore, SignedVar)
+conflict_resolution2 :: NogoodStore -> Clause -> Assignment -> DLT -> (NogoodStore, SignedVar)
 conflict_resolution2 ngs nogood a alt =
 --  trace ("conflict_res2: " Prelude.++ (show nogood) Prelude.++ (show a)) $
   let poopi           = assfromClause nogood (assignment_size a)
@@ -396,10 +397,10 @@ new_watch2 (Clause c v w) a i =
 
   
 fromCClause :: SymbolTable -> CClause -> Clause
-fromCClause spvars (t,f) =
-  let l        = Prelude.length spvars
-      tsvars   = Prelude.map (get_svarx spvars) t
-      fsvars   = Prelude.map (get_svarx spvars) f
+fromCClause st (t,f) =
+  let l        = BVec.length st
+      tsvars   = Prelude.map (get_svarx st) t
+      fsvars   = Prelude.map (get_svarx st) f
       tsvars'  = Prelude.map (+1) tsvars
       fsvars'  = Prelude.map (+1) fsvars
       fsvars'' = Prelude.map (*(-1)) fsvars'

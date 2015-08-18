@@ -17,7 +17,7 @@
 
 module SPC (
     SPC(..),
-    initspc,
+    fromProgram,
     add_source,
     source,
     source_pos,
@@ -30,13 +30,10 @@ import qualified Data.Map as Map
 
 type SPC = (Map.Map Atom SPVar)                                               -- SourcePointerCollection
 
-emptyspc :: SPC
--- returns an empyt SPC
-emptyspc = Map.empty
 
-
-initspc :: [Rule] -> SPC
-initspc p =
+fromProgram :: [Rule] -> SPC
+-- create a source pointer collection from a program
+fromProgram p =
   let atoms = atoms_p p
       g     = pos_dep_graph p
       spc   = Map.empty
