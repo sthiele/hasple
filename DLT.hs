@@ -15,7 +15,7 @@
 -- You should have received a copy of the GNU General Public License
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
-module ALT (
+module DLT (
   DLT,
   al2dl,
   dl2al,

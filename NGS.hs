@@ -36,7 +36,7 @@ module NGS (
 
 import SPVar
 import Types
-import ALT
+import DLT
 import Data.Vector as BVec 
 import Data.Vector.Unboxed as UVec
 import Data.List (nub, delete)

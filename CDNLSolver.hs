@@ -23,7 +23,7 @@ import ASP
 import SPVar
 import Types
 import SPC
-import ALT
+import DLT
 import qualified NGS
 import UFS
 import Data.List (sort, nub, intersect, (\\), delete )
