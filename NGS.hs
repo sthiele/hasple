@@ -268,14 +268,14 @@ reduceClause (Clause c w v) (F l) =
 
 
 conflict_resolution2 :: NogoodStore -> Clause -> Assignment -> DLT -> (NogoodStore, SignedVar)
-conflict_resolution2 ngs nogood a alt =
+conflict_resolution2 ngs nogood a dlt =
 --  trace ("conflict_res2: " Prelude.++ (show nogood) Prelude.++ (show a)) $
   let poopi           = assfromClause nogood (assignment_size a)
       (sigma, prefix) = get_implicationLiteral poopi a
       reduced_nogood  = reduceNogood nogood sigma
       alevel_sigma    = get_alevel a sigma 
-      dl              = al2dl alt alevel_sigma
-      al              = dl2al alt dl 
+      dl              = al2dl dlt alevel_sigma
+      al              = dl2al dlt dl 
   in
 --  trace ("sigma: " Prelude.++ (show sigma)) $
 --  trace ("prefix: " Prelude.++ (show prefix)) $
@@ -294,7 +294,7 @@ conflict_resolution2 ngs nogood a alt =
         newnogood   = joinClauses reduced_nogood reduced_eps
     in
 --    trace ("9: new_nogood:" Prelude.++ (show newnogood)) $
-    conflict_resolution2 ngs newnogood prefix alt
+    conflict_resolution2 ngs newnogood prefix dlt
 
 
 

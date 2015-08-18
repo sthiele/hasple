@@ -19,7 +19,6 @@ module DLT (
   DLT,
   al2dl,
   dl2al,
-  albacktrack,
   get_dliteral,
   dlbacktrack,
 ) where
@@ -28,37 +27,33 @@ import Types
 
 
 type DLT = [(Int, Int, SignedVar)]                                                   -- DLT
--- maps decision level to decision literal
+-- maps assignment level to decision level and decision literal
 
 get_dliteral :: DLT  -> Int -> SignedVar
-
+-- return the decision literal at a level
 get_dliteral ((al1,dl1,sl1):xs) l
   | dl1 == l = sl1
   | otherwise = get_dliteral xs l
 
+  
 dlbacktrack :: DLT  -> Int -> DLT 
--- backtracks the decision levels
+-- backtracks to a decision level
 dlbacktrack ((al1,dl1,sl1):xs) l =
   if dl1 < l
   then ((al1,dl1,sl1):xs)
   else dlbacktrack xs l
 
-
+  
 al2dl :: DLT -> Int -> Int
 al2dl ((al1,dl1,sl1):rest) al =
   if al<al1
   then al2dl rest al
   else dl1
--- 
+
+  
 dl2al :: DLT -> Int -> Int
 dl2al ((al1,dl1,sl1):rest) dl =
   if dl==dl1
   then al1
   else dl2al rest dl
-
-albacktrack :: DLT -> Int -> DLT 
-albacktrack ((al1,dl1,sl1):xs) l =
-  if dl1 < l
-  then ((al1,dl1,sl1):xs)
-  else albacktrack xs l
 

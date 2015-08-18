@@ -65,7 +65,7 @@ data TSolver = TSolver {
                        , blocked_level            :: Int             -- the blocked level
                        , assignment_level         :: Int             -- the assignment level
                        , assignment               :: Assignment      -- an assignment
-                       , dltracker                :: DLT
+                       , dltracker                :: DLT             -- the decision level tracker
                        , get_unfounded_set        :: [Atom]          -- unfounded atoms
                        , conf                     :: Bool            -- is the state of the solver in conflict
                        } deriving (Show, Eq)
@@ -189,7 +189,7 @@ conflict_handling s =
         dl'     = dl-1
         bt_al   = dl2al tr dl'
         a'      = assign (backtrack a bt_al) (invert sigma_d) bt_al
-        tr'     = albacktrack tr dl'
+        tr'     = dlbacktrack tr dl'
     in
     set_decision_level            dl' $
     set_blocked_level             dl' $
