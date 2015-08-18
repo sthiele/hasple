@@ -16,17 +16,18 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module SPC (
-    SPC(..),
-    fromProgram,
-    add_source,
-    source,
-    source_pos,
-  ) where
+  SPC,
+  fromProgram,
+  add_source,
+  source,
+  source_pos,
+) where
 
 import ASP
 import PDG
 import SPVar
 import qualified Data.Map as Map
+
 
 type SPC = (Map.Map Atom SPVar)                                               -- SourcePointerCollection
 

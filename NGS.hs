@@ -34,12 +34,19 @@ module NGS (
    resolve,
 ) where
 
+import Prelude (($), (+), (-), (*), abs, error)
+import Data.Bool
+import Data.Int
+import Data.Maybe
+import Data.Eq
+import Data.Ord
+import Text.Show
 import SPVar
-import Types
+import Assignment as Ass
 import DLT
 import Data.Vector as BVec 
 import Data.Vector.Unboxed as UVec
-import Data.List (nub, delete)
+import Data.List as List
 import Debug.Trace
 
 -- little helper
@@ -175,8 +182,8 @@ instance Nogood Clause where
 
 --  resolve :: Int -> Clause -> Assignment -> RES
   resolve al (Clause c v w) a =
-  --  trace ("resolve: " Prelude.++ (show c) Prelude.++ (show v) Prelude.++ (show w) ) $
-  --  trace ("a: " Prelude.++ (show a)) $
+  --  trace ("resolve: " List.++ (show c) List.++ (show v) List.++ (show w) ) $
+  --  trace ("a: " List.++ (show a)) $
     if v == w -- unit clause
     then
       let v' = (c UVec.!v) in 
@@ -233,8 +240,8 @@ instance Nogood Clause where
 
 --  conflict_resolution :: NogoodStore -> Clause -> Assignment -> DLT -> (NogoodStore, SignedVar,Int)
   conflict_resolution ngs nogood a alt =
-  --  trace ("conflict_res1: " Prelude.++ (show nogood) Prelude.++ (show a)) $
-  --  trace ("DLT: " Prelude.++ (show alt)) $
+  --  trace ("conflict_res1: " List.++ (show nogood) List.++ (show a)) $
+  --  trace ("DLT: " List.++ (show alt)) $
     let (ngs', sigma) = conflict_resolution2 ngs nogood a alt
         reduced_nogood  = reduceNogood nogood sigma
         k    = get_max_alevel reduced_nogood a
@@ -244,7 +251,7 @@ instance Nogood Clause where
 
   -- return true if the clause is satisfied by the assignment
   is_satisfied c a = 
-    let c' = assfromClause c (assignment_size a) in 
+    let c' = assfromClause c (Ass.length a) in 
     is_sat2 c' a 0
 
 
@@ -252,14 +259,14 @@ instance Nogood Clause where
 reduceClause :: Clause -> SignedVar -> Clause
 -- delete literal from the clause
 reduceClause (Clause c w v) (T l) =
---  trace ("reduceNogood: " Prelude.++ (show c) Prelude.++ (show (T l))) $
+--  trace ("reduceNogood: " List.++ (show c) List.++ (show (T l))) $
   let r  = UVec.toList c
       r' = UVec.fromList [ x | x<-r, x/=(l+1) ]
   in
   (Clause r' 0 ((UVec.length r')-1))
 
 reduceClause (Clause c w v) (F l) =
---  trace ("reduceNogood: " Prelude.++ (show c) Prelude.++ (show (F l))) $
+--  trace ("reduceNogood: " List.++ (show c) List.++ (show (F l))) $
   let r  = UVec.toList c
       r' = UVec.fromList [ x | x<-r, x/=(-(l+1)) ]
   in
@@ -269,21 +276,21 @@ reduceClause (Clause c w v) (F l) =
 
 conflict_resolution2 :: NogoodStore -> Clause -> Assignment -> DLT -> (NogoodStore, SignedVar)
 conflict_resolution2 ngs nogood a dlt =
---  trace ("conflict_res2: " Prelude.++ (show nogood) Prelude.++ (show a)) $
-  let poopi           = assfromClause nogood (assignment_size a)
+--  trace ("conflict_res2: " List.++ (show nogood) List.++ (show a)) $
+  let poopi           = assfromClause nogood (Ass.length a)
       (sigma, prefix) = get_implicationLiteral poopi a
       reduced_nogood  = reduceNogood nogood sigma
       alevel_sigma    = get_alevel a sigma 
       dl              = al2dl dlt alevel_sigma
       al              = dl2al dlt dl 
   in
---  trace ("sigma: " Prelude.++ (show sigma)) $
---  trace ("prefix: " Prelude.++ (show prefix)) $
---  trace ("alevel_sigma: " Prelude.++ (show alevel_sigma)) $
---  trace ("dl: " Prelude.++ (show dl)) $
---  trace ("al: " Prelude.++ (show al)) $
+--  trace ("sigma: " List.++ (show sigma)) $
+--  trace ("prefix: " List.++ (show prefix)) $
+--  trace ("alevel_sigma: " List.++ (show alevel_sigma)) $
+--  trace ("dl: " List.++ (show dl)) $
+--  trace ("al: " List.++ (show al)) $
   let rhos            = filter_al nogood a al in
---  trace ("  rhos: " Prelude.++ (show rhos)) $
+--  trace ("  rhos: " List.++ (show rhos)) $
   if only rhos sigma
   then
     let ngs' = add_nogoods [nogood] ngs                                     -- add learned nogood
@@ -293,14 +300,15 @@ conflict_resolution2 ngs nogood a dlt =
         reduced_eps = reduceNogood epsilon (invert sigma) 
         newnogood   = joinClauses reduced_nogood reduced_eps
     in
---    trace ("9: new_nogood:" Prelude.++ (show newnogood)) $
+--    trace ("9: new_nogood:" List.++ (show newnogood)) $
     conflict_resolution2 ngs newnogood prefix dlt
 
 
 
 is_sat2 :: Assignment -> Assignment -> Int -> Bool
+-- return true if the assignment (c) is subsumed by the assignment a
 is_sat2 c a i =
-  if i < assignment_size c
+  if i < Ass.length c
   then
     if (a UVec.! i) > 0
     then
@@ -368,7 +376,7 @@ updatewatch2x al (Clause c v w) a =
   
 new_watch1 :: Clause -> Assignment -> Int -> Maybe Clause
 new_watch1 (Clause c v w) a i=
---  trace ("new_watch1 " Prelude.++ (show i)) $
+--  trace ("new_watch1 " List.++ (show i)) $
   if i < UVec.length c
   then
     let i' = c UVec.!i in
@@ -383,7 +391,7 @@ new_watch1 (Clause c v w) a i=
 
 new_watch2 :: Clause -> Assignment -> Int -> Maybe Clause
 new_watch2 (Clause c v w) a i =
---  trace ("new_watch2: " Prelude.++ (show i)) $
+--  trace ("new_watch2: " List.++ (show i)) $
   if i < UVec.length c
   then
     let i' = c UVec.!i in
@@ -399,19 +407,19 @@ new_watch2 (Clause c v w) a i =
 fromCClause :: SymbolTable -> CClause -> Clause
 fromCClause st (t,f) =
   let l        = BVec.length st
-      tsvars   = Prelude.map (get_svarx st) t
-      fsvars   = Prelude.map (get_svarx st) f
-      tsvars'  = Prelude.map (+1) tsvars
-      fsvars'  = Prelude.map (+1) fsvars
-      fsvars'' = Prelude.map (*(-1)) fsvars'
-      b        = UVec.fromList (tsvars' Prelude.++ fsvars'')
+      tsvars   = List.map (get_svarx st) t
+      fsvars   = List.map (get_svarx st) f
+      tsvars'  = List.map (+1) tsvars
+      fsvars'  = List.map (+1) fsvars
+      fsvars'' = List.map (*(-1)) fsvars'
+      b        = UVec.fromList (tsvars' List.++ fsvars'')
   in
---  trace ("fromCClause: " Prelude.++ (show (t,f)) Prelude.++ (show b)) $
+--  trace ("fromCClause: " List.++ (show (t,f)) List.++ (show b)) $
   (Clause b 0 ((UVec.length b) -1))
 
 
 assfromClause :: Clause -> Int -> Assignment
-assfromClause c i = assfromClause2 c (initialAssignment i) 0
+assfromClause c i = assfromClause2 c (initAssignment i) 0
 
 assfromClause2 :: Clause -> Assignment -> Int -> Assignment
 assfromClause2 (Clause c v w) a i =
@@ -433,15 +441,15 @@ get_implicationLiteral :: Assignment -> Assignment -> (SignedVar, Assignment)
 -- return a implication literal (sigma) from c and a prefix of the assignment a
 -- s.t c\prefix = sigma
 get_implicationLiteral c a =
---  trace ("get_implicationLiteral: " Prelude.++ (show c) Prelude.++ (show a)) $
+--  trace ("get_implicationLiteral: " List.++ (show c) List.++ (show a)) $
   let last_assigned_var = get_last_assigned_var a 
       prefix            = unassign a last_assigned_var
   in
---  trace ("  test: " Prelude.++ (show last_assigned_var)) $
+--  trace ("  test: " List.++ (show last_assigned_var)) $
   if (c UVec.!last_assigned_var) /= 0
   then 
     let temp = without c prefix in
---    trace ("   wo: " Prelude.++ (show temp)) $
+--    trace ("   wo: " List.++ (show temp)) $
     if (c UVec.!last_assigned_var) > 0
     then
       let sigma =  (T last_assigned_var) in
@@ -484,7 +492,7 @@ get_antecedent :: NogoodStore -> SignedVar -> Assignment -> Clause
 -- given an implication literal (sigma) and a prefix return an antecedent (epsilon)
 -- s.t. epsilon\prefix = (invert sigma)
 get_antecedent ngs sigma prefix =
---    trace ("get_eps: " Prelude.++ (show sigma) Prelude.++ (show prefix)) $ 
+--    trace ("get_eps: " List.++ (show sigma) List.++ (show prefix)) $ 
   if NGS.can_choose ngs
   then
     let ngs' = choose ngs
@@ -499,7 +507,7 @@ get_antecedent ngs sigma prefix =
 
 joinClauses :: Clause -> Clause -> Clause
 joinClauses (Clause c1 w1 v1) (Clause c2 w2 v2) =
-  let c = UVec.fromList $ nub ((UVec.toList c1) Prelude.++ (UVec.toList c2)) in
+  let c = UVec.fromList $ nub ((UVec.toList c1) List.++ (UVec.toList c2)) in
   (Clause c 0 ((UVec.length c) -1))
 
 
@@ -529,7 +537,7 @@ get_max_alevel :: Clause -> Assignment -> Int
 get_max_alevel (Clause c w v) a = get_max_alevel2 c a 0 0
 
 get_max_alevel2 c a i akku =
---  trace ("get_max_alevel: " Prelude.++ (show c) Prelude.++ (show a) Prelude.++ (show i) Prelude.++ (show akku)) $
+--  trace ("get_max_alevel: " List.++ (show c) List.++ (show a) List.++ (show i) List.++ (show akku)) $
   if i < UVec.length c
   then
     let i' = c UVec.! i in
@@ -542,7 +550,7 @@ get_max_alevel2 c a i akku =
 only :: Assignment -> SignedVar -> Bool
 -- returns True if the Signed Literal is the only in the Clause
 only c (T l) =
---  trace ("only1 " Prelude.++ (show c) Prelude.++ (show (T l)))  $
+--  trace ("only1 " List.++ (show c) List.++ (show (T l)))  $
   if (c UVec.! l) == 1
   then only2 c l 0
   else False
@@ -577,14 +585,14 @@ only3 c i =
 filter_al :: Clause -> Assignment -> Int -> Assignment
 -- unassigns all literal from c that have in a an alevel < l
 filter_al c a l =
---  trace ("filter1: " Prelude.++ (show c) Prelude.++ (show a)) $ 
-  let c' = assfromClause c (assignment_size a) in
+--  trace ("filter1: " List.++ (show c) List.++ (show a)) $ 
+  let c' = assfromClause c (Ass.length a) in
   filter_al2 c' a l 0
 
 filter_al2 :: Assignment -> Assignment -> Int -> Int -> Assignment
 filter_al2 c a l i =
---  trace ("filter2: " Prelude.++ (show c) Prelude.++ (show a)) $ 
-  if i < assignment_size c
+--  trace ("filter2: " List.++ (show c) List.++ (show a)) $ 
+  if i < Ass.length c
   then
      if (abs (a UVec.!i)) < l
      then

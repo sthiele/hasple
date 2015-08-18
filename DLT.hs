@@ -23,7 +23,7 @@ module DLT (
   dlbacktrack,
 ) where
 
-import Types
+import SPVar
 
 
 type DLT = [(Int, Int, SignedVar)]                                                   -- DLT
@@ -56,4 +56,5 @@ dl2al ((al1,dl1,sl1):rest) dl =
   if dl==dl1
   then al1
   else dl2al rest dl
+
 

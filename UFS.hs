@@ -19,12 +19,15 @@ module UFS (
     ufs_check,
 ) where
 
+import Prelude ()
+import Data.Bool
+import Data.Eq
 import ASP
 import SPVar
 import PDG
 import SPC
-import Types
-import Data.List (nub, intersect, (\\))
+import Assignment (Assignment, falseatoms, falselits, nonfalseatoms)
+import Data.List (intersect, (\\),null, head, (++), elem)
 -- import Debug.Trace
 
 

@@ -16,11 +16,11 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module PDG (
-    PDG(..),
-    pos_dep_graph,
-    cyclic,
-    scc,
-  ) where
+  PDG,
+  pos_dep_graph,
+  cyclic,
+  scc,
+) where
 
 import ASP
 import Data.List ((\\))
@@ -50,9 +50,6 @@ scc :: Atom -> PDG -> [Atom]
 -- returns the strongly connected component of an atom
 scc a depg = tarjan depg [] [] a
 
-
-tarjan :: PDG -> [Atom] -> [Atom] -> Atom -> [Atom]
--- given a dependency graph compute the scc of an atom a
 tarjan depg visited visited2 a  =
    if elem a visited
    then
