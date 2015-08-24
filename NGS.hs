@@ -173,68 +173,147 @@ class (Eq s) => Nogood s where
   reduceNogood :: s -> SignedVar -> s
   is_satisfied :: s -> Assignment -> Bool
 
--- 
--- 
-data Clause = Clause (UVec.Vector Int) Int Int
-              deriving (Show,Eq)
- 
+
+data Clause = UClause Int
+            | BClause Int Int
+            | Clause (UVec.Vector Int) {-# UNPACK #-} !Int {-# UNPACK #-} !Int
+              deriving (Show,Eq) 
+
+
 instance Nogood Clause where
 
---  resolve :: Int -> Clause -> Assignment -> RES
-  resolve al (Clause c v w) a =
-  --  trace ("resolve: " List.++ (show c) List.++ (show v) List.++ (show w) ) $
-  --  trace ("a: " List.++ (show a)) $
-    if v == w -- unit clause
-    then
-      let v' = (c UVec.!v) in 
-      if v' > 0 
+  resolve al (UClause c) a =
+      if c > 0 
       then
-        if (a UVec.!(v'-1) > 0)
+        if (a UVec.!(c-1) > 0)
         then CONF
         else
-          if a UVec.!(v'-1)==0
-          then Res (assign a (F (v'-1)) al)
+          if a UVec.!(c-1)==0
+          then Res (assign a (F (c-1)) al)
           else NIX
       else
-        if (a UVec.!((abs v')-1) < 0)
+        if (a UVec.!((abs c)-1) < 0)
         then CONF
         else
-          if a UVec.!((abs v')-1)==0
-          then Res (assign a (T (abs (v')-1)) al)
+          if a UVec.!((abs c)-1)==0
+          then Res (assign a (T ((abs c)-1)) al)
           else NIX
-  
-    else  -- non-unit clause
-      let v' = c UVec.!v in
-      if v' > 0
-      then
-        if (a UVec.!(v'-1) < 0)            -- assigned
-        then NIX
-        else
-          let w' = c UVec.!w in
-          if (a UVec.!((abs w')-1) > 0 && w' < 0) || (a UVec.!((abs w')-1) < 0 && w' > 0)           -- assigned
-          then NIX
-          else 
-            if a UVec.!(v'-1)==0
-            then 
-              if a UVec.!((abs w')-1)==0
-              then NIX
-              else updatewatch2 al (Clause c v w) a
-            else updatewatch1 al (Clause c v w) a
-      else
-        if (a UVec.!((abs v')-1) > 0)             -- assigned
-        then NIX
-        else
-          let w' = c UVec.!w in
-          if (a UVec.!((abs w')-1) > 0 && w' < 0) || (a UVec.!((abs w')-1) < 0 && w' > 0)           -- assigned
-          then NIX
-          else 
-            if a UVec.!((abs v')-1)==0
-            then 
-              if a UVec.!((abs w')-1)==0
-              then NIX
-              else updatewatch2 al (Clause c v w) a
-            else updatewatch1 al (Clause c v w) a
  
+
+  resolve al (BClause x y) a =
+    let x' = a UVec.! ((abs x)-1)
+        y' = a UVec.! ((abs y)-1)
+    in
+    if (x>0)
+    then
+      if x'<0
+      then NIX
+      else
+        if x'>0
+        then                                  --x>0             
+          if y>0
+          then
+            if y'<0
+            then NIX
+            else         
+              if y'>0
+              then CONF                       -- x'>0, y>0
+              else Res (assign a (F (y-1)) al)   -- x'>0, y'==0
+          else                                -- x'>0, y < 0
+            if y'>0
+            then NIX
+            else 
+              if y'<0
+              then CONF                       --x'>0, y'<0  
+              else Res (assign a (T ((abs y)-1)) al)    --x'>0, y'==0
+        else                                 --x'==0        
+          if y>0
+          then
+            if y'<0
+            then NIX
+            else
+              if y'>0
+              then Res (assign a (F (x-1)) al)  --x'==0, y'>0
+              else NIX                      --x'==0, y'==0
+          else                             -- y < 0          
+            if y'>0
+            then NIX
+            else 
+              if y'<0
+              then Res (assign a (F (x-1)) al)  -- x'==0, y'<0
+              else NIX                      -- x'==0, y'==0
+
+    else                                    -- x<0
+      if x'>0
+      then NIX
+      else                                  
+        if x'<0
+        then                                --x'<0             
+          if y>0
+          then                              --y > 0
+            if y'<0                         
+            then NIX                       
+            else         
+              if y'>0                      
+              then CONF                     --x'<0, y'>0
+              else Res (assign a (F (y-1)) al)  --x'<0, y'==0
+          else                              -- y < 0
+            if y'>0
+            then NIX
+            else 
+              if y'<0
+              then CONF                     --x'<0, y'<0  
+              else Res (assign a (T ((abs y)-1)) al)  --x'<0, y'==0
+        else                               -- x'==0        
+          if y>0
+          then
+            if y'<0
+            then NIX
+            else
+              if y'>0
+              then Res (assign a (T ((abs x)-1)) al)  -- x'==0, y'>0
+              else NIX                      -- x'==0, y'==0
+          else                              -- y<0
+            if y'>0
+            then NIX
+            else 
+              if y'<0
+              then Res (assign a (T ((abs x)-1)) al)  -- x'==0, y'<0
+              else NIX                      --x'==0, y'==0
+
+ 
+  resolve al (Clause c v w) a =
+    let v' = c UVec.!v in
+    if v' > 0
+    then
+      if (a UVec.!(v'-1) < 0)            -- assigned
+      then NIX
+      else
+        let w' = c UVec.!w in
+        if (a UVec.!((abs w')-1) > 0 && w' < 0) || (a UVec.!((abs w')-1) < 0 && w' > 0)           -- assigned
+        then NIX
+        else 
+          if a UVec.!(v'-1)==0
+          then 
+            if a UVec.!((abs w')-1)==0
+            then NIX
+            else updatewatch2 al (Clause c v w) a
+          else updatewatch1 al (Clause c v w) a
+    else
+      if (a UVec.!((abs v')-1) > 0)             -- assigned
+      then NIX
+      else
+        let w' = c UVec.!w in
+        if (a UVec.!((abs w')-1) > 0 && w' < 0) || (a UVec.!((abs w')-1) < 0 && w' > 0)           -- assigned
+        then NIX
+        else 
+          if a UVec.!((abs v')-1)==0
+          then 
+            if a UVec.!((abs w')-1)==0
+            then NIX
+            else updatewatch2 al (Clause c v w) a
+          else updatewatch1 al (Clause c v w) a
+  
 
   reduceNogood c l = reduceClause c l 
 
