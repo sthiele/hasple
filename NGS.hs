@@ -491,11 +491,14 @@ fromCClause st (t,f) =
       tsvars'  = List.map (+1) tsvars
       fsvars'  = List.map (+1) fsvars
       fsvars'' = List.map (*(-1)) fsvars'
-      b        = UVec.fromList (tsvars' List.++ fsvars'')
+      avars    = tsvars' List.++ fsvars''
+      b        = UVec.fromList (avars)
   in
+  case List.length avars of
+    1 -> UClause (List.head avars)
+    2 -> BClause (List.head avars) (List.head $ List.drop 1 avars)
 --  trace ("fromCClause: " List.++ (show (t,f)) List.++ (show b)) $
-  (Clause b 0 ((UVec.length b) -1))
-
+    _ -> (Clause b 0 ((UVec.length b) -1))
 
 assfromClause :: Clause -> Int -> Assignment
 assfromClause c i = assfromClause2 c (initAssignment i) 0
