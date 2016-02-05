@@ -29,8 +29,8 @@ module ASP (
   atoms_p,
 ) where
     
-import Data.List (nub)                  
-
+import Data.List (nub) 
+import Test.QuickCheck
 
 -- --------------------------------------------------------------
 
@@ -45,11 +45,74 @@ data Term = Constant Integer
           deriving (Eq, Ord)
                 
 instance Show Term where
-  show (Identifier x) = x
-  show (Variable x) = x
-  show (Constant x) = show x
+  show (Identifier x)       = x
+  show (Variable x)         = x
+  show (Constant x)         = show x
+  show (Addition x y)       = "("++(show x)++"+"++(show y)++")"
+  show (Subtraction x y)    = "("++(show x)++"-"++(show y)++")"
+  show (Multiplication x y) = "("++(show x)++"*"++(show y)++")"
+  show (Negation x)         = "(-"++(show x)++")"
 
-  
+
+-- smart Constructors
+
+mkAddition:: Term -> Term -> Term
+mkAddition (Constant a) (Constant b) = (Constant (a+b))
+mkAddition a (Negation b) = (mkSubtraction a b)
+--mkAddition (Negation a) b = (mkNegation (mkSubtraction a b))
+mkAddition a b = Addition a b
+
+
+mkSubtraction (Constant a) (Constant b) = (Constant (a-b))
+mkSubtraction a (Negation b) = (mkAddition a b)
+--move negation outwards
+mkSubtraction (Negation a) b = (mkNegation (mkAddition a b))
+mkSubtraction a b = Subtraction a b
+
+
+mkMultiplication (Constant a) (Constant b) = (Constant (a*b))
+mkMultiplication (Negation a) (Negation b) = (mkMultiplication a b)
+--move negation outwards
+mkMultiplication (Negation a) b = (mkNegation (mkMultiplication a b))
+mkMultiplication a (Negation b) = (mkNegation (mkMultiplication a b))
+mkMultiplication a b = Multiplication a b
+
+
+mkNegation (Constant a) = (Constant (-a))
+mkNegation (Negation a) = a
+mkNegation a = Negation a
+
+
+instance Arbitrary Term where 
+  arbitrary =
+    do  
+      n <- choose (0,2) :: Gen Int
+      case n of
+                 0 -> do 
+                       x <- arbitrary 
+                       return (Constant x)
+                 1 -> do
+                        x <- elements(map (:[]) ['a'..'g']) 
+                        return (Identifier x)
+                 2 -> do
+                       x <- elements(map (:[]) ['A'..'E'])
+                       return (Variable x)
+                 3 -> do
+                       x <- arbitrary  
+                       y <- arbitrary
+                       return (mkAddition x y)
+                 4 -> do
+                       x <- arbitrary  
+                       y <- arbitrary 
+                       return (mkSubtraction x y)
+                 5 -> do
+                       x <- arbitrary 
+                       y <- arbitrary
+                       return (mkMultiplication x y)
+                 6 -> do 
+                       x <- arbitrary 
+                       return (mkNegation x)
+
 -- --------------------------------------------------------------
 
 data Atom = Atom { predicate :: String
@@ -58,14 +121,26 @@ data Atom = Atom { predicate :: String
 
 
 showlist :: (Show a) => [a] -> String
-showlist [] = ""
-showlist [x] = show x
-showlist (x:xs) = show x  ++ "," ++ showlist xs
+showlist a = showlist' a ""
+showlist' [] []   = ""
+showlist' [] akku = akku
+
+showlist' (x:xs) [] = showlist' xs (show x)
+showlist' (x:xs) akku = showlist' xs (akku ++ "," ++ show x)
+
                  
 instance Show Atom where
     show (Atom pred []) =  pred
     show (Atom pred xs) =  pred ++ "(" ++ showlist xs ++ ")"
     
+
+instance Arbitrary Atom where 
+  arbitrary =
+    do
+      p <- elements (map (:[]) ['p' .. 'w'])
+      a <- arbitrary
+      return (Atom p (take 5 a)) --maximal 5 arguments
+
 
 __conflict = Atom "conflict" []
 
@@ -75,6 +150,15 @@ instance Show Literal where
     show (PAtom a) =  show a
     show (NAtom a) =  "not " ++ show a
 
+
+instance Arbitrary Literal where 
+  arbitrary =
+    do
+      n <- choose (0,1) :: Gen Int 
+      a <- arbitrary
+      case n of
+        0 -> return (PAtom a)
+        1 -> return (NAtom a)
 
 -- --------------------------------------------------------------
 
@@ -94,7 +178,7 @@ normalRule h pa na = Rule h ((fmap PAtom pa) ++ (fmap NAtom na))
 
 
 instance Show Rule where
-  show (Rule h []) = show h ++ "."
+  show (Rule h []  ) = show h ++ "."
   show (Rule h body) = show h ++ " :- " ++ showlist body ++ "."
   
 
@@ -104,6 +188,14 @@ instance Eq Rule where
 
 instance Ord Rule where
   compare (Rule h b1) (Rule h2 b2) = compare h h2
+
+
+instance Arbitrary Rule where 
+  arbitrary =
+    do
+      h <- arbitrary
+      b <- arbitrary
+      return (Rule h b)
 
 
 pbody :: Rule -> [Atom]

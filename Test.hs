@@ -19,6 +19,8 @@ module Test (
   unit_test,
   test,
 )where
+import Test.QuickCheck
+
 import ASP
 import Grounder
 import qualified GoodSolver
@@ -27,6 +29,9 @@ import GrounderSolver
 import LPParser -- for parsing tests
 import Data.List (sort)
 import Debug.Trace
+
+
+-- function to test
 
 test_good :: [Char] -> [[Atom]]
 test_good x =
@@ -58,6 +63,20 @@ test x =
       Left  err -> print $ "ParseError: " ++ (show err)
       Right prg -> putStrLn $ show (gr_solve prg)
 
+
+
+
+
+
+good_solver p = sort (map sort (GoodSolver.anssets (groundProgram p)))
+new_solver  p = sort (map sort (gr_solve p))
+
+-- Test properties
+
+prop_good_model p = new_solver p == good_solver p
+
+
+-- Test cases
 
 mpr1 = "a :- not b, not c.\n"
     ++ "b :- not a, not c.\n"
@@ -162,6 +181,10 @@ mpr13 = "f(c).\n"
 Right mp13 = readProgram mpr13
 
 
+-- test 
+
+t0 = quickCheck prop_good_model
+
 t1 = (test_new mpr1)==(test_good mpr1)
 t2 = (test_new mpr2)==(test_good mpr2) 
 t3 = (test_new mpr3)==(test_good mpr3) 
@@ -194,5 +217,4 @@ unit_test =
   trace ("test14: " ++ (show t14)) $
   trace ("test15: " ++ (show t15)) $
   t1&&t2&&t3&&t4&&t5&&t6&&t7&&t8&&t9&&t12&&t13&&t14&&t15
-  
   
