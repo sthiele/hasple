@@ -16,13 +16,13 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module Grounder (
-   groundProgram,
-   matchAtom,
-   AtomMap,
-   emptyAtomMap,
-   insert_atoms,
-   groundRule,
-   applySubs
+  groundProgram,
+  matchAtom,
+  AtomMap,
+  emptyAtomMap,
+  insert_atoms,
+  groundRule,
+  applySubs
 ) where
   
 import ASP
@@ -175,9 +175,9 @@ instance Substitutable Term where
   applySubs m (Constant x) = (Constant x)
   applySubs m (Identifier x) = (Identifier x)
   applySubs m (Variable x) =
-              case lookup (Variable x) m of
-                Just y  -> y
-                Nothing -> Variable x
+    case lookup (Variable x) m of
+      Just y  -> y
+      Nothing -> Variable x
 
   applySubs m (Addition x y) =
     let xsubs = applySubs m x
