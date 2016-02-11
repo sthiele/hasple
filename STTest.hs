@@ -110,6 +110,7 @@ get_svar2 s st i =
 instance Nogood Clause where
 
   resolve al (UClause c) a =
+--     trace ("res1:") $
       if c > 0 
       then
         if (a UVec.!(c-1) > 0)
@@ -128,6 +129,7 @@ instance Nogood Clause where
  
 
   resolve al (BClause x y) a =
+--     trace ("res2:") $
     let x' = a UVec.! ((abs x)-1)
         y' = a UVec.! ((abs y)-1)
     in
@@ -210,6 +212,7 @@ instance Nogood Clause where
 
  
   resolve al (Clause c v w) a =
+--     trace ("res3:") $
     let v' = c UVec.!v in
     if v' > 0
     then
@@ -622,7 +625,7 @@ mkStore :: [Clause] -> ST s (Store s)
 mkStore x  = 
   do
     refs <- Prelude.mapM newSTRef x
-    return $ (Store refs 0)
+    return $ (Store refs (-1))
 
 new_ngs :: [Clause] -> [Clause] -> ST s (Store s)
 -- create a new store
@@ -630,7 +633,7 @@ new_ngs png lng =
   do
     r_png <- Prelude.mapM newSTRef png
     r_lng <- Prelude.mapM newSTRef lng
-    return $ (Store (r_png Prelude.++ r_lng) 0)
+    return $ (Store (r_png Prelude.++ r_lng) (-1))
 
 
 cupdate :: Store s  -> Clause -> ST s ()
@@ -642,7 +645,7 @@ cupdate st cl =
 
 rewind :: Store s -> Store s
 -- basically reset the nogood store because some resolvent was found
-rewind (Store png counter) = (Store png 0)
+rewind (Store png counter) = (Store png (-1))
 
     
 up_rew :: Store s -> Clause -> ST s (Store s)
@@ -650,19 +653,23 @@ up_rew :: Store s -> Clause -> ST s (Store s)
 up_rew (Store ngs c) cl =
   do 
     modifySTRef (current (Store ngs c)) (\x -> cl)
-    return $ (Store ngs 0)
+    return $ (Store ngs (-1))
 
 
 shead :: Store s -> STRef s Clause
 shead (Store (x:xs) c) = x
 tolist (Store x c) = x
 
-current (Store x c) = x!!c
+current (Store x c) =
+--   trace ("getng" Prelude.++ (show c)) $
+  x!!c
 
-can_choose (Store x c) = c < ((Prelude.length x)-1)
+can_choose (Store x c) = c < ((Prelude.length x) -1)
 
 
-choose (Store x c) = (Store x (c+1))
+choose (Store x c) =
+--   trace ("choose") $
+  (Store x (c+1))
 
 addClause :: Store s -> Clause -> ST s (Store s)
 addClause (Store st c) x =
@@ -695,7 +702,7 @@ conflict_resolution2 :: Store s -> Clause -> Assignment -> DLT -> ST s (Store s,
 conflict_resolution2 ngs nogood a dlt =
   let poopi           = assfromClause nogood (Ass.length a)
       (sigma, prefix) = get_implicationLiteral poopi a
---       reduced_nogood  = reduceNogood nogood sigma
+      reduced_nogood  = reduceNogood nogood sigma
       alevel_sigma    = get_alevel a sigma
       dl              = al2dl dlt alevel_sigma
       al              = dl2al dlt dl
@@ -706,14 +713,15 @@ conflict_resolution2 ngs nogood a dlt =
     do ngs' <- add_nogoods ngs [nogood]                                     -- add learned nogood
        return $ (ngs', sigma)
   else
-    let
+  do
+    epsilon     <- get_antecedent ngs sigma prefix
+--     let
 --         epsilon     = get_antecedent ngs sigma prefix
---         reduced_eps = reduceNogood epsilon (invert sigma)
---         newnogood   = joinClauses reduced_nogood reduced_eps
-    in
-    do
-      epsilon     <- get_antecedent ngs sigma prefix
-      conflict_resolution2 ngs (joinClauses (reduceNogood nogood sigma) (reduceNogood (epsilon) (invert sigma))) prefix dlt
+    let reduced_eps = reduceNogood epsilon (invert sigma)
+    let newnogood   = joinClauses reduced_nogood reduced_eps
+--     in
+--     do 
+    conflict_resolution2 ngs newnogood prefix dlt
 
 
 get_antecedent :: Store s -> SignedVar -> Assignment -> ST s Clause

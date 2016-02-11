@@ -30,7 +30,6 @@ import SPVar
 import Assignment (Assignment, initAssignment, unassigned, trueatoms, elem, assign, backtrack)
 import SPC
 import DLT
--- import qualified NGS
 import STTest
 import UFS
 import Data.List (head, map, sort, nub, intersect, (\\), delete, null )
@@ -115,8 +114,6 @@ anssets prg  =
       cngs   = nub (nogoods_of_lp prg)
       st     = Vector.fromList (get_vars cngs)
       png    = transforms cngs st
---      blub   = simplifyCNF png -- TODO preprocessing
---       ngs    = new_ngs png []
       l      = Vector.length st
       dl     = 1
       bl     = 1
@@ -127,6 +124,8 @@ anssets prg  =
       conf   = False
 --       solver = TSolver prg st ngs dl bl al a dlt u conf
   in
+--   trace ("Clauses: " Prelude.++ (show png)) $
+--   trace ("SymbTab: " Prelude.++ (show st)) $
   runST $ do
     ngs <- new_ngs png []
     solver <- mkSolver prg st ngs dl bl al a dlt u conf
@@ -142,6 +141,8 @@ anssets prg  =
 
 
 -- get_occurence_list
+traceMonad :: (Show a, Monad m) => a -> m a
+traceMonad x = trace (show x) (return x)
 
 cdnl_enum :: TSolver s -> Int -> ST s [[Atom]]
 cdnl_enum solver s =
@@ -150,10 +151,11 @@ cdnl_enum solver s =
   in
   do
     solver' <- nogood_propagation solverp
+--     traceMonad ("cdnl: " Prelude.++ (show (assignment solver')))
     if conf solver'
     then                                                                                                 -- conflict
       if (decision_level solver') == 1
-      then return $ []                                                  -- no need for conflict handling, no more answer sets
+      then return $ []                                         -- no need for conflict handling, no more answer sets
       else                                                                                      -- conflict handling
         do
           solver'' <- conflict_handling solver'
@@ -168,7 +170,7 @@ cdnl_enum solver s =
       if null selectable
       then                                                                     -- if all atoms then answer set found
         if (decision_level solver')==1 || s==1
-        then return $ [nub (trueatoms a' (symboltable solver'))]                                           -- last answer set
+        then return $ [nub (trueatoms a' (symboltable solver'))]                                  -- last answer set
         else                                                                  -- backtrack for remaining answer sets
           let
               dl           = decision_level solver'
@@ -196,7 +198,7 @@ cdnl_enum solver s =
                           set_assignment_level      (al'+1) $
                           set_assignment a''_e          solver'
         in
-  --      trace ("choose: " Prelude.++ (show sigma_d)) $
+--         trace ("choose: " Prelude.++ (show sigma_d_e)) $
         do cdnl_enum solver''_e s
 
 
@@ -209,13 +211,13 @@ conflict_handling s =
       dlt = dltracker      s
   in
   if bl < dl
-  then                                                                         -- learn a new nogood and backtrack
+  then                                                                          -- learn a new nogood and backtrack
     let ngs                    = boocons s 
 --         (ngs', sigma_uip, alx) = conflict_analysis ngs a dlt
     in
     do
       (ngs', sigma_uip, alx) <-  conflict_analysis ngs a dlt
---       let                                                                                               -- backtrack
+--       let                                                                                           -- backtrack
       let bt_dl = al2dl dlt alx
       let bt_al = dl2al dlt bt_dl
       let a'    = assign (backtrack a bt_al) (invert sigma_uip) bt_al
@@ -227,7 +229,7 @@ conflict_handling s =
                 set_assignment              a' $
                 set_boocons               ngs' $
                 set_conf                 False s )
-  else                                                                                                -- backtrack
+  else                                                                                                 -- backtrack
     let 
         sigma_d = get_dliteral dlt dl
         dl'     = dl-1
@@ -266,7 +268,7 @@ nogood_propagation :: TSolver s -> ST s (TSolver s)
 nogood_propagation s =
   do
     s' <- local_propagation s
-
+--     traceMonad ("nogo_prop: " Prelude.++ (show (assignment s')))
     if conf s'
     then return $ s'
     else
@@ -274,7 +276,6 @@ nogood_propagation s =
         prg = program           s
         st  = symboltable       s
         u   = get_unfounded_set s
---         s'  = local_propagation s
         a   = assignment        s'
         al  = assignment_level  s'
         ngs = boocons           s'
@@ -312,6 +313,7 @@ nogood_propagation s =
 local_propagation :: TSolver s -> ST s (TSolver s)
 -- itterate over the nogoods and try to resolve them until nothing new can be infered or a conflict is found
 local_propagation s =
+--   trace ("loc_prop: " ) $
   if conf s
   then return s
   else 
@@ -319,9 +321,11 @@ local_propagation s =
     then
       do
         s' <- CDNLSolverST.resolve $ choose_next_ng s
+--         traceMonad ("loc_prop: " Prelude.++ (show (assignment s')))
         local_propagation s'
 
-    else 
+    else
+--       trace ("loc_prop: " Prelude.++ "no choice") $
       let ngs' = rewind $ boocons s in -- rewind for next use
       return $ set_boocons ngs' s
 
@@ -333,6 +337,7 @@ choose_next_ng s = set_boocons (choose $ boocons s) s
 resolve :: TSolver s -> ST s (TSolver s)
 -- resolve the current no good
 resolve s =
+--     trace ("res: " ) $
     let al = (assignment_level s)
         ng = get_ng (boocons s)
 --         x  = resolve al ng (assignment s)
@@ -340,7 +345,7 @@ resolve s =
     do
       v_ng <- readSTRef ng
 --       STTest.resolve al v_ng (assignment s)
---    trace ("res: " ++ (show x)) $
+--       traceMonad ("res: " ++ (show x))
       case STTest.resolve al v_ng (assignment s) of
         NIX         -> return $ s
         NIXU ng'    ->
