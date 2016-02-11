@@ -1,3 +1,41 @@
+-- Copyright (c) 2015, Sven Thiele <sthiele78@gmail.com>
+
+-- This file is part of hasple.
+
+-- hasple is free software: you can redistribute it and/or modify
+-- it under the terms of the GNU General Public License as published by
+-- the Free Software Foundation, either version 3 of the License, or
+-- (at your option) any later version.
+
+-- hasple is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-- GNU General Public License for more details.
+
+-- You should have received a copy of the GNU General Public License
+-- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
+
+module STTest (
+   NogoodStore,
+   Store,
+--    Store,
+   new_ngs,
+   add_nogoods,
+--    get_nogoods,
+   can_choose,
+   choose,
+   get_ng,
+   up_rew,
+   cupdate,
+   rewind,
+   Clause,
+   fromCClause,
+   conflict_resolution,
+   RES(..),
+   resolve,
+) where
+
+
 --import System.Environment
 
 import Control.Monad.ST
@@ -34,6 +72,40 @@ data Clause = UClause Int
             | Clause (UVec.Vector Int) {-# UNPACK #-} !Int {-# UNPACK #-} !Int
               deriving (Show,Eq) 
 
+
+fromCClause :: SymbolTable -> CClause -> Clause
+fromCClause st (t,f) =
+  let l        = BVec.length st
+      tsvars   = Prelude.map (get_svarx st) t
+      fsvars   = Prelude.map (get_svarx st) f
+      tsvars'  = Prelude.map (+1) tsvars
+      fsvars'  = Prelude.map (+1) fsvars
+      fsvars'' = Prelude.map (*(-1)) fsvars'
+      avars    = tsvars' Prelude.++ fsvars''
+      b        = UVec.fromList (avars)
+  in
+  case Prelude.length avars of
+    1 ->
+--      trace ("fromCClause: UClause " List.++ (show (t,f)) List.++ (show b)) $
+      UClause (Prelude.head avars)
+    2 ->
+--      trace ("fromCClause: BClause" List.++ (show (t,f)) List.++ (show b)) $
+      BClause (Prelude.head avars) (Prelude.head $ Prelude.drop 1 avars)
+    _ ->
+--      trace ("fromCClause: XClause" List.++ (show (t,f)) List.++ (show b)) $
+      (Clause b 0 ((UVec.length b) -1))
+
+
+-- little helper
+get_svarx :: SymbolTable -> SPVar -> SVar
+get_svarx st l = get_svar2 l st 0
+
+get_svar2 :: SPVar -> SymbolTable -> Int -> SVar
+get_svar2 s st i =
+  if st BVec.!i == s
+  then i
+  else get_svar2 s st (i+1)
+  
 
 instance Nogood Clause where
 
@@ -552,6 +624,34 @@ mkStore x  =
     refs <- Prelude.mapM newSTRef x
     return $ (Store refs 0)
 
+new_ngs :: [Clause] -> [Clause] -> ST s (Store s)
+-- create a new store
+new_ngs png lng =
+  do
+    r_png <- Prelude.mapM newSTRef png
+    r_lng <- Prelude.mapM newSTRef lng
+    return $ (Store (r_png Prelude.++ r_lng) 0)
+
+
+cupdate :: Store s  -> Clause -> ST s ()
+-- replace current nogood with new nogood reset nogood store
+cupdate st cl =
+  do
+    modifySTRef (current st) (\x -> cl)
+
+
+rewind :: Store s -> Store s
+-- basically reset the nogood store because some resolvent was found
+rewind (Store png counter) = (Store png 0)
+
+    
+up_rew :: Store s -> Clause -> ST s (Store s)
+-- update and rewind
+up_rew (Store ngs c) cl =
+  do 
+    modifySTRef (current (Store ngs c)) (\x -> cl)
+    return $ (Store ngs 0)
+
 
 shead :: Store s -> STRef s Clause
 shead (Store (x:xs) c) = x
@@ -562,7 +662,7 @@ current (Store x c) = x!!c
 can_choose (Store x c) = c < ((Prelude.length x)-1)
 
 
-choose (Store x c) = return $ (Store x (c+1))
+choose (Store x c) = (Store x (c+1))
 
 addClause :: Store s -> Clause -> ST s (Store s)
 addClause (Store st c) x =
@@ -613,27 +713,30 @@ conflict_resolution2 ngs nogood a dlt =
     in
     do
       epsilon     <- get_antecedent ngs sigma prefix
-      conflict_resolution2 ngs (joinClauses (reduceNogood nogood sigma) (reduceNogood epsilon (invert sigma))) prefix dlt
+      conflict_resolution2 ngs (joinClauses (reduceNogood nogood sigma) (reduceNogood (epsilon) (invert sigma))) prefix dlt
 
 
-get_antecedent :: Store s -> SignedVar -> Assignment -> ST s (Clause)
+get_antecedent :: Store s -> SignedVar -> Assignment -> ST s Clause
 -- given an implication literal (sigma) and a prefix return an antecedent (epsilon)
 -- s.t. epsilon\prefix = (invert sigma)
 get_antecedent ngs sigma prefix =
 --    trace ("get_eps: " Prelude.++ (show sigma) Prelude.++ (show prefix)) $
-  do
+  
     if can_choose ngs
     then
+      let ngs' = choose ngs
+          ng   = get_ng ngs'
+      in
       do
-      ngs' <- choose ngs
-      ng   <- get_ng ngs'
-      vng <- readSTRef ng
---       temp = reduceNogood ng (invert sigma)
-
-      if is_satisfied (reduceNogood vng (invert sigma)) prefix
-      then return $ vng
-      else get_antecedent ngs' sigma prefix
+        vng <- readSTRef ng
+        if is_satisfied (reduceNogood vng (invert sigma)) prefix
+        then return vng
+        else get_antecedent ngs' sigma prefix
     else error "no antecedent epsilon found"
+
+
+
+
 
 
 s_new_watch1 :: Clause -> Assignment -> Int -> Store s -> ST s ()
