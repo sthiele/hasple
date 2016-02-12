@@ -24,8 +24,10 @@ import Test.QuickCheck
 import ASP
 import Grounder
 import qualified GoodSolver
-import qualified CDNLSolver
-import GrounderSolver
+-- import qualified CDNLSolverST
+import GrounderSolverST
+-- import STTest
+
 import LPParser -- for parsing tests
 import Data.List (sort)
 import Debug.Trace
@@ -41,12 +43,12 @@ test_good x =
       Right prg -> sort (map sort (GoodSolver.anssets (groundProgram prg)))
 
 
-test_old :: [Char] -> [[Atom]]
-test_old x =
-  do
-    case readProgram x of
-      Left  err -> []
-      Right prg -> sort (map sort (CDNLSolver.anssets (groundProgram prg)))
+-- test_old :: [Char] -> [[Atom]]
+-- test_old x =
+--   do
+--     case readProgram x of
+--       Left  err -> []
+--       Right prg -> sort (map sort (CDNLSolver.anssets (groundProgram prg)))
 
 
 test_new :: [Char] -> [[Atom]]
@@ -76,7 +78,7 @@ new_solver  p = sort (map sort (gr_solve p))
 prop_good_model p = new_solver p == good_solver p
 
 
--- Test cases
+-- Test cases logic programs
 
 mpr1 = "a :- not b, not c.\n"
     ++ "b :- not a, not c.\n"
@@ -181,6 +183,7 @@ mpr13 = "f(c).\n"
 Right mp13 = readProgram mpr13
 
 
+
 -- test 
 
 t0 = quickCheck prop_good_model
@@ -218,3 +221,7 @@ unit_test =
   trace ("test15: " ++ (show t15)) $
   t1&&t2&&t3&&t4&&t5&&t6&&t7&&t8&&t9&&t12&&t13&&t14&&t15
   
+ 
+
+
+

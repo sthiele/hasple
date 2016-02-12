@@ -124,8 +124,8 @@ anssets prg  =
       conf   = False
 --       solver = TSolver prg st ngs dl bl al a dlt u conf
   in
---   trace ("Clauses: " Prelude.++ (show png)) $
---   trace ("SymbTab: " Prelude.++ (show st)) $
+--   trace ("Clauses: " ++ (show png)) $
+--   trace ("SymbTab: " ++ (show st)) $
   runST $ do
     ngs <- new_ngs png []
     solver <- mkSolver prg st ngs dl bl al a dlt u conf
@@ -151,13 +151,14 @@ cdnl_enum solver s =
   in
   do
     solver' <- nogood_propagation solverp
---     traceMonad ("cdnl: " Prelude.++ (show (assignment solver')))
+--     traceMonad ("cdnl: " ++ (show (assignment solver')))
     if conf solver'
     then                                                                                                 -- conflict
       if (decision_level solver') == 1
       then return $ []                                         -- no need for conflict handling, no more answer sets
       else                                                                                      -- conflict handling
         do
+--           traceMonad ("cdnl: conflict detected")
           solver'' <- conflict_handling solver'
           cdnl_enum solver'' s
     else                                                                                              -- no conflict
@@ -179,26 +180,26 @@ cdnl_enum solver s =
               dlt'         = dlbacktrack dlt dl
               a''          = backtrack a' cal
               a'''         = assign a'' (invert sigma_d) cal                         -- invert last decision literal
-              solver''     = set_decision_level         (dl-1) $
-                            set_blocked_level          (dl-1) $
-                            set_dltracker                dlt' $
-                            set_assignment_level      (cal+1) $
-                            set_assignment a'''         solver'
+              solver''     = set_decision_level           (dl-1) $
+                             set_blocked_level            (dl-1) $
+                             set_dltracker                  dlt' $
+                             set_assignment_level        (cal+1) $
+                             set_assignment a'''           solver'
           in
           do
             remaining_as <- cdnl_enum solver'' (s-1)
             return $ (nub (trueatoms a' (symboltable solver'))):remaining_as
       else                                                                                         -- select new lit
-        let dl           = decision_level solver'
-            sigma_d_e      = head selectable
-            dlt'_e         = (al',dl+1,(T sigma_d_e)):dlt
-            a''_e          = assign a' (T sigma_d_e) al'
-            solver''_e     = set_decision_level         (dl+1) $
+        let dl          = decision_level solver'
+            sigma_d_e   = head selectable
+            dlt'_e      = (al',dl+1,(T sigma_d_e)):dlt
+            a''_e       = assign a' (T sigma_d_e) al'
+            solver''_e  = set_decision_level           (dl+1) $
                           set_dltracker                dlt'_e $
-                          set_assignment_level      (al'+1) $
+                          set_assignment_level        (al'+1) $
                           set_assignment a''_e          solver'
         in
---         trace ("choose: " Prelude.++ (show sigma_d_e)) $
+--         trace ("choose: " ++ (show sigma_d_e)) $
         do cdnl_enum solver''_e s
 
 
@@ -209,27 +210,23 @@ conflict_handling s =
       bl  = blocked_level  s
       dl  = decision_level s
       dlt = dltracker      s
+      ngs = boocons        s
   in
   if bl < dl
-  then                                                                          -- learn a new nogood and backtrack
-    let ngs                    = boocons s 
---         (ngs', sigma_uip, alx) = conflict_analysis ngs a dlt
-    in
+  then                                                                           -- learn a new nogood and backtrack
     do
       (ngs', sigma_uip, alx) <-  conflict_analysis ngs a dlt
---       let                                                                                           -- backtrack
-      let bt_dl = al2dl dlt alx
+      let bt_dl = al2dl dlt alx                                                                         -- backtrack
       let bt_al = dl2al dlt bt_dl
       let a'    = assign (backtrack a bt_al) (invert sigma_uip) bt_al
       let dlt'  = dlbacktrack dlt bt_dl
---       in
       return $ ( set_decision_level   (bt_dl-1) $
-                set_dltracker             dlt' $
-                set_assignment_level (bt_al+1) $
-                set_assignment              a' $
-                set_boocons               ngs' $
-                set_conf                 False s )
-  else                                                                                                 -- backtrack
+                 set_dltracker             dlt' $
+                 set_assignment_level (bt_al+1) $
+                 set_assignment              a' $
+                 set_boocons               ngs' $
+                 set_conf                 False s )
+  else                                                                                                  -- backtrack
     let 
         sigma_d = get_dliteral dlt dl
         dl'     = dl-1
@@ -252,6 +249,7 @@ conflict_analysis ngs a dlt =
   in
   do
     v_conflict_nogood <- readSTRef conflict_nogood
+--     traceMonad ("conflict_analysis: " ++ (show a) ++" "++ (show v_conflict_nogood))
     conflict_resolution ngs' v_conflict_nogood a dlt
 
 
@@ -268,7 +266,7 @@ nogood_propagation :: TSolver s -> ST s (TSolver s)
 nogood_propagation s =
   do
     s' <- local_propagation s
---     traceMonad ("nogo_prop: " Prelude.++ (show (assignment s')))
+--     traceMonad ("nogo_prop: " ++ (show (assignment s')))
     if conf s'
     then return $ s'
     else
@@ -290,7 +288,6 @@ nogood_propagation s =
                 then
                   let cngs_of_loop = loop_nogoods prg u'
                       ngs_of_loop  = transforms cngs_of_loop st
---                       ngs'         = add_nogoods ngs_of_loop ngs
 --                       s''          = set_boocons ngs' s'
                   in
                   do
@@ -321,11 +318,11 @@ local_propagation s =
     then
       do
         s' <- CDNLSolverST.resolve $ choose_next_ng s
---         traceMonad ("loc_prop: " Prelude.++ (show (assignment s')))
+--         traceMonad ("loc_prop: " ++ (show (assignment s')))
         local_propagation s'
 
     else
---       trace ("loc_prop: " Prelude.++ "no choice") $
+--       trace ("loc_prop: " ++ "all clauses done") $
       let ngs' = rewind $ boocons s in -- rewind for next use
       return $ set_boocons ngs' s
 
@@ -337,30 +334,30 @@ choose_next_ng s = set_boocons (choose $ boocons s) s
 resolve :: TSolver s -> ST s (TSolver s)
 -- resolve the current no good
 resolve s =
---     trace ("res: " ) $
-    let al = (assignment_level s)
-        ng = get_ng (boocons s)
---         x  = resolve al ng (assignment s)
-    in
-    do
-      v_ng <- readSTRef ng
---       STTest.resolve al v_ng (assignment s)
---       traceMonad ("res: " ++ (show x))
-      case STTest.resolve al v_ng (assignment s) of
-        NIX         -> return $ s
-        NIXU ng'    ->
-          do
-            cupdate (boocons s) ng'
-            return $ s
-        Res a'      ->
-          do
---             ngs' = rewind (boocons s)
-            return $ set_boocons (rewind (boocons s)) $ set_assignment_level (al+1) $ set_assignment a' s
-        ResU a' ng' ->
-          do
-            ngs' <- up_rew (boocons s) ng'
-            return $ set_boocons ngs' $ set_assignment_level (al+1) $ set_assignment a' s
-        CONF        -> return $ (set_conf True s)                                                     -- set conflict
+--   trace ("res: " ) $
+  let al = (assignment_level s)
+      ng = get_ng (boocons s)
+--       x  = resolve al ng (assignment s)
+  in
+  do
+    v_ng <- readSTRef ng
+--     STTest.resolve al v_ng (assignment s)
+--     traceMonad ("res: " ++ (show (assignment s))  ++" "++ (show v_ng) )
+    case STTest.resolve al v_ng (assignment s) of
+      NIX         -> return $ s
+      NIXU ng'    ->
+        do
+          cupdate (boocons s) ng'
+          return $ s
+      Res a'      ->
+        do
+--           ngs' = rewind (boocons s)
+          return $ set_boocons (rewind (boocons s)) $ set_assignment_level (al+1) $ set_assignment a' s
+      ResU a' ng' ->
+        do
+          ngs' <- up_rew (boocons s) ng'
+          return $ set_boocons ngs' $ set_assignment_level (al+1) $ set_assignment a' s
+      CONF        -> return $ (set_conf True s)                                                       -- set conflict
 
 
 

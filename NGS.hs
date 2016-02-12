@@ -149,7 +149,9 @@ up_rew (Store png lng pnga lnga counter) ng =
 
 can_choose :: Store a -> Bool
 -- returns true if not all nogoods have been tested
-can_choose (Store png lng pnga lnga counter) = (counter+1) < (BVec.length png) + (BVec.length lng) 
+can_choose (Store png lng pnga lnga counter) =
+--   trace ("can_choose" ++ (show counter) $
+  (counter+1) < (BVec.length png) + (BVec.length lng)
 
 choose :: Store a -> Store a
 -- is only called if canchoose return true
@@ -337,15 +339,45 @@ instance Nogood Clause where
 
 reduceClause :: Clause -> SignedVar -> Clause
 -- delete literal from the clause
+reduceClause (UClause c) (T l) =
+--  trace ("reduceNogood: " Prelude.++ (show c) Prelude.++ (show (T l))) $
+  if c==(l+1)
+  then error "empyt clause in reduceClause"
+  else (UClause c)
+
+reduceClause (UClause c) (F l) =
+--  trace ("reduceNogood: " Prelude.++ (show c) Prelude.++ (show (F l))) $
+  if c==(-(l+1))
+  then error "empty clause in reduceClause"
+  else (UClause c)
+
+reduceClause (BClause x y) (T l) =
+--  trace ("reduceNogood: " Prelude.++ (show c) Prelude.++ (show (T l))) $
+  if x==(l+1)
+  then (UClause y)
+  else
+    if y==(l+1)
+    then (UClause x)
+    else (BClause x y)
+
+reduceClause (BClause x y) (F l) =
+--  trace ("reduceNogood: " Prelude.++ (show c) Prelude.++ (show (F l))) $
+  if x==(-(l+1))
+  then (UClause y)
+  else
+    if y==(-(l+1))
+    then (UClause x)
+    else (BClause x y)
+
 reduceClause (Clause c w v) (T l) =
---  trace ("reduceNogood: " List.++ (show c) List.++ (show (T l))) $
+--  trace ("reduceNogood: " Prelude.++ (show c) Prelude.++ (show (T l))) $
   let r  = UVec.toList c
       r' = UVec.fromList [ x | x<-r, x/=(l+1) ]
   in
   (Clause r' 0 ((UVec.length r')-1))
 
 reduceClause (Clause c w v) (F l) =
---  trace ("reduceNogood: " List.++ (show c) List.++ (show (F l))) $
+--  trace ("reduceNogood: " Prelude.++ (show c) Prelude.++ (show (F l))) $
   let r  = UVec.toList c
       r' = UVec.fromList [ x | x<-r, x/=(-(l+1)) ]
   in
@@ -500,22 +532,46 @@ fromCClause st (t,f) =
 --  trace ("fromCClause: " List.++ (show (t,f)) List.++ (show b)) $
     _ -> (Clause b 0 ((UVec.length b) -1))
 
-assfromClause :: Clause -> Int -> Assignment
-assfromClause c i = assfromClause2 c (initAssignment i) 0
 
-assfromClause2 :: Clause -> Assignment -> Int -> Assignment
-assfromClause2 (Clause c v w) a i =
+assfromClause :: Clause -> Int -> Assignment
+assfromClause (UClause c) i =
+    let a = initAssignment i in
+    if c > 0
+    then
+      assign a (T (c-1)) 1
+    else
+      assign a (F ((abs c)-1)) 1
+
+assfromClause (BClause x y) i =
+    let a = initAssignment i in
+    if x > 0
+    then
+      let a' = assign a (T (x-1)) 1 in
+      if y > 0
+      then assign a' (T (y-1)) 1
+      else assign a' (F ((abs y)-1)) 1
+    else
+      let a' = assign a (F ((abs x)-1)) 1 in
+      if y > 0
+       then assign a' (T (y-1)) 1
+       else assign a' (F ((abs y)-1)) 1
+
+assfromClause c i = assfromClause' c (initAssignment i) 0
+
+assfromClause' :: Clause -> Assignment -> Int -> Assignment
+assfromClause' (Clause c v w) a i =
   if i < UVec.length c
   then
     let i' = c UVec.!i in
     if i' > 0
     then
       let a' = assign a (T (i'-1)) 1 in
-      assfromClause2 (Clause c v w) a' (i+1)
+      assfromClause' (Clause c v w) a' (i+1)
     else
-      let a' = assign a (F (abs (i')-1)) 1 in
-      assfromClause2 (Clause c v w) a' (i+1)
+      let a' = assign a (F ((abs i')-1)) 1 in
+      assfromClause' (Clause c v w) a' (i+1)
   else a
+
 
 
 get_implicationLiteral :: Assignment -> Assignment -> (SignedVar, Assignment)
@@ -549,7 +605,9 @@ get_implicationLiteral c a =
 
 get_last_assigned_var :: Assignment -> SVar
 -- get last assigned variable in the assignment
-get_last_assigned_var a = get_last_assigned_var2 a 0
+get_last_assigned_var a =
+--   trace ("get_last_ass_var: " List.++ (show a)) $
+  get_last_assigned_var2 a 0
 
 get_last_assigned_var2 a i =
   if i < (UVec.length a)
@@ -587,9 +645,14 @@ get_antecedent ngs sigma prefix =
   else error "no antecedent epsilon found"
 
 
+toList:: Clause -> [Int]
+toList (UClause c) = [c]
+toList (BClause c1 c2) = [c1,c2]
+toList (Clause c w v) = UVec.toList c
+
 joinClauses :: Clause -> Clause -> Clause
-joinClauses (Clause c1 w1 v1) (Clause c2 w2 v2) =
-  let c = UVec.fromList $ nub ((UVec.toList c1) List.++ (UVec.toList c2)) in
+joinClauses cl1 cl2 =
+  let c = UVec.fromList $ nub ((NGS.toList cl1) List.++ (NGS.toList cl2)) in
   (Clause c 0 ((UVec.length c) -1))
 
 
@@ -616,16 +679,29 @@ without2 c a i =
 
 get_max_alevel :: Clause -> Assignment -> Int
 -- determin k in conflict_analysis
-get_max_alevel (Clause c w v) a = get_max_alevel2 c a 0 0
+get_max_alevel (UClause c) a =
+  abs (a UVec.! ((abs c)-1))
 
-get_max_alevel2 c a i akku =
---  trace ("get_max_alevel: " List.++ (show c) List.++ (show a) List.++ (show i) List.++ (show akku)) $
+get_max_alevel (BClause x y) a =
+  let alx = abs (a UVec.! ((abs x)-1))
+      aly = abs (a UVec.! ((abs y)-1))
+  in
+  if alx > aly
+  then alx
+  else aly
+
+get_max_alevel (Clause c w v) a = get_max_alevel' c a 0 0
+
+get_max_alevel' c a i akku =
+--  trace ("get_max_alevel: " Prelude.++ (show c) Prelude.++ (show a) Prelude.++ (show i) Prelude.++ (show akku)) $
   if i < UVec.length c
   then
-    let i' = c UVec.! i in
-    if a UVec.! ((abs i')-1) > akku
-    then get_max_alevel2 c a (i+1) (a UVec.! ((abs i')-1))
-    else get_max_alevel2 c a (i+1) akku
+    let i'   = c UVec.! i
+        ali' = abs (a UVec.! ((abs i')-1))
+    in
+    if ali' > akku
+    then get_max_alevel' c a (i+1) (ali')
+    else get_max_alevel' c a (i+1) akku
   else akku
 
 

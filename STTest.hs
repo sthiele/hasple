@@ -37,7 +37,6 @@ module STTest (
 
 
 --import System.Environment
-
 import Control.Monad.ST
 import Data.STRef
 
@@ -430,12 +429,12 @@ assfromClause (BClause x y) i =
       let a' = assign a (T (x-1)) 1 in
       if y > 0
       then assign a' (T (y-1)) 1
-      else assign a' (T ((abs y)-1)) 1
+      else assign a' (F ((abs y)-1)) 1
     else
       let a' = assign a (F ((abs x)-1)) 1 in
       if y > 0
        then assign a' (T (y-1)) 1
-       else assign a' (T ((abs y)-1)) 1
+       else assign a' (F ((abs y)-1)) 1
 
 assfromClause c i = assfromClause' c (initAssignment i) 0
 
@@ -566,15 +565,23 @@ get_max_alevel' c a i akku =
 
 
 
+toList:: Clause -> [Int]
+toList (UClause c) = [c]
+toList (BClause c1 c2) = [c1,c2]
+toList (Clause c w v) = UVec.toList c
+
 joinClauses :: Clause -> Clause -> Clause
-joinClauses (Clause c1 w1 v1) (Clause c2 w2 v2) =
-  let c = UVec.fromList $ nub ((UVec.toList c1) Prelude.++ (UVec.toList c2)) in
+joinClauses cl1 cl2 =
+  let c = UVec.fromList $ nub ((STTest.toList cl1) Prelude.++ (STTest.toList cl2)) in
   (Clause c 0 ((UVec.length c) -1))
+
 
   
 get_last_assigned_var :: Assignment -> SVar
 -- get last assigned variable in the assignment
-get_last_assigned_var a = get_last_assigned_var2 a 0
+get_last_assigned_var a =
+--   trace ("get_last_ass_var: " Prelude.++ (show a)) $
+  get_last_assigned_var2 a 0
 
 get_last_assigned_var2 a i =
   if i < (UVec.length a)
@@ -707,6 +714,7 @@ conflict_resolution2 ngs nogood a dlt =
       dl              = al2dl dlt alevel_sigma
       al              = dl2al dlt dl
   in
+--   trace ("conflict_resolution2: " Prelude.++ (show reduced_nogood) ) $
   let rhos            = filter_al nogood a al in
   if only rhos sigma
   then
@@ -741,10 +749,6 @@ get_antecedent ngs sigma prefix =
         then return vng
         else get_antecedent ngs' sigma prefix
     else error "no antecedent epsilon found"
-
-
-
-
 
 
 s_new_watch1 :: Clause -> Assignment -> Int -> Store s -> ST s ()
@@ -785,3 +789,17 @@ main =
   do
     putStrLn $ show x
     putStrLn $ show (foo x)
+
+
+--test cases clause
+cl1 = (UClause (1))
+cl2 = (UClause (-1))
+cl3 = (BClause (-1) 2)
+cl4 = (BClause (-2) 1)
+cl5 = (BClause 1 (-2))
+cl6 = (BClause 2 (-1))
+cl7 = (BClause (-1) (-2))
+cl8 = (BClause (-2) (-1))
+
+
+

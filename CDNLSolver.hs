@@ -19,7 +19,7 @@ module CDNLSolver (
    anssets
 ) where
 
-import Prelude (($), (+), (-))
+import Prelude (($), (+), (-), (++))
 import Data.Bool
 import Data.Int
 import Data.Eq
@@ -107,6 +107,8 @@ anssets prg  =
       conf   = False
       solver = TSolver prg st ngs dl bl al a dlt u conf
   in
+--   trace ("Clauses: " Prelude.++ (show png)) $
+--   trace ("SymbTab: " Prelude.++ (show st)) $  
   cdnl_enum solver s
 
 
@@ -116,6 +118,7 @@ cdnl_enum solver s =
     solverp = set_unfounded_set [] solver 
     solver' = nogood_propagation solverp
   in
+--   trace ("cdnl: " Prelude.++ (show (assignment solver'))) $
   if conf solver'
   then                                                                                                 -- conflict
     if (decision_level solver') == 1
@@ -160,7 +163,7 @@ cdnl_enum solver s =
                          set_assignment a''          solver'
           remaining_as = cdnl_enum solver'' s
       in
---      trace ("choose: " Prelude.++ (show sigma_d)) $
+--       trace ("choose: " Prelude.++ (show sigma_d)) $
       remaining_as
 
 
@@ -233,6 +236,7 @@ nogood_propagation s =
     al  = assignment_level  s'
     ngs = boocons           s'
   in
+--   trace ("nogo_prop: " Prelude.++ (show (assignment s'))) $
   if conf s'
   then s'
   else
@@ -271,11 +275,18 @@ local_propagation s =
   then s
   else 
     if NGS.can_choose $ boocons s
-    then 
-      local_propagation $ 
-      resolve           $ 
-      choose_next_ng    s
-    else 
+    then
+      let a = choose_next_ng    s
+          b = resolve a
+      in
+--       trace ("loc_prop: " Prelude.++ (show (assignment b))) $
+      let
+          c = local_propagation b
+      in
+      c
+--       local_propagation $  resolve  $  choose_next_ng    s
+    else
+--       trace ("loc_prop: " Prelude.++ "no choice") $
       let ngs' = NGS.rewind $ boocons s in -- rewind for next use
       set_boocons ngs' s
 
