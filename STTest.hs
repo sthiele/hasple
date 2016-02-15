@@ -18,7 +18,6 @@
 module STTest (
    NogoodStore,
    Store,
---    Store,
    new_ngs,
    add_nogoods,
 --    get_nogoods,
@@ -36,7 +35,6 @@ module STTest (
 ) where
 
 
---import System.Environment
 import Control.Monad.ST
 import Data.STRef
 
@@ -309,10 +307,6 @@ reduceClause (Clause c w v) (F l) =
       r' = UVec.fromList [ x | x<-r, x/=(-(l+1)) ]
   in
   (Clause r' 0 ((UVec.length r')-1))
-
-
-
-
 
 
 
@@ -622,25 +616,60 @@ without2 c a i =
   else c
 
 
-data Store s = Store { refs    :: [(STRef s Clause)],
-                       counter :: Int
+-- data Store s = Store {
+--                        refs    :: [(STRef s Clause)],
+--                        counter :: Int
+--                      }
+                     
+data Store s = Store {
+                       refs    :: BVec.Vector (STRef s Clause),
+                       counter :: Int,
+                       length  :: Int
                      }
+                     
+type NogoodStore s = Store s
 
-type NogoodStore s = Store s 
+
+foo :: [Clause] -> Int -> ST s (STRef s Clause)
+foo [] i =  newSTRef (UClause 0)
+
+
+foo (x:xs) 0 = newSTRef x
+
+
+foo (x:xs) i = foo xs (i-1)
+
 
 mkStore :: [Clause] -> ST s (Store s)
-mkStore x  = 
-  do
-    refs <- Prelude.mapM newSTRef x
-    return $ (Store refs (-1))
+mkStore x  =
+  mkStore' x 100
+    
+mkStore' :: [Clause] -> Int -> ST s (Store s)
+mkStore' x b =
+  if (Prelude.length x) > b
+  then mkStore' x (2*b)
+  else
+    let nlist = x Prelude.++ (Prelude.replicate (b- (Prelude.length x)) (UClause 0))
+    in
+    do
+      rlist <- Prelude.mapM newSTRef nlist
+      return $ (Store (BVec.fromList rlist) (-1) (Prelude.length x))
+
+
+
+
+
+
+-- mkStore :: [Clause] -> ST s (Store s)
+-- mkStore x  = 
+--   do
+--     refs <- Prelude.mapM newSTRef x
+--     return $ (Store refs (-1))
+
 
 new_ngs :: [Clause] -> [Clause] -> ST s (Store s)
 -- create a new store
-new_ngs png lng =
-  do
-    r_png <- Prelude.mapM newSTRef png
-    r_lng <- Prelude.mapM newSTRef lng
-    return $ (Store (r_png Prelude.++ r_lng) (-1))
+new_ngs png lng =  mkStore (png Prelude.++ lng)
 
 
 cupdate :: Store s  -> Clause -> ST s ()
@@ -652,56 +681,72 @@ cupdate st cl =
 
 rewind :: Store s -> Store s
 -- basically reset the nogood store because some resolvent was found
-rewind (Store png counter) = (Store png (-1))
+rewind (Store png counter l) = (Store png (-1) l)
 
     
 up_rew :: Store s -> Clause -> ST s (Store s)
 -- update and rewind
-up_rew (Store ngs c) cl =
+up_rew (Store ngs c l) cl =
   do 
-    modifySTRef (current (Store ngs c)) (\x -> cl)
-    return $ (Store ngs (-1))
+    modifySTRef (current (Store ngs c l)) (\x -> cl)
+    return $ (Store ngs (-1) l)
 
 
 shead :: Store s -> STRef s Clause
-shead (Store (x:xs) c) = x
-tolist (Store x c) = x
+shead (Store (x) c l) = x BVec.! 0
+tolist (Store x c l) = Prelude.take l (BVec.toList x)
 
-current (Store x c) =
---   trace ("getng" Prelude.++ (show c)) $
-  x!!c
+current (Store x c l) =
+--  trace ("current" Prelude.++ (show (readSTRef (x BVec.! c)))) $
+  x BVec.! c
 
-can_choose (Store x c) = c < ((Prelude.length x) -1)
+can_choose (Store x c l) = c < (l -1)
 
 
-choose (Store x c) =
+choose (Store x c l) =
 --   trace ("choose") $
-  (Store x (c+1))
+  (Store x (c+1) l)
 
 addClause :: Store s -> Clause -> ST s (Store s)
-addClause (Store st c) x =
-  do 
-    rx <- newSTRef x
---     return $ (Store (rx:st) (c+1)) -- prepend
-    return $ (Store (st Prelude.++ [rx]) c) -- append
-
-add_nogoods :: Store s -> [Clause] -> ST s (Store s)
-add_nogoods (Store st c) x =
+addClause (Store st c l) x =
+--   trace ("addClause") $
+  let b = (BVec.length st)
+  in
   do
-    refs <- Prelude.mapM newSTRef x
---    return $ (Store (refs Prelude.++ st) (c+(Prelude.length x))) -- prepend
-    return $ (Store (st Prelude.++ refs) c) -- append
+    if l < b
+    then
+      do
+        modifySTRef ( st BVec.! l) (\y -> x)
+        return $ (Store st c (l+1))
+    else
+      let nlist = Prelude.replicate (b-1) (UClause 0)
+          rlist1 = tolist (Store st c l)
+      in
+      do
+        rx     <- newSTRef x
+        rlist2 <- Prelude.mapM newSTRef nlist
+        return $ (Store (BVec.fromList ((rlist1 Prelude.++ [rx] Prelude.++ rlist2))) (c) (l+1))
+  
+
+    
+add_nogoods :: Store s -> [Clause] -> ST s (Store s)
+add_nogoods st [] = return $ st
+add_nogoods st (x:xs) =
+--   trace ("add_nogoods") $
+  do
+    st' <- addClause st x
+    add_nogoods st' xs
 
 get_ng = current
 
 
 
-next :: Store s ->  ST s (Store s)
-next (Store st c) = 
-  do
-    if c < Prelude.length st
-    then return $ (Store st (c+1))
-    else return $ (Store st 0)
+-- next :: Store s ->  ST s (Store s)
+-- next (Store st c) = 
+--   do
+--     if c < Prelude.length st
+--     then return $ (Store st (c+1))
+--     else return $ (Store st 0)
 
 
 
@@ -751,44 +796,8 @@ get_antecedent ngs sigma prefix =
     else error "no antecedent epsilon found"
 
 
-s_new_watch1 :: Clause -> Assignment -> Int -> Store s -> ST s ()
-s_new_watch1 (Clause c v w) a i st =
-  do
-    if i < UVec.length c
-    then
-      let i' = c UVec.!i in
-      if i==w
-      then s_new_watch1 (Clause c v w) a (i+1) st
-      else
-        if (a UVec.!((abs i')-1) > 0 && i' >= 0) || (a UVec.!((abs i')-1) < 0 && i' < 0)  -- assigned
-        then s_new_watch1 (Clause c v w) a (i+1) st
-        else modifySTRef (current st) (\x -> Clause c i w) --Just (Clause c i w)   
-    else return ()
-
---foo :: 
-
-foo x  =
-  let ass = initAssignment 10 
-  in 
-  runST $ do
-    st <- mkStore x
-    now <- readSTRef  (current st)
-    s_new_watch1 now ass 1 $ st
-    st'  <-  addClause st (UClause 1)
-    st'' <- next st'
-    vals <- Prelude.mapM readSTRef (tolist st'')
-    return vals
 
 
-
-
-main :: IO ()
-main =
-  let x = [(Clause (UVec.fromList [1,2,3,4,5]) 0 4),(UClause 2),(UClause 3),(UClause (-4)),(BClause 2 3)] 
-  in
-  do
-    putStrLn $ show x
-    putStrLn $ show (foo x)
 
 
 --test cases clause
@@ -802,4 +811,4 @@ cl7 = (BClause (-1) (-2))
 cl8 = (BClause (-2) (-1))
 
 
-
+-- clause_test1 = (assfromClause cl1 3)== 
