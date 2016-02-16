@@ -69,7 +69,7 @@ transforms cclauses st = map (fromCClause st) cclauses
 data TSolver s = TSolver { 
        program                  :: [Rule]          -- the program
      , symboltable              :: SymbolTable     --
-     , boocons                  :: Store s   -- the store of boolean constraints
+     , boocons                  :: Store s         -- the store of boolean constraints
      , decision_level           :: Int             -- the decision level
      , blocked_level            :: Int             -- the blocked level
      , assignment_level         :: Int             -- the assignment level
@@ -94,7 +94,7 @@ set_conf c               (TSolver p st ngs dl bl al a dlt u _) = (TSolver p st n
 
 mkSolver :: [Rule]         ->
             SymbolTable    ->
-            Store s  ->
+            Store s        ->
             Int            ->
             Int            ->
             Int            ->
@@ -127,7 +127,7 @@ anssets prg  =
 --   trace ("Clauses: " ++ (show png)) $
 --   trace ("SymbTab: " ++ (show st)) $
   runST $ do
-    ngs <- new_ngs png []
+    ngs <- mkStore png
     solver <- mkSolver prg st ngs dl bl al a dlt u conf
     cdnl_enum solver s
 
@@ -245,9 +245,10 @@ conflict_handling s =
 conflict_analysis :: NogoodStore s -> Assignment -> DLT -> ST s (NogoodStore s, SignedVar, Int)
 conflict_analysis ngs a dlt =
   let conflict_nogood = get_ng ngs
-      ngs'            = rewind ngs
+--       ngs'            = rewind ngs
   in
   do
+    ngs' <- rewind ngs
     v_conflict_nogood <- readSTRef conflict_nogood
 --     traceMonad ("conflict_analysis: " ++ (show a) ++" "++ (show v_conflict_nogood))
     conflict_resolution ngs' v_conflict_nogood a dlt
@@ -323,8 +324,10 @@ local_propagation s =
 
     else
 --       trace ("loc_prop: " ++ "all clauses done") $
-      let ngs' = rewind $ boocons s in -- rewind for next use
-      return $ set_boocons ngs' s
+--       let ngs' = rewind $ boocons s in -- rewind for next use
+      do
+        ngs' <- rewind (boocons s)
+        return $ set_boocons ngs' s
 
 
 choose_next_ng :: TSolver s -> TSolver s
@@ -335,30 +338,19 @@ resolve :: TSolver s -> ST s (TSolver s)
 -- resolve the current no good
 resolve s =
 --   trace ("res: " ) $
-  let al = (assignment_level s)
-      ng = get_ng (boocons s)
---       x  = resolve al ng (assignment s)
+  let ng = get_ng (boocons s)
+      al = assignment_level s
   in
   do
     v_ng <- readSTRef ng
---     STTest.resolve al v_ng (assignment s)
---     traceMonad ("res: " ++ (show (assignment s))  ++" "++ (show v_ng) )
-    case STTest.resolve al v_ng (assignment s) of
-      NIX         -> return $ s
-      NIXU ng'    ->
-        do
-          cupdate (boocons s) ng'
-          return $ s
-      Res a'      ->
-        do
---           ngs' = rewind (boocons s)
-          return $ set_boocons (rewind (boocons s)) $ set_assignment_level (al+1) $ set_assignment a' s
-      ResU a' ng' ->
-        do
-          ngs' <- up_rew (boocons s) ng'
-          return $ set_boocons ngs' $ set_assignment_level (al+1) $ set_assignment a' s
-      CONF        -> return $ (set_conf True s)                                                       -- set conflict
+    res <- STTest.resolve (boocons s) v_ng al (assignment s)
 
+    case (res) of
+      NIX         -> return $ s
+      Res a'      -> do
+                      ngs' <- rewind (boocons s)
+                      return $ set_boocons (ngs') $ set_assignment_level (al+1) $ set_assignment a' s
+      CONF        -> return $ (set_conf True s)
 
 
 

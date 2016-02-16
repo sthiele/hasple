@@ -18,13 +18,12 @@
 module STTest (
    NogoodStore,
    Store,
-   new_ngs,
+   mkStore,
    add_nogoods,
---    get_nogoods,
    can_choose,
    choose,
    get_ng,
-   up_rew,
+--    up_rew,
    cupdate,
    rewind,
    Clause,
@@ -48,18 +47,14 @@ import Assignment as Ass
 import SPVar
 import DLT
 
---type Clause = [Int]
---
 
 data RES = Res Assignment
-         | ResU Assignment Clause
          | NIX
-         | NIXU Clause         
          | CONF
          deriving Show
 
 class (Eq s) => Nogood s where
-  resolve :: Int -> s -> Assignment -> RES
+  resolve :: NogoodStore st -> s -> Int -> Assignment -> ST st (RES)
   conflict_resolution :: NogoodStore st -> s -> Assignment -> DLT -> ST st (NogoodStore st,SignedVar,Int)
   reduceNogood :: s -> SignedVar -> s
   is_satisfied :: s -> Assignment -> Bool
@@ -106,150 +101,14 @@ get_svar2 s st i =
 
 instance Nogood Clause where
 
-  resolve al (UClause c) a =
---     trace ("res1:") $
-      if c > 0 
-      then
-        if (a UVec.!(c-1) > 0)
-        then CONF
-        else
-          if a UVec.!(c-1)==0
-          then Res (assign a (F (c-1)) al)
-          else NIX
-      else
-        if (a UVec.!((abs c)-1) < 0)
-        then CONF
-        else
-          if a UVec.!((abs c)-1)==0
-          then Res (assign a (T ((abs c)-1)) al)
-          else NIX
- 
-
-  resolve al (BClause x y) a =
---     trace ("res2:") $
-    let x' = a UVec.! ((abs x)-1)
-        y' = a UVec.! ((abs y)-1)
-    in
-    if (x>0)
-    then
-      if x'<0
-      then NIX
-      else
-        if x'>0
-        then                                  --x>0             
-          if y>0
-          then
-            if y'<0
-            then NIX
-            else         
-              if y'>0
-              then CONF                       -- x'>0, y>0
-              else Res (assign a (F (y-1)) al)   -- x'>0, y'==0
-          else                                -- x'>0, y < 0
-            if y'>0
-            then NIX
-            else 
-              if y'<0
-              then CONF                       --x'>0, y'<0  
-              else Res (assign a (T ((abs y)-1)) al)    --x'>0, y'==0
-        else                                 --x'==0        
-          if y>0
-          then
-            if y'<0
-            then NIX
-            else
-              if y'>0
-              then Res (assign a (F (x-1)) al)  --x'==0, y'>0
-              else NIX                      --x'==0, y'==0
-          else                             -- y < 0          
-            if y'>0
-            then NIX
-            else 
-              if y'<0
-              then Res (assign a (F (x-1)) al)  -- x'==0, y'<0
-              else NIX                      -- x'==0, y'==0
-
-    else                                    -- x<0
-      if x'>0
-      then NIX
-      else                                  
-        if x'<0
-        then                                --x'<0             
-          if y>0
-          then                              --y > 0
-            if y'<0                         
-            then NIX                       
-            else         
-              if y'>0                      
-              then CONF                     --x'<0, y'>0
-              else Res (assign a (F (y-1)) al)  --x'<0, y'==0
-          else                              -- y < 0
-            if y'>0
-            then NIX
-            else 
-              if y'<0
-              then CONF                     --x'<0, y'<0  
-              else Res (assign a (T ((abs y)-1)) al)  --x'<0, y'==0
-        else                               -- x'==0        
-          if y>0
-          then
-            if y'<0
-            then NIX
-            else
-              if y'>0
-              then Res (assign a (T ((abs x)-1)) al)  -- x'==0, y'>0
-              else NIX                      -- x'==0, y'==0
-          else                              -- y<0
-            if y'>0
-            then NIX
-            else 
-              if y'<0
-              then Res (assign a (T ((abs x)-1)) al)  -- x'==0, y'<0
-              else NIX                      --x'==0, y'==0
-
- 
-  resolve al (Clause c v w) a =
---     trace ("res3:") $
-    let v' = c UVec.!v in
-    if v' > 0
-    then
-      if (a UVec.!(v'-1) < 0)            -- assigned
-      then NIX
-      else
-        let w' = c UVec.!w in
-        if (a UVec.!((abs w')-1) > 0 && w' < 0) || (a UVec.!((abs w')-1) < 0 && w' > 0)           -- assigned
-        then NIX
-        else 
-          if a UVec.!(v'-1)==0
-          then 
-            if a UVec.!((abs w')-1)==0
-            then NIX
-            else updatewatch2 al (Clause c v w) a
-          else updatewatch1 al (Clause c v w) a
-    else
-      if (a UVec.!((abs v')-1) > 0)             -- assigned
-      then NIX
-      else
-        let w' = c UVec.!w in
-        if (a UVec.!((abs w')-1) > 0 && w' < 0) || (a UVec.!((abs w')-1) < 0 && w' > 0)           -- assigned
-        then NIX
-        else 
-          if a UVec.!((abs v')-1)==0
-          then 
-            if a UVec.!((abs w')-1)==0
-            then NIX
-            else updatewatch2 al (Clause c v w) a
-          else updatewatch1 al (Clause c v w) a
-
-          
+     
   reduceNogood c l = reduceClause c l
 
---  conflict_resolution :: NogoodStore -> Clause -> Assignment -> DLT -> (NogoodStore, SignedVar,Int)
   conflict_resolution ngs nogood a alt =
   --  trace ("conflict_res1: " Prelude.++ (show nogood) Prelude.++ (show a)) $
   --  trace ("DLT: " Prelude.++ (show alt)) $
     do
-      (ngs', sigma) <- (conflict_resolution2 ngs nogood a alt)
+      (ngs', sigma) <- (conflict_resolution' ngs nogood a alt)
 --         reduced_nogood  = reduceNogood nogood sigma
 --         k    = get_max_alevel reduced_nogood a
 --     in
@@ -260,6 +119,144 @@ instance Nogood Clause where
   is_satisfied c a =
     let c' = assfromClause c (Ass.length a) in
     is_sat2 c' a 0
+    
+  resolve st (UClause c) al a =
+    do
+  --     trace ("res1:") $
+        if c > 0
+        then
+          if (a UVec.!(c-1) > 0)
+          then return $ CONF
+          else
+            if a UVec.!(c-1)==0
+            then return $ Res (assign a (F (c-1)) al)
+            else return $ NIX
+        else
+          if (a UVec.!((abs c)-1) < 0)
+          then return $ CONF
+          else
+            if a UVec.!((abs c)-1)==0
+            then return $ Res (assign a (T ((abs c)-1)) al)
+            else return $ NIX
+            
+  resolve st (BClause x y) al a =
+    do
+          let x' = a UVec.! ((abs x)-1)
+          let y' = a UVec.! ((abs y)-1)
+          if (x>0)
+          then
+            if x'<0
+            then return $ NIX
+            else
+              if x'>0
+              then                                  --x>0
+                if y>0
+                then
+                  if y'<0
+                  then return $ NIX
+                  else
+                    if y'>0
+                    then return $ CONF                       -- x'>0, y>0
+                    else return $ Res (assign a (F (y-1)) al)   -- x'>0, y'==0
+                else                                -- x'>0, y < 0
+                  if y'>0
+                  then return $ NIX
+                  else
+                    if y'<0
+                    then return $ CONF                       --x'>0, y'<0
+                    else return $ Res (assign a (T ((abs y)-1)) al)    --x'>0, y'==0
+              else                                 --x'==0
+                if y>0
+                then
+                  if y'<0
+                  then return $ NIX
+                  else
+                    if y'>0
+                    then return $ Res (assign a (F (x-1)) al)  --x'==0, y'>0
+                    else return $ NIX                      --x'==0, y'==0
+                else                             -- y < 0
+                  if y'>0
+                  then return $ NIX
+                  else
+                    if y'<0
+                    then return $ Res (assign a (F (x-1)) al)  -- x'==0, y'<0
+                    else return $ NIX                      -- x'==0, y'==0
+
+          else                                    -- x<0
+            if x'>0
+            then return $ NIX
+            else
+              if x'<0
+              then                                --x'<0
+                if y>0
+                then                              --y > 0
+                  if y'<0
+                  then return $ NIX
+                  else
+                    if y'>0
+                    then return $ CONF                     --x'<0, y'>0
+                    else return $ Res (assign a (F (y-1)) al)  --x'<0, y'==0
+                else                              -- y < 0
+                  if y'>0
+                  then return $ NIX
+                  else
+                    if y'<0
+                    then return $ CONF                     --x'<0, y'<0
+                    else return $ Res (assign a (T ((abs y)-1)) al)  --x'<0, y'==0
+              else                               -- x'==0
+                if y>0
+                then
+                  if y'<0
+                  then return $ NIX
+                  else
+                    if y'>0
+                    then return $ Res (assign a (T ((abs x)-1)) al)  -- x'==0, y'>0
+                    else return $ NIX                      -- x'==0, y'==0
+                else                              -- y<0
+                  if y'>0
+                  then return $ NIX
+                  else
+                    if y'<0
+                    then return $ Res (assign a (T ((abs x)-1)) al)  -- x'==0, y'<0
+                    else return $ NIX                      --x'==0, y'==0
+
+ 
+  resolve st (Clause c v w) al a =
+    do
+        --     trace ("res3:") $
+            let v' = c UVec.!v
+            if v' > 0
+            then
+              if (a UVec.!(v'-1) < 0)            -- assigned
+              then return $ NIX
+              else
+                let w' = c UVec.!w in
+                if (a UVec.!((abs w')-1) > 0 && w' < 0) || (a UVec.!((abs w')-1) < 0 && w' > 0)           -- assigned
+                then return $ NIX
+                else
+                  if a UVec.!(v'-1)==0
+                  then
+                    if a UVec.!((abs w')-1)==0
+                    then return $ NIX
+                    else do updatewatch2 st al (Clause c v w) a
+                  else updatewatch1 st al (Clause c v w) a
+            else
+              if (a UVec.!((abs v')-1) > 0)             -- assigned
+              then return $ NIX
+              else
+                let w' = c UVec.!w in
+                if (a UVec.!((abs w')-1) > 0 && w' < 0) || (a UVec.!((abs w')-1) < 0 && w' > 0)           -- assigned
+                then return $ NIX
+                else
+                  if a UVec.!((abs v')-1)==0
+                  then
+                    if a UVec.!((abs w')-1)==0
+                    then return $ NIX
+                    else updatewatch2 st al (Clause c v w) a
+                  else updatewatch1 st al (Clause c v w) a
+
+          
+
 
 
 reduceClause :: Clause -> SignedVar -> Clause
@@ -333,50 +330,67 @@ is_sat2 c a i =
   else True
 
   
-updatewatch1 :: Int -> Clause -> Assignment -> RES
-updatewatch1 al (Clause c v w) a =
+updatewatch1 :: NogoodStore s -> Int -> Clause -> Assignment -> ST s (RES)
+updatewatch1 st al (Clause c v w) a =
 --  trace ("update watch1 ")$
   case new_watch1 (Clause c 0 w) a 0 of
   Just cl -> let w' = c UVec.!w in
              if (a UVec.!((abs w')-1) > 0 && w' > 0) || (a UVec.!((abs w')-1) < 0 && w' < 0) -- assigned
-             then updatewatch2x al cl a
-             else NIXU cl
+             then do updatewatch2x st al cl a
+             else
+               do
+                 cupdate st cl
+                 return $ NIX
   Nothing -> let w'=c UVec.!w in
              if (a UVec.!((abs w')-1) > 0 && w' > 0)                         -- assigned true
-             then CONF
+             then return $ CONF
              else
                if (a UVec.!((abs w')-1) < 0 && w' < 0)                       -- assigned false
-               then CONF
+               then return $ CONF
                else
                  if a UVec.!((abs w')-1) == 0
                  then
                    if w' > 0
-                   then Res (assign a (F (w'-1)) al)
-                   else Res (assign a (T ((abs w')-1)) al)
-                 else NIX
+                   then return $ Res (assign a (F (w'-1)) al)
+                   else return $ Res (assign a (T ((abs w')-1)) al)
+                 else return $ NIX
 
-updatewatch2 al (Clause c v w) a =
+updatewatch2 st al (Clause c v w) a =
 --  trace ("update watch2 ")$
   case new_watch2 (Clause c v 0) a 0 of
-  Just cl -> NIXU cl
+  Just cl -> do
+               cupdate st cl
+               return $ NIX
+             
   Nothing -> let v'=c UVec.!v in
              if a UVec.!((abs v')-1) == 0
              then
                if v' > 0
-               then Res (assign a (F (v'-1)) al)
-               else Res (assign a (T ((abs v')-1)) al)
-             else NIX
+               then return $ Res (assign a (F (v'-1)) al)
+               else return $ Res (assign a (T ((abs v')-1)) al)
+             else return $ NIX
 
-updatewatch2x al (Clause c v w) a =
+updatewatch2x st al (Clause c v w) a =
   case new_watch2 (Clause c v 0) a 0 of
-  Just cl -> NIXU cl
+  Just cl -> do
+               cupdate st cl
+               return $ NIX 
   Nothing -> let v'=c UVec.!v in
              if a UVec.!((abs v')-1) == 0
              then
                if v' > 0
-               then ResU (assign a (F (v'-1)) al) (Clause c v w)
-               else ResU (assign a (T ((abs v')-1)) al) (Clause c v w)
-             else NIXU (Clause c v w)
+               then
+                 do
+                   cupdate st (Clause c v w)
+                   return $ Res (assign a (F (v'-1)) al)
+               else
+                 do
+                   cupdate st (Clause c v w)
+                   return $ Res (assign a (T ((abs v')-1)) al)
+             else
+               do
+                 cupdate st (Clause c v w)
+                 return $ NIX
 
 new_watch1 :: Clause -> Assignment -> Int -> Maybe Clause
 new_watch1 (Clause c v w) a i=
@@ -616,10 +630,6 @@ without2 c a i =
   else c
 
 
--- data Store s = Store {
---                        refs    :: [(STRef s Clause)],
---                        counter :: Int
---                      }
                      
 data Store s = Store {
                        refs    :: BVec.Vector (STRef s Clause),
@@ -628,16 +638,6 @@ data Store s = Store {
                      }
                      
 type NogoodStore s = Store s
-
-
-foo :: [Clause] -> Int -> ST s (STRef s Clause)
-foo [] i =  newSTRef (UClause 0)
-
-
-foo (x:xs) 0 = newSTRef x
-
-
-foo (x:xs) i = foo xs (i-1)
 
 
 mkStore :: [Clause] -> ST s (Store s)
@@ -656,49 +656,23 @@ mkStore' x b =
       return $ (Store (BVec.fromList rlist) (-1) (Prelude.length x))
 
 
-
-
-
-
--- mkStore :: [Clause] -> ST s (Store s)
--- mkStore x  = 
---   do
---     refs <- Prelude.mapM newSTRef x
---     return $ (Store refs (-1))
-
-
-new_ngs :: [Clause] -> [Clause] -> ST s (Store s)
--- create a new store
-new_ngs png lng =  mkStore (png Prelude.++ lng)
-
-
 cupdate :: Store s  -> Clause -> ST s ()
 -- replace current nogood with new nogood reset nogood store
 cupdate st cl =
   do
     modifySTRef (current st) (\x -> cl)
 
-
-rewind :: Store s -> Store s
+rewind :: Store s -> ST s (Store s)
 -- basically reset the nogood store because some resolvent was found
-rewind (Store png counter l) = (Store png (-1) l)
-
-    
-up_rew :: Store s -> Clause -> ST s (Store s)
--- update and rewind
-up_rew (Store ngs c l) cl =
-  do 
-    modifySTRef (current (Store ngs c l)) (\x -> cl)
-    return $ (Store ngs (-1) l)
+rewind (Store png counter l) = return $ (Store png (-1) l)
 
 
-shead :: Store s -> STRef s Clause
-shead (Store (x) c l) = x BVec.! 0
 tolist (Store x c l) = Prelude.take l (BVec.toList x)
 
 current (Store x c l) =
 --  trace ("current" Prelude.++ (show (readSTRef (x BVec.! c)))) $
   x BVec.! c
+
 
 can_choose (Store x c l) = c < (l -1)
 
@@ -741,17 +715,9 @@ get_ng = current
 
 
 
--- next :: Store s ->  ST s (Store s)
--- next (Store st c) = 
---   do
---     if c < Prelude.length st
---     then return $ (Store st (c+1))
---     else return $ (Store st 0)
 
-
-
-conflict_resolution2 :: Store s -> Clause -> Assignment -> DLT -> ST s (Store s, SignedVar)
-conflict_resolution2 ngs nogood a dlt =
+conflict_resolution' :: Store s -> Clause -> Assignment -> DLT -> ST s (Store s, SignedVar)
+conflict_resolution' ngs nogood a dlt =
   let poopi           = assfromClause nogood (Ass.length a)
       (sigma, prefix) = get_implicationLiteral poopi a
       reduced_nogood  = reduceNogood nogood sigma
@@ -759,7 +725,7 @@ conflict_resolution2 ngs nogood a dlt =
       dl              = al2dl dlt alevel_sigma
       al              = dl2al dlt dl
   in
---   trace ("conflict_resolution2: " Prelude.++ (show reduced_nogood) ) $
+--   trace ("conflict_resolution': " Prelude.++ (show reduced_nogood) ) $
   let rhos            = filter_al nogood a al in
   if only rhos sigma
   then
@@ -768,13 +734,9 @@ conflict_resolution2 ngs nogood a dlt =
   else
   do
     epsilon     <- get_antecedent ngs sigma prefix
---     let
---         epsilon     = get_antecedent ngs sigma prefix
     let reduced_eps = reduceNogood epsilon (invert sigma)
     let newnogood   = joinClauses reduced_nogood reduced_eps
---     in
---     do 
-    conflict_resolution2 ngs newnogood prefix dlt
+    conflict_resolution' ngs newnogood prefix dlt
 
 
 get_antecedent :: Store s -> SignedVar -> Assignment -> ST s Clause
@@ -782,7 +744,6 @@ get_antecedent :: Store s -> SignedVar -> Assignment -> ST s Clause
 -- s.t. epsilon\prefix = (invert sigma)
 get_antecedent ngs sigma prefix =
 --    trace ("get_eps: " Prelude.++ (show sigma) Prelude.++ (show prefix)) $
-  
     if can_choose ngs
     then
       let ngs' = choose ngs
