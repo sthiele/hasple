@@ -16,19 +16,19 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module Assignment (
-   Assignment,
-   initAssignment,
-   length,
-   assign,
-   unassign,
-   backtrack,
-   get_alevel,
-   elem,
-   unassigned,
-   falselits,
-   trueatoms,
-   falseatoms,
-   nonfalseatoms,
+  Assignment,
+  initAssignment,
+  length,
+  assign,
+  unassign,
+  backtrack,
+  get_alevel,
+  elem,
+  unassigned,
+  falselits,
+  trueatoms,
+  falseatoms,
+  nonfalseatoms,
 ) where
 
 import Prelude ((+), abs)

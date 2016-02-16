@@ -7,7 +7,7 @@ f(f).
 f(g).
 f(h).
 f(i).
-
+f(j).
 
 
 q(X):- f(X), not p(X), not r(X).

@@ -65,6 +65,7 @@ transforms cclauses st = map (NGS.fromCClause st) cclauses
 
 data TSolver = TSolver { 
                          program                  :: [Rule]          -- the program
+                       , is_tight                 :: Bool
                        , symboltable              :: SymbolTable     --
                        , boocons                  :: NGS.NogoodStore -- the store of boolean constraints
                        , decision_level           :: Int             -- the decision level 
@@ -77,22 +78,22 @@ data TSolver = TSolver {
                        } deriving (Show, Eq)
 
 set_program :: [Rule] -> TSolver -> TSolver
-set_program p                    (TSolver _ st ngs dl bl al a dlt u c) = (TSolver p st ngs dl bl al a dlt u c) 
-set_symboltable st               (TSolver p _  ngs dl bl al a dlt u c) = (TSolver p st ngs dl bl al a dlt u c) 
-set_boocons ngs                  (TSolver p st _   dl bl al a dlt u c) = (TSolver p st ngs dl bl al a dlt u c) 
-set_decision_level dl            (TSolver p st ngs _  bl al a dlt u c) = (TSolver p st ngs dl bl al a dlt u c) 
-set_blocked_level bl             (TSolver p st ngs dl _  al a dlt u c) = (TSolver p st ngs dl bl al a dlt u c) 
-set_assignment_level al          (TSolver p st ngs dl bl _  a dlt u c) = (TSolver p st ngs dl bl al a dlt u c) 
-set_assignment a                 (TSolver p st ngs dl bl al _ dlt u c) = (TSolver p st ngs dl bl al a dlt u c) 
-set_dltracker dlt                (TSolver p st ngs dl bl al a _   u c) = (TSolver p st ngs dl bl al a dlt u c) 
-set_unfounded_set u              (TSolver p st ngs dl bl al a dlt _ c) = (TSolver p st ngs dl bl al a dlt u c) 
-set_conf c                       (TSolver p st ngs dl bl al a dlt u _) = (TSolver p st ngs dl bl al a dlt u c) 
+set_program p                    (TSolver _ t st ngs dl bl al a dlt u c) = (TSolver p t st ngs dl bl al a dlt u c)
+set_symboltable st               (TSolver p t _  ngs dl bl al a dlt u c) = (TSolver p t st ngs dl bl al a dlt u c)
+set_boocons ngs                  (TSolver p t st _   dl bl al a dlt u c) = (TSolver p t st ngs dl bl al a dlt u c)
+set_decision_level dl            (TSolver p t st ngs _  bl al a dlt u c) = (TSolver p t st ngs dl bl al a dlt u c)
+set_blocked_level bl             (TSolver p t st ngs dl _  al a dlt u c) = (TSolver p t st ngs dl bl al a dlt u c)
+set_assignment_level al          (TSolver p t st ngs dl bl _  a dlt u c) = (TSolver p t st ngs dl bl al a dlt u c)
+set_assignment a                 (TSolver p t st ngs dl bl al _ dlt u c) = (TSolver p t st ngs dl bl al a dlt u c)
+set_dltracker dlt                (TSolver p t st ngs dl bl al a _   u c) = (TSolver p t st ngs dl bl al a dlt u c)
+set_unfounded_set u              (TSolver p t st ngs dl bl al a dlt _ c) = (TSolver p t st ngs dl bl al a dlt u c)
+set_conf c                       (TSolver p t st ngs dl bl al a dlt u _) = (TSolver p t st ngs dl bl al a dlt u c) 
  
 
 anssets :: [Rule] -> [[Atom]]
 -- create a solver and initiate solving process
 anssets prg  =
-  let s      = 0
+  let t      = tight prg
       cngs   = nub (nogoods_of_lp prg)
       st     = Vector.fromList (get_vars cngs)
       png    = transforms cngs st
@@ -105,11 +106,11 @@ anssets prg  =
       dlt    = []
       u      = []
       conf   = False
-      solver = TSolver prg st ngs dl bl al a dlt u conf
+      solver = TSolver prg t st ngs dl bl al a dlt u conf
   in
 --   trace ("Clauses: " Prelude.++ (show png)) $
 --   trace ("SymbTab: " Prelude.++ (show st)) $  
-  cdnl_enum solver s
+  cdnl_enum solver 0
 
 
 cdnl_enum :: TSolver -> Int -> [[Atom]]
@@ -219,10 +220,6 @@ conflict_analysis ngs a dlt =
 
 -- Propagation
 
-tight :: [Rule] -> Bool  -- TODO implement tightness check
--- return true if the program is tight
-tight p = False
-
 
 nogood_propagation :: TSolver -> TSolver
 -- propagate nogoods
@@ -240,7 +237,7 @@ nogood_propagation s =
   if conf s'
   then s'
   else
-    if tight prg
+    if is_tight s
     then s'
     else
       case ufs_check prg a st u of                                                           -- unfounded set check

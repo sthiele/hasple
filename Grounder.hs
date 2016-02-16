@@ -29,7 +29,7 @@ import ASP
 import Data.List (sort, nub, intersect, (\\), delete )
 import Data.Maybe
 import qualified Data.Set as Set
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 
 
 type AtomMap =  Map.Map (String, Int) (Set.Set [Term])

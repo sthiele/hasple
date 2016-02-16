@@ -16,21 +16,20 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module STTest (
-   NogoodStore,
-   Store,
-   mkStore,
-   add_nogoods,
-   can_choose,
-   choose,
-   get_ng,
---    up_rew,
-   cupdate,
-   rewind,
-   Clause,
-   fromCClause,
-   conflict_resolution,
-   RES(..),
-   resolve,
+  NogoodStore,
+  Store,
+  mkStore,
+  add_nogoods,
+  can_choose,
+  choose,
+  get_ng,
+  cupdate,
+  rewind,
+  Clause,
+  fromCClause,
+  conflict_resolution,
+  RES(..),
+  resolve,
 ) where
 
 

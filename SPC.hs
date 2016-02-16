@@ -26,7 +26,7 @@ module SPC (
 import ASP
 import PDG
 import SPVar
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 
 
 type SPC = (Map.Map Atom SPVar)                                               -- SourcePointerCollection

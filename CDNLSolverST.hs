@@ -16,10 +16,9 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module CDNLSolverST (
-   anssets
+  anssets
 ) where
 
-import Prelude
 import Data.Bool
 import Data.Int
 import Data.Eq
@@ -40,7 +39,7 @@ import Control.Monad.ST
 import Data.STRef
 
 import Data.Maybe
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import Debug.Trace
 
 
@@ -68,6 +67,7 @@ transforms cclauses st = map (fromCClause st) cclauses
 
 data TSolver s = TSolver { 
        program                  :: [Rule]          -- the program
+     , is_tight                 :: Bool            --  
      , symboltable              :: SymbolTable     --
      , boocons                  :: Store s         -- the store of boolean constraints
      , decision_level           :: Int             -- the decision level
@@ -80,19 +80,19 @@ data TSolver s = TSolver {
      }
 
 set_program :: [Rule] -> TSolver s -> TSolver s
-set_program p            (TSolver _ st ngs dl bl al a dlt u c) = (TSolver p st ngs dl bl al a dlt u c)
---set_symboltable st       (TSolver p _  ngs dl bl al a dlt u c) = (TSolver p st ngs dl bl al a dlt u c)
-set_boocons ngs          (TSolver p st _   dl bl al a dlt u c) = (TSolver p st ngs dl bl al a dlt u c)
-set_decision_level dl    (TSolver p st ngs _  bl al a dlt u c) = (TSolver p st ngs dl bl al a dlt u c)
-set_blocked_level bl     (TSolver p st ngs dl _  al a dlt u c) = (TSolver p st ngs dl bl al a dlt u c)
-set_assignment_level al  (TSolver p st ngs dl bl _  a dlt u c) = (TSolver p st ngs dl bl al a dlt u c)
-set_assignment a         (TSolver p st ngs dl bl al _ dlt u c) = (TSolver p st ngs dl bl al a dlt u c)
-set_dltracker dlt        (TSolver p st ngs dl bl al a _   u c) = (TSolver p st ngs dl bl al a dlt u c)
-set_unfounded_set u      (TSolver p st ngs dl bl al a dlt _ c) = (TSolver p st ngs dl bl al a dlt u c)
-set_conf c               (TSolver p st ngs dl bl al a dlt u _) = (TSolver p st ngs dl bl al a dlt u c)
+set_program p            (TSolver _ t st ngs dl bl al a dlt u c) = (TSolver p t st ngs dl bl al a dlt u c)
+set_boocons ngs          (TSolver p t st _   dl bl al a dlt u c) = (TSolver p t st ngs dl bl al a dlt u c)
+set_decision_level dl    (TSolver p t st ngs _  bl al a dlt u c) = (TSolver p t st ngs dl bl al a dlt u c)
+set_blocked_level bl     (TSolver p t st ngs dl _  al a dlt u c) = (TSolver p t st ngs dl bl al a dlt u c)
+set_assignment_level al  (TSolver p t st ngs dl bl _  a dlt u c) = (TSolver p t st ngs dl bl al a dlt u c)
+set_assignment a         (TSolver p t st ngs dl bl al _ dlt u c) = (TSolver p t st ngs dl bl al a dlt u c)
+set_dltracker dlt        (TSolver p t st ngs dl bl al a _   u c) = (TSolver p t st ngs dl bl al a dlt u c)
+set_unfounded_set u      (TSolver p t st ngs dl bl al a dlt _ c) = (TSolver p t st ngs dl bl al a dlt u c)
+set_conf c               (TSolver p t st ngs dl bl al a dlt u _) = (TSolver p t st ngs dl bl al a dlt u c)
  
 
 mkSolver :: [Rule]         ->
+            Bool           ->
             SymbolTable    ->
             Store s        ->
             Int            ->
@@ -102,15 +102,14 @@ mkSolver :: [Rule]         ->
             DLT            ->
             [Atom]         ->
             Bool           -> ST s (TSolver s)
-mkSolver prg st ngs dl bl al a dlt u conf  =
-  do
-    return $ (TSolver prg st (ngs) dl bl al a dlt u conf)
+mkSolver prg t st ngs dl bl al a dlt u conf  =
+  return $ (TSolver prg t st (ngs) dl bl al a dlt u conf)
 
  
 anssets :: [Rule] -> [[Atom]]
 -- create a solver and initiate solving process
 anssets prg  =
-  let s      = 0
+  let t      = tight prg
       cngs   = nub (nogoods_of_lp prg)
       st     = Vector.fromList (get_vars cngs)
       png    = transforms cngs st
@@ -128,8 +127,8 @@ anssets prg  =
 --   trace ("SymbTab: " ++ (show st)) $
   runST $ do
     ngs <- mkStore png
-    solver <- mkSolver prg st ngs dl bl al a dlt u conf
-    cdnl_enum solver s
+    solver <- mkSolver prg t st ngs dl bl al a dlt u conf
+    cdnl_enum solver 0
 
 -- TODO preprocessing
 -- simplifyCNF [] = []
@@ -141,6 +140,9 @@ anssets prg  =
 
 
 -- get_occurence_list
+
+
+
 traceMonad :: (Show a, Monad m) => a -> m a
 traceMonad x = trace (show x) (return x)
 
@@ -180,11 +182,11 @@ cdnl_enum solver s =
               dlt'         = dlbacktrack dlt dl
               a''          = backtrack a' cal
               a'''         = assign a'' (invert sigma_d) cal                         -- invert last decision literal
-              solver''     = set_decision_level           (dl-1) $
-                             set_blocked_level            (dl-1) $
-                             set_dltracker                  dlt' $
-                             set_assignment_level        (cal+1) $
-                             set_assignment a'''           solver'
+              solver''     = set_decision_level           (dl-1)
+                           $ set_blocked_level            (dl-1)
+                           $ set_dltracker                  dlt'
+                           $ set_assignment_level        (cal+1)
+                           $ set_assignment        a'''  solver'
           in
           do
             remaining_as <- cdnl_enum solver'' (s-1)
@@ -194,10 +196,10 @@ cdnl_enum solver s =
             sigma_d_e   = head selectable
             dlt'_e      = (al',dl+1,(T sigma_d_e)):dlt
             a''_e       = assign a' (T sigma_d_e) al'
-            solver''_e  = set_decision_level           (dl+1) $
-                          set_dltracker                dlt'_e $
-                          set_assignment_level        (al'+1) $
-                          set_assignment a''_e          solver'
+            solver''_e  = set_decision_level           (dl+1)
+                        $ set_dltracker                dlt'_e
+                        $ set_assignment_level        (al'+1)
+                        $ set_assignment a''_e        solver'
         in
 --         trace ("choose: " ++ (show sigma_d_e)) $
         do cdnl_enum solver''_e s
@@ -220,12 +222,12 @@ conflict_handling s =
       let bt_al = dl2al dlt bt_dl
       let a'    = assign (backtrack a bt_al) (invert sigma_uip) bt_al
       let dlt'  = dlbacktrack dlt bt_dl
-      return $ ( set_decision_level   (bt_dl-1) $
-                 set_dltracker             dlt' $
-                 set_assignment_level (bt_al+1) $
-                 set_assignment              a' $
-                 set_boocons               ngs' $
-                 set_conf                 False s )
+      return $ set_decision_level   (bt_dl-1)
+             $ set_dltracker             dlt'
+             $ set_assignment_level (bt_al+1)
+             $ set_assignment              a'
+             $ set_boocons               ngs'
+             $ set_conf               False s
   else                                                                                                  -- backtrack
     let 
         sigma_d = get_dliteral dlt dl
@@ -234,12 +236,12 @@ conflict_handling s =
         a'      = assign (backtrack a bt_al) (invert sigma_d) bt_al
         dlt'    = dlbacktrack dlt dl'
     in
-    return $ ( set_decision_level     dl' $
-               set_blocked_level      dl' $
-               set_dltracker         dlt' $
-               set_assignment_level bt_al $
-               set_assignment          a' $
-               set_conf             False s )
+    return $ set_decision_level     dl'
+           $ set_blocked_level      dl'
+           $ set_dltracker         dlt'
+           $ set_assignment_level bt_al
+           $ set_assignment          a'
+           $ set_conf           False s
     
 
 conflict_analysis :: NogoodStore s -> Assignment -> DLT -> ST s (NogoodStore s, SignedVar, Int)
@@ -257,10 +259,6 @@ conflict_analysis ngs a dlt =
 
 -- Propagation
 
-tight :: [Rule] -> Bool  -- TODO implement tightness check
--- return true if the program is tight
-tight p = False
-
 
 nogood_propagation :: TSolver s -> ST s (TSolver s)
 -- propagate nogoods
@@ -269,7 +267,7 @@ nogood_propagation s =
     s' <- local_propagation s
 --     traceMonad ("nogo_prop: " ++ (show (assignment s')))
     if conf s'
-    then return $ s'
+    then return s'
     else
       let
         prg = program           s
@@ -279,11 +277,11 @@ nogood_propagation s =
         al  = assignment_level  s'
         ngs = boocons           s'
       in
-      if tight prg
-      then return $ s'
+      if is_tight s
+      then return s'
       else
         case ufs_check prg a st u of                                                           -- unfounded set check
-          [] -> return $ s'                                                                     -- no unfounded atoms
+          [] -> return s'                                                                     -- no unfounded atoms
           u' -> let p = get_svar (ALit (head u')) st in                                            -- unfounded atoms
                 if Assignment.elem (T p) a
                 then
@@ -318,39 +316,38 @@ local_propagation s =
     if can_choose $ boocons s
     then
       do
-        s' <- CDNLSolverST.resolve $ choose_next_ng s
---         traceMonad ("loc_prop: " ++ (show (assignment s')))
+        s' <- CDNLSolverST.resolve s
         local_propagation s'
 
     else
---       trace ("loc_prop: " ++ "all clauses done") $
---       let ngs' = rewind $ boocons s in -- rewind for next use
       do
         ngs' <- rewind (boocons s)
         return $ set_boocons ngs' s
 
 
-choose_next_ng :: TSolver s -> TSolver s
-choose_next_ng s = set_boocons (choose $ boocons s) s
-
 
 resolve :: TSolver s -> ST s (TSolver s)
--- resolve the current no good
+-- resolve the next no good
 resolve s =
 --   trace ("res: " ) $
-  let ng = get_ng (boocons s)
-      al = assignment_level s
+  let ngs = choose $ boocons s
+      ng  = get_ng ngs
+      al  = assignment_level s
   in
   do
     v_ng <- readSTRef ng
-    res <- STTest.resolve (boocons s) v_ng al (assignment s)
+    res <- STTest.resolve ngs v_ng al (assignment s)
 
     case (res) of
-      NIX         -> return $ s
+      NIX         ->   return $ set_boocons ngs $ s
       Res a'      -> do
-                      ngs' <- rewind (boocons s)
-                      return $ set_boocons (ngs') $ set_assignment_level (al+1) $ set_assignment a' s
-      CONF        -> return $ (set_conf True s)
+                       ngs' <- rewind ngs
+                       return $ set_boocons ngs'
+                              $ set_assignment_level (al+1)
+                              $ set_assignment a' s
+                              
+      CONF        ->   return $ set_boocons ngs
+                              $ set_conf True s
 
 
 

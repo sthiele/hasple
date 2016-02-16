@@ -16,10 +16,10 @@
 -- along with hasple.  If not, see <http://www.gnu.org/licenses/>.
 
 module UFS (
-    ufs_check,
+  ufs_check,
+  tight
 ) where
 
-import Prelude ()
 import Data.Bool
 import Data.Eq
 import ASP
@@ -28,8 +28,16 @@ import PDG
 import SPC
 import Assignment (Assignment, falseatoms, falselits, nonfalseatoms)
 import Data.List (intersect, (\\),null, head, (++), elem)
--- import Debug.Trace
+import Debug.Trace
 
+
+tight :: [Rule] -> Bool
+-- returns true if the pdg is accyclic
+tight p =
+--   trace ("tight: " ) $
+  let g   = pos_dep_graph p
+  in
+  not (cyclic_graph g)
 
 ufs_check :: [Rule] -> Assignment -> SymbolTable -> [Atom] -> [Atom]
 -- checks the current unfounded set (u) and if neccessary recomputes a set of unfounded atoms

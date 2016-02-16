@@ -18,16 +18,26 @@
 module PDG (
   PDG,
   pos_dep_graph,
+  cyclic_graph,
   cyclic,
   scc,
 ) where
 
 import ASP
 import Data.List ((\\))
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 
 
 type PDG = (Map.Map Atom [Atom])                                                -- PositiveDependencyGraph
+
+
+cyclic_graph:: PDG -> Bool
+cyclic_graph g = cyclic_graph' (Map.keys g) g
+
+cyclic_graph' [] g = False
+cyclic_graph' (a:as) g = cyclic a g || cyclic_graph' as g
+
+
 
 pos_dep_graph :: [Rule] -> PDG
 -- create a pdg for a program
