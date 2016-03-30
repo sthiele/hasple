@@ -1,7 +1,7 @@
 hasple
 ======
 
-A simple Answer Set solver in Haskell
+An experimental answer set solver in Haskell
 
 compile
 -------
